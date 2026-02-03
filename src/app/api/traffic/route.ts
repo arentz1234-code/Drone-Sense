@@ -14,104 +14,47 @@ export interface TrafficData {
   roadType: string;
   trafficLevel: string;
   congestionPercent: number;
-  // FDOT AADT data
-  aadt: number | null;
-  aadtYear: string | null;
-  roadName: string | null;
-  countyName: string | null;
-  fdotDistance: string | null;
+  // VPD data
+  estimatedVPD: number;
+  vpdRange: string;
+  vpdSource: string;
 }
 
-interface FDOTFeature {
-  attributes: {
-    AADT: number;
-    AADTYEAR: number;
-    ROADWAY: string;
-    COUNTY: string;
-    BEGINDESC: string;
-    ENDDESC: string;
+// Estimate VPD based on road functional class (FRC)
+// These are typical AADT ranges from FHWA Highway Statistics
+function estimateVPD(frc: string, freeFlowSpeed: number): {
+  estimatedVPD: number;
+  vpdRange: string;
+  source: string;
+} {
+  // Typical VPD ranges by road class (from FHWA data)
+  const vpdByFRC: Record<string, { min: number; max: number; typical: number }> = {
+    'FRC0': { min: 30000, max: 150000, typical: 75000 },  // Motorway/Freeway
+    'FRC1': { min: 15000, max: 50000, typical: 30000 },   // Major Road
+    'FRC2': { min: 10000, max: 35000, typical: 20000 },   // Other Major Road
+    'FRC3': { min: 5000, max: 20000, typical: 12000 },    // Secondary Road
+    'FRC4': { min: 2000, max: 10000, typical: 5000 },     // Local Connecting Road
+    'FRC5': { min: 1000, max: 5000, typical: 2500 },      // Local Road High Importance
+    'FRC6': { min: 100, max: 2000, typical: 800 },        // Local Road
   };
-  geometry: {
-    x: number;
-    y: number;
+
+  const range = vpdByFRC[frc] || { min: 500, max: 5000, typical: 2000 };
+
+  // Adjust estimate based on free flow speed
+  // Higher speed limits typically correlate with higher capacity/volume
+  let speedFactor = 1;
+  if (freeFlowSpeed > 60) speedFactor = 1.2;
+  else if (freeFlowSpeed > 45) speedFactor = 1.0;
+  else if (freeFlowSpeed > 30) speedFactor = 0.8;
+  else speedFactor = 0.6;
+
+  const estimated = Math.round(range.typical * speedFactor);
+
+  return {
+    estimatedVPD: estimated,
+    vpdRange: `${range.min.toLocaleString()} - ${range.max.toLocaleString()}`,
+    source: 'Estimated (FHWA road class)'
   };
-}
-
-async function getFDOTData(lat: number, lng: number): Promise<{
-  aadt: number | null;
-  aadtYear: string | null;
-  roadName: string | null;
-  countyName: string | null;
-  distance: string | null;
-}> {
-  try {
-    // Query FDOT's ArcGIS REST API for AADT data
-    // Search within ~1 mile radius (0.015 degrees approximately)
-    const searchRadius = 0.015;
-    const geometry = JSON.stringify({
-      xmin: lng - searchRadius,
-      ymin: lat - searchRadius,
-      xmax: lng + searchRadius,
-      ymax: lat + searchRadius,
-      spatialReference: { wkid: 4326 }
-    });
-
-    const fdotUrl = new URL('https://services1.arcgis.com/O1JpcwDW8sjYuddV/arcgis/rest/services/AADT_On_Florida_State_Highway_System/FeatureServer/0/query');
-    fdotUrl.searchParams.set('where', '1=1');
-    fdotUrl.searchParams.set('geometry', geometry);
-    fdotUrl.searchParams.set('geometryType', 'esriGeometryEnvelope');
-    fdotUrl.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
-    fdotUrl.searchParams.set('outFields', 'AADT,AADTYEAR,ROADWAY,COUNTY,BEGINDESC,ENDDESC');
-    fdotUrl.searchParams.set('returnGeometry', 'true');
-    fdotUrl.searchParams.set('f', 'json');
-
-    const response = await fetch(fdotUrl.toString());
-
-    if (!response.ok) {
-      console.error('FDOT API error:', response.status);
-      return { aadt: null, aadtYear: null, roadName: null, countyName: null, distance: null };
-    }
-
-    const data = await response.json();
-
-    if (!data.features || data.features.length === 0) {
-      return { aadt: null, aadtYear: null, roadName: null, countyName: null, distance: null };
-    }
-
-    // Find the closest feature
-    let closestFeature: FDOTFeature | null = null;
-    let closestDistance = Infinity;
-
-    for (const feature of data.features as FDOTFeature[]) {
-      if (feature.geometry) {
-        const dx = feature.geometry.x - lng;
-        const dy = feature.geometry.y - lat;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestFeature = feature;
-        }
-      }
-    }
-
-    if (!closestFeature) {
-      return { aadt: null, aadtYear: null, roadName: null, countyName: null, distance: null };
-    }
-
-    // Convert distance to miles (rough approximation: 1 degree ≈ 69 miles)
-    const distanceMiles = (closestDistance * 69).toFixed(2);
-
-    return {
-      aadt: closestFeature.attributes.AADT,
-      aadtYear: closestFeature.attributes.AADTYEAR?.toString() || null,
-      roadName: closestFeature.attributes.ROADWAY || null,
-      countyName: closestFeature.attributes.COUNTY || null,
-      distance: `${distanceMiles} mi`
-    };
-  } catch (error) {
-    console.error('FDOT fetch error:', error);
-    return { aadt: null, aadtYear: null, roadName: null, countyName: null, distance: null };
-  }
 }
 
 export async function POST(request: Request) {
@@ -134,11 +77,10 @@ export async function POST(request: Request) {
 
     const { lat, lng } = coordinates;
 
-    // Fetch both TomTom and FDOT data in parallel
-    const [tomtomResponse, fdotData] = await Promise.all([
-      fetch(`https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?point=${lat},${lng}&unit=MPH&thickness=1&key=${apiKey}`),
-      getFDOTData(lat, lng)
-    ]);
+    // Fetch TomTom traffic flow data
+    const tomtomResponse = await fetch(
+      `https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?point=${lat},${lng}&unit=MPH&thickness=1&key=${apiKey}`
+    );
 
     if (!tomtomResponse.ok) {
       const errorText = await tomtomResponse.text();
@@ -188,6 +130,9 @@ export async function POST(request: Request) {
     };
     const roadType = frcMap[flowData.frc] || 'Road';
 
+    // Estimate VPD based on road class and speed
+    const vpdEstimate = estimateVPD(flowData.frc, flowData.freeFlowSpeed);
+
     const trafficData: TrafficData = {
       currentSpeed: Math.round(flowData.currentSpeed),
       freeFlowSpeed: Math.round(flowData.freeFlowSpeed),
@@ -197,12 +142,10 @@ export async function POST(request: Request) {
       roadType,
       trafficLevel,
       congestionPercent: Math.max(0, congestionPercent),
-      // FDOT data
-      aadt: fdotData.aadt,
-      aadtYear: fdotData.aadtYear,
-      roadName: fdotData.roadName,
-      countyName: fdotData.countyName,
-      fdotDistance: fdotData.distance,
+      // VPD estimate
+      estimatedVPD: vpdEstimate.estimatedVPD,
+      vpdRange: vpdEstimate.vpdRange,
+      vpdSource: vpdEstimate.source,
     };
 
     return NextResponse.json(trafficData);

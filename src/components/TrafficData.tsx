@@ -135,57 +135,28 @@ export default function TrafficData({ coordinates }: TrafficDataProps) {
       {/* Traffic Data */}
       {traffic && !loading && (
         <div className="space-y-4">
-          {/* FDOT VPD - Prominent Display */}
-          {traffic.aadt && (
-            <div className="p-4 rounded-lg border bg-[var(--accent-cyan)]/10 border-[var(--accent-cyan)]/30">
-              <div className="text-center">
-                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">FDOT Traffic Count (AADT)</span>
-                <p className="text-3xl font-bold text-[var(--accent-cyan)]">
-                  {traffic.aadt.toLocaleString()} <span className="text-lg font-normal">VPD</span>
-                </p>
-                <p className="text-sm text-[var(--text-secondary)] mt-1">
-                  Vehicles Per Day
-                </p>
+          {/* VPD - Prominent Display */}
+          <div className="p-4 rounded-lg border bg-[var(--accent-cyan)]/10 border-[var(--accent-cyan)]/30">
+            <div className="text-center">
+              <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Traffic Volume</span>
+              <p className="text-3xl font-bold text-[var(--accent-cyan)]">
+                {traffic.estimatedVPD.toLocaleString()} <span className="text-lg font-normal">VPD</span>
+              </p>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                Vehicles Per Day
+              </p>
+            </div>
+            <div className="mt-3 pt-3 border-t border-[var(--border-color)] grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <span className="text-xs text-[var(--text-muted)]">Typical Range</span>
+                <p className="font-medium">{traffic.vpdRange}</p>
               </div>
-              {(traffic.roadName || traffic.countyName) && (
-                <div className="mt-3 pt-3 border-t border-[var(--border-color)] grid grid-cols-2 gap-2 text-sm">
-                  {traffic.roadName && (
-                    <div>
-                      <span className="text-xs text-[var(--text-muted)]">Road</span>
-                      <p className="font-medium">{traffic.roadName}</p>
-                    </div>
-                  )}
-                  {traffic.countyName && (
-                    <div>
-                      <span className="text-xs text-[var(--text-muted)]">County</span>
-                      <p className="font-medium">{traffic.countyName}</p>
-                    </div>
-                  )}
-                  {traffic.aadtYear && (
-                    <div>
-                      <span className="text-xs text-[var(--text-muted)]">Year</span>
-                      <p className="font-medium">{traffic.aadtYear}</p>
-                    </div>
-                  )}
-                  {traffic.fdotDistance && (
-                    <div>
-                      <span className="text-xs text-[var(--text-muted)]">Distance to Count</span>
-                      <p className="font-medium">{traffic.fdotDistance}</p>
-                    </div>
-                  )}
-                </div>
-              )}
+              <div>
+                <span className="text-xs text-[var(--text-muted)]">Source</span>
+                <p className="font-medium text-xs">{traffic.vpdSource}</p>
+              </div>
             </div>
-          )}
-
-          {/* No FDOT Data Message */}
-          {!traffic.aadt && (
-            <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)] text-center">
-              <span className="text-xs text-[var(--text-muted)]">FDOT VPD Data</span>
-              <p className="text-sm text-[var(--text-secondary)]">No FDOT count station nearby</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">(Florida state highways only)</p>
-            </div>
-          )}
+          </div>
 
           {/* Traffic Level Badge */}
           <div className={`p-4 rounded-lg border ${getTrafficBg(traffic.trafficLevel)}`}>
@@ -233,7 +204,7 @@ export default function TrafficData({ coordinates }: TrafficDataProps) {
 
           {/* Note */}
           <p className="text-xs text-[var(--text-muted)] text-center">
-            Real-time: TomTom | VPD: FDOT
+            Real-time: TomTom | VPD: FHWA estimates
           </p>
         </div>
       )}
