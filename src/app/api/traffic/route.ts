@@ -5,6 +5,7 @@ interface TrafficRequest {
 }
 
 export interface TrafficData {
+  // Real-time data from TomTom
   currentSpeed: number;
   freeFlowSpeed: number;
   currentTravelTime: number;
@@ -13,6 +14,104 @@ export interface TrafficData {
   roadType: string;
   trafficLevel: string;
   congestionPercent: number;
+  // FDOT AADT data
+  aadt: number | null;
+  aadtYear: string | null;
+  roadName: string | null;
+  countyName: string | null;
+  fdotDistance: string | null;
+}
+
+interface FDOTFeature {
+  attributes: {
+    AADT: number;
+    AADTYEAR: number;
+    ROADWAY: string;
+    COUNTY: string;
+    BEGINDESC: string;
+    ENDDESC: string;
+  };
+  geometry: {
+    x: number;
+    y: number;
+  };
+}
+
+async function getFDOTData(lat: number, lng: number): Promise<{
+  aadt: number | null;
+  aadtYear: string | null;
+  roadName: string | null;
+  countyName: string | null;
+  distance: string | null;
+}> {
+  try {
+    // Query FDOT's ArcGIS REST API for AADT data
+    // Search within ~1 mile radius (0.015 degrees approximately)
+    const searchRadius = 0.015;
+    const geometry = JSON.stringify({
+      xmin: lng - searchRadius,
+      ymin: lat - searchRadius,
+      xmax: lng + searchRadius,
+      ymax: lat + searchRadius,
+      spatialReference: { wkid: 4326 }
+    });
+
+    const fdotUrl = new URL('https://services1.arcgis.com/O1JpcwDW8sjYuddV/arcgis/rest/services/AADT_On_Florida_State_Highway_System/FeatureServer/0/query');
+    fdotUrl.searchParams.set('where', '1=1');
+    fdotUrl.searchParams.set('geometry', geometry);
+    fdotUrl.searchParams.set('geometryType', 'esriGeometryEnvelope');
+    fdotUrl.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
+    fdotUrl.searchParams.set('outFields', 'AADT,AADTYEAR,ROADWAY,COUNTY,BEGINDESC,ENDDESC');
+    fdotUrl.searchParams.set('returnGeometry', 'true');
+    fdotUrl.searchParams.set('f', 'json');
+
+    const response = await fetch(fdotUrl.toString());
+
+    if (!response.ok) {
+      console.error('FDOT API error:', response.status);
+      return { aadt: null, aadtYear: null, roadName: null, countyName: null, distance: null };
+    }
+
+    const data = await response.json();
+
+    if (!data.features || data.features.length === 0) {
+      return { aadt: null, aadtYear: null, roadName: null, countyName: null, distance: null };
+    }
+
+    // Find the closest feature
+    let closestFeature: FDOTFeature | null = null;
+    let closestDistance = Infinity;
+
+    for (const feature of data.features as FDOTFeature[]) {
+      if (feature.geometry) {
+        const dx = feature.geometry.x - lng;
+        const dy = feature.geometry.y - lat;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestFeature = feature;
+        }
+      }
+    }
+
+    if (!closestFeature) {
+      return { aadt: null, aadtYear: null, roadName: null, countyName: null, distance: null };
+    }
+
+    // Convert distance to miles (rough approximation: 1 degree ≈ 69 miles)
+    const distanceMiles = (closestDistance * 69).toFixed(2);
+
+    return {
+      aadt: closestFeature.attributes.AADT,
+      aadtYear: closestFeature.attributes.AADTYEAR?.toString() || null,
+      roadName: closestFeature.attributes.ROADWAY || null,
+      countyName: closestFeature.attributes.COUNTY || null,
+      distance: `${distanceMiles} mi`
+    };
+  } catch (error) {
+    console.error('FDOT fetch error:', error);
+    return { aadt: null, aadtYear: null, roadName: null, countyName: null, distance: null };
+  }
 }
 
 export async function POST(request: Request) {
@@ -33,28 +132,24 @@ export async function POST(request: Request) {
       }, { status: 500 });
     }
 
-    // Use TomTom Traffic Flow API
-    // Get traffic flow for roads near the coordinates
     const { lat, lng } = coordinates;
 
-    // Create a small bounding box around the coordinates (roughly 0.5 mile radius)
-    const delta = 0.008; // ~0.5 miles
-    const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
+    // Fetch both TomTom and FDOT data in parallel
+    const [tomtomResponse, fdotData] = await Promise.all([
+      fetch(`https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?point=${lat},${lng}&unit=MPH&thickness=1&key=${apiKey}`),
+      getFDOTData(lat, lng)
+    ]);
 
-    const flowUrl = `https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?point=${lat},${lng}&unit=MPH&thickness=1&key=${apiKey}`;
-
-    const response = await fetch(flowUrl);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('TomTom API error:', response.status, errorText);
+    if (!tomtomResponse.ok) {
+      const errorText = await tomtomResponse.text();
+      console.error('TomTom API error:', tomtomResponse.status, errorText);
       return NextResponse.json({
         error: 'Failed to fetch traffic data',
-        message: `API returned status ${response.status}`
-      }, { status: response.status });
+        message: `API returned status ${tomtomResponse.status}`
+      }, { status: tomtomResponse.status });
     }
 
-    const data = await response.json();
+    const data = await tomtomResponse.json();
     const flowData = data.flowSegmentData;
 
     if (!flowData) {
@@ -102,6 +197,12 @@ export async function POST(request: Request) {
       roadType,
       trafficLevel,
       congestionPercent: Math.max(0, congestionPercent),
+      // FDOT data
+      aadt: fdotData.aadt,
+      aadtYear: fdotData.aadtYear,
+      roadName: fdotData.roadName,
+      countyName: fdotData.countyName,
+      fdotDistance: fdotData.distance,
     };
 
     return NextResponse.json(trafficData);
