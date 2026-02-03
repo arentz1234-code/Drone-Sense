@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Business } from '@/app/page';
 
 interface NearbyBusinessesProps {
@@ -48,6 +48,14 @@ export default function NearbyBusinesses({
       setLoading(false);
     }
   };
+
+  // Auto-scan when coordinates are set
+  useEffect(() => {
+    if (coordinates && businesses.length === 0) {
+      fetchNearbyBusinesses();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coordinates]);
 
   const addManualBusiness = () => {
     if (!newBusiness.name || !newBusiness.type) return;
