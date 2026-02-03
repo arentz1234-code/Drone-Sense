@@ -15,6 +15,21 @@ export interface Business {
   address: string;
 }
 
+export interface TrafficInfo {
+  estimatedVPD: number;
+  vpdRange: string;
+  roadType: string;
+  trafficLevel: string;
+  congestionPercent: number;
+}
+
+export interface BusinessSuitability {
+  category: string;
+  suitabilityScore: number;
+  reasoning: string;
+  examples: string[];
+}
+
 export interface AnalysisResult {
   viabilityScore: number;
   terrain: string;
@@ -26,6 +41,7 @@ export interface AnalysisResult {
   constructionPotential: string;
   keyFindings: string[];
   recommendations: string[];
+  businessSuitability?: BusinessSuitability[];
 }
 
 export default function HomePage() {
@@ -33,6 +49,7 @@ export default function HomePage() {
   const [address, setAddress] = useState('');
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [trafficData, setTrafficData] = useState<TrafficInfo | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +78,7 @@ export default function HomePage() {
           address,
           coordinates,
           nearbyBusinesses: allBusinesses,
+          trafficData,
         }),
       });
 
@@ -164,7 +182,7 @@ export default function HomePage() {
               <span className="terminal-title">traffic_data.module</span>
             </div>
             <div className="terminal-body">
-              <TrafficData coordinates={coordinates} />
+              <TrafficData coordinates={coordinates} onDataLoad={setTrafficData} />
             </div>
           </div>
         </div>

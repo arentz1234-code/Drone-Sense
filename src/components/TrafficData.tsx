@@ -5,9 +5,16 @@ import { TrafficData as TrafficDataType } from '@/app/api/traffic/route';
 
 interface TrafficDataProps {
   coordinates: { lat: number; lng: number } | null;
+  onDataLoad?: (data: {
+    estimatedVPD: number;
+    vpdRange: string;
+    roadType: string;
+    trafficLevel: string;
+    congestionPercent: number;
+  } | null) => void;
 }
 
-export default function TrafficData({ coordinates }: TrafficDataProps) {
+export default function TrafficData({ coordinates, onDataLoad }: TrafficDataProps) {
   const [loading, setLoading] = useState(false);
   const [traffic, setTraffic] = useState<TrafficDataType | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +37,16 @@ export default function TrafficData({ coordinates }: TrafficDataProps) {
       if (!response.ok) {
         setError(data.message || data.error || 'Failed to fetch traffic data');
         setTraffic(null);
+        onDataLoad?.(null);
       } else {
         setTraffic(data);
+        onDataLoad?.({
+          estimatedVPD: data.estimatedVPD,
+          vpdRange: data.vpdRange,
+          roadType: data.roadType,
+          trafficLevel: data.trafficLevel,
+          congestionPercent: data.congestionPercent,
+        });
       }
     } catch (err) {
       setError('Failed to fetch traffic data');

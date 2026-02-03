@@ -22,7 +22,33 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
     return 'Poor';
   };
 
+  const getSuitabilityColor = (score: number) => {
+    if (score >= 8) return 'bg-green-500';
+    if (score >= 6) return 'bg-cyan-500';
+    if (score >= 4) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  const getSuitabilityBg = (score: number) => {
+    if (score >= 8) return 'bg-green-500/10 border-green-500/30';
+    if (score >= 6) return 'bg-cyan-500/10 border-cyan-500/30';
+    if (score >= 4) return 'bg-yellow-500/10 border-yellow-500/30';
+    return 'bg-red-500/10 border-red-500/30';
+  };
+
   const handleExportPDF = () => {
+    // Create business suitability section if available
+    const suitabilitySection = analysis.businessSuitability && analysis.businessSuitability.length > 0
+      ? `
+      BUSINESS SUITABILITY BY TRAFFIC (VPD)
+      -------------------------------------
+      ${analysis.businessSuitability.map(item =>
+        `${item.category}: ${item.suitabilityScore}/10
+       ${item.reasoning}
+       Examples: ${item.examples.join(', ')}`
+      ).join('\n\n')}`
+      : '';
+
     // Create a printable version
     const printContent = `
       DRONE SENSE - SITE ANALYSIS REPORT
@@ -44,6 +70,7 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
       BUSINESS RECOMMENDATION
       -----------------------
       ${analysis.businessRecommendation}
+      ${suitabilitySection}
 
       CONSTRUCTION POTENTIAL
       ----------------------
@@ -152,6 +179,52 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
           <p className="text-[var(--text-primary)]">{analysis.businessRecommendation}</p>
         </div>
       </div>
+
+      {/* Business Suitability by VPD */}
+      {analysis.businessSuitability && analysis.businessSuitability.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <svg className="w-5 h-5 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Business Suitability by Traffic (VPD)
+          </h3>
+          <p className="text-sm text-[var(--text-muted)] mb-4">
+            Suitability scores based on traffic volume requirements for each business type
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {analysis.businessSuitability.map((item, index) => (
+              <div
+                key={index}
+                className={`p-3 rounded-lg border ${getSuitabilityBg(item.suitabilityScore)}`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-sm">{item.category}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-2 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${getSuitabilityColor(item.suitabilityScore)} rounded-full transition-all`}
+                        style={{ width: `${item.suitabilityScore * 10}%` }}
+                      />
+                    </div>
+                    <span className={`text-sm font-bold ${
+                      item.suitabilityScore >= 8 ? 'text-green-400' :
+                      item.suitabilityScore >= 6 ? 'text-cyan-400' :
+                      item.suitabilityScore >= 4 ? 'text-yellow-400' : 'text-red-400'
+                    }`}>
+                      {item.suitabilityScore}/10
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-[var(--text-muted)] mb-1">{item.reasoning}</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Examples: {item.examples.slice(0, 3).join(', ')}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Construction Potential */}
       <div className="mb-8">
