@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface Business {
   name: string;
@@ -24,29 +24,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No images provided' }, { status: 400 });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!apiKey) {
       // Return mock data if no API key configured
       return NextResponse.json(getMockAnalysis(nearbyBusinesses));
     }
 
-    const client = new Anthropic({ apiKey });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     // Prepare business context
     const businessContext = nearbyBusinesses.length > 0
       ? `\n\nNearby businesses within 0.5 miles:\n${nearbyBusinesses.map(b => `- ${b.name} (${b.type}) - ${b.distance}`).join('\n')}`
       : '\n\nNo nearby business data available.';
 
-    // Prepare image content for Claude
-    const imageContent = images.map((img) => {
-      // Extract base64 data and media type
+    // Prepare image content for Gemini
+    const imageParts = images.map((img) => {
       const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
       if (match) {
         return {
-          type: 'image' as const,
-          source: {
-            type: 'base64' as const,
-            media_type: match[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+          inlineData: {
+            mimeType: match[1],
             data: match[2],
           },
         };
@@ -54,17 +52,7 @@ export async function POST(request: Request) {
       return null;
     }).filter(Boolean);
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            ...imageContent as Anthropic.ImageBlockParam[],
-            {
-              type: 'text',
-              text: `You are an expert commercial real estate analyst and site evaluator. Analyze these drone/aerial images of a property located at: ${address}
+    const prompt = `You are an expert commercial real estate analyst and site evaluator. Analyze these drone/aerial images of a property located at: ${address}
 ${businessContext}
 
 Please provide a comprehensive site analysis in the following JSON format:
@@ -81,21 +69,15 @@ Please provide a comprehensive site analysis in the following JSON format:
   "recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>"]
 }
 
-Be specific and practical in your analysis. Consider the commercial potential based on the location and surrounding businesses. Return ONLY valid JSON, no markdown or explanation.`,
-            },
-          ],
-        },
-      ],
-    });
+Be specific and practical in your analysis. Consider the commercial potential based on the location and surrounding businesses. Return ONLY valid JSON, no markdown or explanation.`;
 
-    // Parse the response
-    const textContent = response.content.find(block => block.type === 'text');
-    if (!textContent || textContent.type !== 'text') {
-      throw new Error('No text response from Claude');
-    }
+    const result = await model.generateContent([
+      prompt,
+      ...imageParts as any[],
+    ]);
 
-    // Try to extract JSON from the response
-    let analysisText = textContent.text.trim();
+    const response = await result.response;
+    let analysisText = response.text().trim();
 
     // Remove markdown code blocks if present
     if (analysisText.startsWith('```json')) {
