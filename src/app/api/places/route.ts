@@ -39,15 +39,19 @@ export async function POST(request: Request) {
     const response = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
       body: `data=${encodeURIComponent(query)}`,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'DroneSense/1.0 (https://drone-sense.vercel.app)',
+      },
     });
 
     if (!response.ok) {
-      console.error('Overpass API error:', response.status);
-      return NextResponse.json({ businesses: [] });
+      console.error('Overpass API error:', response.status, await response.text());
+      return NextResponse.json({ businesses: [], error: `Overpass API returned ${response.status}` });
     }
 
     const data = await response.json();
+    console.log('Overpass returned', data.elements?.length || 0, 'elements');
     const allBusinesses: Business[] = [];
 
     if (data.elements) {
@@ -79,7 +83,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ businesses: allBusinesses.slice(0, 25) });
   } catch (error) {
     console.error('Places API error:', error);
-    return NextResponse.json({ businesses: [] });
+    return NextResponse.json({ businesses: [], error: String(error) });
   }
 }
 
