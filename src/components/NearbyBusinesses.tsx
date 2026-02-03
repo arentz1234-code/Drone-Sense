@@ -49,13 +49,14 @@ export default function NearbyBusinesses({
     }
   };
 
-  // Auto-scan when coordinates are set
+  // Auto-scan when coordinates change
   useEffect(() => {
-    if (coordinates && businesses.length === 0) {
+    if (coordinates) {
+      setBusinesses([]); // Clear old results
       fetchNearbyBusinesses();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coordinates]);
+  }, [coordinates?.lat, coordinates?.lng]);
 
   const addManualBusiness = () => {
     if (!newBusiness.name || !newBusiness.type) return;
