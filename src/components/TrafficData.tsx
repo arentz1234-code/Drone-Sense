@@ -192,15 +192,9 @@ export default function TrafficData({ coordinates, onDataLoad }: TrafficDataProp
           </div>
 
           {/* Speed Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
-              <span className="text-xs text-[var(--text-muted)]">Current Speed</span>
-              <p className="text-lg font-semibold">{traffic.currentSpeed} mph</p>
-            </div>
-            <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
-              <span className="text-xs text-[var(--text-muted)]">Free Flow Speed</span>
-              <p className="text-lg font-semibold">{traffic.freeFlowSpeed} mph</p>
-            </div>
+          <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
+            <span className="text-xs text-[var(--text-muted)]">Speed Limit (Estimated)</span>
+            <p className="text-lg font-semibold">{traffic.freeFlowSpeed} mph</p>
           </div>
 
           {/* Road Info */}

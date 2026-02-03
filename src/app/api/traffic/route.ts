@@ -20,6 +20,26 @@ export interface TrafficData {
   vpdSource: string;
 }
 
+interface FlowData {
+  frc: string;
+  currentSpeed: number;
+  freeFlowSpeed: number;
+  currentTravelTime: number;
+  freeFlowTravelTime: number;
+  confidence: number;
+}
+
+// FRC priority - lower number = more major road
+const FRC_PRIORITY: Record<string, number> = {
+  'FRC0': 0,  // Motorway/Freeway - highest priority
+  'FRC1': 1,  // Major Road
+  'FRC2': 2,  // Other Major Road
+  'FRC3': 3,  // Secondary Road
+  'FRC4': 4,  // Local Connecting Road
+  'FRC5': 5,  // Local Road High Importance
+  'FRC6': 6,  // Local Road - lowest priority
+};
+
 // Estimate VPD based on road functional class (FRC)
 // These are typical AADT ranges from FHWA Highway Statistics
 function estimateVPD(frc: string, freeFlowSpeed: number): {
@@ -57,6 +77,22 @@ function estimateVPD(frc: string, freeFlowSpeed: number): {
   };
 }
 
+// Fetch traffic data for a single point
+async function fetchTrafficPoint(lat: number, lng: number, apiKey: string): Promise<FlowData | null> {
+  try {
+    const response = await fetch(
+      `https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?point=${lat},${lng}&unit=MPH&thickness=1&key=${apiKey}`
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    return data.flowSegmentData || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body: TrafficRequest = await request.json();
@@ -77,29 +113,46 @@ export async function POST(request: Request) {
 
     const { lat, lng } = coordinates;
 
-    // Fetch TomTom traffic flow data
-    const tomtomResponse = await fetch(
-      `https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?point=${lat},${lng}&unit=MPH&thickness=1&key=${apiKey}`
+    // Sample multiple points around the address to find the nearest major road
+    // This helps when addresses are geocoded to parking lots or set back from main roads
+    const offsets = [
+      { lat: 0, lng: 0 },           // Center point
+      { lat: 0.0005, lng: 0 },      // ~55m North
+      { lat: -0.0005, lng: 0 },     // ~55m South
+      { lat: 0, lng: 0.0005 },      // ~55m East
+      { lat: 0, lng: -0.0005 },     // ~55m West
+      { lat: 0.001, lng: 0 },       // ~110m North
+      { lat: -0.001, lng: 0 },      // ~110m South
+      { lat: 0, lng: 0.001 },       // ~110m East
+      { lat: 0, lng: -0.001 },      // ~110m West
+    ];
+
+    // Fetch traffic data for all sample points in parallel
+    const results = await Promise.all(
+      offsets.map(offset =>
+        fetchTrafficPoint(lat + offset.lat, lng + offset.lng, apiKey)
+      )
     );
 
-    if (!tomtomResponse.ok) {
-      const errorText = await tomtomResponse.text();
-      console.error('TomTom API error:', tomtomResponse.status, errorText);
-      return NextResponse.json({
-        error: 'Failed to fetch traffic data',
-        message: `API returned status ${tomtomResponse.status}`
-      }, { status: tomtomResponse.status });
-    }
+    // Filter out null results and find the most major road (lowest FRC number)
+    const validResults = results.filter((r): r is FlowData => r !== null);
 
-    const data = await tomtomResponse.json();
-    const flowData = data.flowSegmentData;
-
-    if (!flowData) {
+    if (validResults.length === 0) {
       return NextResponse.json({
         error: 'No traffic data available',
         message: 'No traffic information found for this location'
       }, { status: 404 });
     }
+
+    // Sort by FRC priority (most major road first)
+    validResults.sort((a, b) => {
+      const priorityA = FRC_PRIORITY[a.frc] ?? 99;
+      const priorityB = FRC_PRIORITY[b.frc] ?? 99;
+      return priorityA - priorityB;
+    });
+
+    // Use the most major road found
+    const flowData = validResults[0];
 
     // Calculate congestion percentage
     const congestionPercent = flowData.freeFlowSpeed > 0
