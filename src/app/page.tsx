@@ -28,6 +28,7 @@ export interface BusinessSuitability {
   suitabilityScore: number;
   reasoning: string;
   examples: string[];
+  existingInArea?: string[];
 }
 
 export interface AnalysisResult {
@@ -42,6 +43,7 @@ export interface AnalysisResult {
   keyFindings: string[];
   recommendations: string[];
   businessSuitability?: BusinessSuitability[];
+  topRecommendations?: string[];
 }
 
 export default function HomePage() {

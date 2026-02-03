@@ -167,6 +167,28 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
         </div>
       </div>
 
+      {/* Top Recommendations - Not In Area */}
+      {analysis.topRecommendations && analysis.topRecommendations.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <svg className="w-5 h-5 text-[var(--accent-green)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Top Recommendations (Not Currently in Area)
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {analysis.topRecommendations.slice(0, 10).map((rec, index) => (
+              <span
+                key={index}
+                className="px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-full text-sm font-medium text-green-400"
+              >
+                {rec}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Business Recommendation */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -217,8 +239,13 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
                   </div>
                 </div>
                 <p className="text-xs text-[var(--text-muted)] mb-1">{item.reasoning}</p>
+                {item.existingInArea && item.existingInArea.length > 0 && (
+                  <p className="text-xs text-red-400 mb-1">
+                    Already in area: {item.existingInArea.join(', ')}
+                  </p>
+                )}
                 <p className="text-xs text-[var(--text-secondary)]">
-                  Examples: {item.examples.slice(0, 3).join(', ')}
+                  Available: {item.examples.slice(0, 3).join(', ')}
                 </p>
               </div>
             ))}

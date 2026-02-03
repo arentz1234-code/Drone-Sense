@@ -26,26 +26,55 @@ interface AnalyzeRequest {
 
 // VPD thresholds for different business types
 const VPD_THRESHOLDS = {
-  bigBox: { min: 25000, ideal: 35000, examples: ['Walmart', 'Target', 'Costco', 'Home Depot', "Lowe's"] },
-  gasStation: { min: 15000, ideal: 25000, examples: ['Shell', 'BP', 'Chevron', 'RaceTrac', "Buc-ee's"] },
-  fastFood: { min: 15000, ideal: 20000, examples: ["Chick-fil-A", "McDonald's", "Wendy's", 'Taco Bell', "Zaxby's"] },
-  casualDining: { min: 12000, ideal: 18000, examples: ["Chili's", "Applebee's", 'Olive Garden', 'Red Lobster'] },
-  coffeeShop: { min: 12000, ideal: 18000, examples: ['Starbucks', 'Dunkin', 'Dutch Bros', 'Scooters'] },
-  quickService: { min: 10000, ideal: 15000, examples: ['Subway', 'Jersey Mikes', 'Firehouse Subs', 'Jimmy Johns'] },
-  convenience: { min: 8000, ideal: 12000, examples: ['7-Eleven', 'Circle K', 'Wawa', 'QuikTrip'] },
-  bank: { min: 10000, ideal: 15000, examples: ['Chase', 'Bank of America', 'Wells Fargo', 'Regions'] },
+  bigBox: { min: 25000, ideal: 35000, examples: ['Walmart', 'Target', 'Costco', 'Home Depot', "Lowe's", 'Best Buy', 'Kohl\'s'] },
+  gasStation: { min: 15000, ideal: 25000, examples: ['Shell', 'BP', 'Chevron', 'RaceTrac', "Buc-ee's", 'QuikTrip', 'Wawa', 'Sheetz'] },
+  fastFood: { min: 15000, ideal: 20000, examples: ["Chick-fil-A", "McDonald's", "Wendy's", 'Taco Bell', "Zaxby's", "Popeyes", "Raising Cane's", "Whataburger", "Five Guys", "Shake Shack", "In-N-Out"] },
+  casualDining: { min: 12000, ideal: 18000, examples: ["Chili's", "Applebee's", 'Olive Garden', 'Red Lobster', 'Texas Roadhouse', 'Outback', 'Buffalo Wild Wings', 'Red Robin'] },
+  coffeeShop: { min: 12000, ideal: 18000, examples: ['Starbucks', 'Dunkin', 'Dutch Bros', 'Scooters', 'PJ\'s Coffee', '7 Brew', 'Black Rifle Coffee'] },
+  quickService: { min: 10000, ideal: 15000, examples: ['Subway', 'Jersey Mike\'s', 'Firehouse Subs', 'Jimmy John\'s', 'Chipotle', 'Moe\'s', 'Qdoba', 'Wingstop', 'Tropical Smoothie'] },
+  convenience: { min: 8000, ideal: 12000, examples: ['7-Eleven', 'Circle K', 'Wawa', 'QuikTrip', 'Speedway', 'Casey\'s'] },
+  bank: { min: 10000, ideal: 15000, examples: ['Chase', 'Bank of America', 'Wells Fargo', 'Regions', 'PNC', 'Truist', 'TD Bank'] },
   pharmacy: { min: 12000, ideal: 18000, examples: ['CVS', 'Walgreens', 'Rite Aid'] },
-  autoService: { min: 10000, ideal: 15000, examples: ['Jiffy Lube', 'Tire Kingdom', 'AutoZone', "O'Reilly"] },
-  medical: { min: 8000, ideal: 12000, examples: ['Urgent Care', 'Dental Office', 'Medical Clinic'] },
-  retail: { min: 10000, ideal: 18000, examples: ['Dollar General', 'Dollar Tree', 'Family Dollar', 'Ross'] },
+  autoService: { min: 10000, ideal: 15000, examples: ['Jiffy Lube', 'Tire Kingdom', 'AutoZone', "O'Reilly", 'Advance Auto Parts', 'Discount Tire', 'Take 5 Oil Change', 'Valvoline'] },
+  medical: { min: 8000, ideal: 12000, examples: ['Urgent Care', 'Dental Office', 'Medical Clinic', 'CareNow', 'AFC Urgent Care', 'MedExpress'] },
+  retail: { min: 10000, ideal: 18000, examples: ['Dollar General', 'Dollar Tree', 'Family Dollar', 'Ross', 'TJ Maxx', 'Marshalls', 'Five Below', 'Ulta', 'Sephora'] },
 };
 
-function calculateBusinessSuitability(vpd: number) {
+// Check if a business name matches any of the examples (fuzzy match)
+function businessExistsInArea(businessName: string, examples: string[]): boolean {
+  const normalizedName = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return examples.some(example => {
+    const normalizedExample = example.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return normalizedName.includes(normalizedExample) || normalizedExample.includes(normalizedName);
+  });
+}
+
+// Get list of existing business names from nearby businesses
+function getExistingBusinessNames(nearbyBusinesses: Business[]): string[] {
+  return nearbyBusinesses.map(b => b.name);
+}
+
+// Filter examples to exclude businesses that already exist nearby
+function filterExistingBusinesses(examples: string[], nearbyBusinesses: Business[]): string[] {
+  const existingNames = nearbyBusinesses.map(b => b.name.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+  return examples.filter(example => {
+    const normalizedExample = example.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Check if this business already exists in the nearby area
+    const exists = existingNames.some(existing =>
+      existing.includes(normalizedExample) || normalizedExample.includes(existing)
+    );
+    return !exists;
+  });
+}
+
+function calculateBusinessSuitability(vpd: number, nearbyBusinesses: Business[]) {
   const suitability: Array<{
     category: string;
     suitabilityScore: number;
     reasoning: string;
     examples: string[];
+    existingInArea: string[];
   }> = [];
 
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
@@ -81,16 +110,66 @@ function calculateBusinessSuitability(vpd: number) {
       retail: 'Discount Retail',
     };
 
+    // Find which businesses from this category already exist in the area
+    const existingInArea = threshold.examples.filter(example => {
+      const normalizedExample = example.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return nearbyBusinesses.some(b => {
+        const normalizedName = b.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return normalizedName.includes(normalizedExample) || normalizedExample.includes(normalizedName);
+      });
+    });
+
+    // Filter out existing businesses from recommendations
+    const availableExamples = filterExistingBusinesses(threshold.examples, nearbyBusinesses);
+
+    // If all examples exist, lower the score and note it
+    if (availableExamples.length === 0) {
+      reasoning += '. All major brands in this category already exist in the area.';
+      score = Math.max(1, score - 3);
+    } else if (existingInArea.length > 0) {
+      reasoning += `. Note: ${existingInArea.join(', ')} already in area.`;
+    }
+
     suitability.push({
       category: categoryNames[key] || key,
       suitabilityScore: Math.max(1, Math.min(10, score)),
       reasoning,
-      examples: threshold.examples,
+      examples: availableExamples.length > 0 ? availableExamples : ['Market may be saturated'],
+      existingInArea,
     });
   }
 
   // Sort by suitability score descending
   return suitability.sort((a, b) => b.suitabilityScore - a.suitabilityScore);
+}
+
+// Generate top specific recommendations excluding existing businesses
+function generateTopRecommendations(vpd: number, nearbyBusinesses: Business[]): string[] {
+  const recommendations: Array<{ name: string; score: number; reason: string }> = [];
+
+  for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
+    // Check if VPD supports this category
+    if (vpd < threshold.min * 0.7) continue;
+
+    const availableExamples = filterExistingBusinesses(threshold.examples, nearbyBusinesses);
+
+    let categoryScore = 0;
+    if (vpd >= threshold.ideal) categoryScore = 10;
+    else if (vpd >= threshold.min) categoryScore = 7;
+    else categoryScore = 4;
+
+    for (const example of availableExamples.slice(0, 3)) {
+      recommendations.push({
+        name: example,
+        score: categoryScore,
+        reason: `VPD supports ${key.replace(/([A-Z])/g, ' $1').toLowerCase()} concept`
+      });
+    }
+  }
+
+  // Sort by score and return top recommendations
+  recommendations.sort((a, b) => b.score - a.score);
+  return recommendations.slice(0, 10).map(r => r.name);
 }
 
 export async function POST(request: Request) {
@@ -115,22 +194,27 @@ export async function POST(request: Request) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
+    // Get list of existing businesses to exclude
+    const existingBusinessNames = nearbyBusinesses.map(b => b.name).join(', ');
+
     // Prepare business context
     const businessContext = nearbyBusinesses.length > 0
-      ? `\n\nNearby businesses within scanning radius:\n${nearbyBusinesses.map(b => `- ${b.name} (${b.type}) - ${b.distance}`).join('\n')}`
+      ? `\n\nNearby businesses within scanning radius (ALREADY EXIST - DO NOT RECOMMEND THESE):\n${nearbyBusinesses.map(b => `- ${b.name} (${b.type}) - ${b.distance}`).join('\n')}`
       : '\n\nNo nearby business data available.';
 
     // Prepare traffic context
     let trafficContext = '\n\nNo traffic data available.';
     let businessSuitability: ReturnType<typeof calculateBusinessSuitability> = [];
+    let topRecommendations: string[] = [];
 
     if (trafficData) {
+      businessSuitability = calculateBusinessSuitability(trafficData.estimatedVPD, nearbyBusinesses);
+      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses);
+
       trafficContext = `\n\nTraffic Data:
 - Estimated VPD (Vehicles Per Day): ${trafficData.estimatedVPD.toLocaleString()}
 - VPD Range: ${trafficData.vpdRange}
 - Road Type: ${trafficData.roadType}
-- Current Traffic Level: ${trafficData.trafficLevel}
-- Congestion: ${trafficData.congestionPercent}%
 
 VPD Guidelines for Business Types:
 - Big Box Stores (Walmart, Target): 25,000-35,000+ VPD ideal
@@ -139,9 +223,9 @@ VPD Guidelines for Business Types:
 - Coffee Shops (Starbucks, Dunkin): 12,000-18,000+ VPD ideal
 - Quick Service Restaurants: 10,000-15,000+ VPD ideal
 - Convenience Stores: 8,000-12,000+ VPD ideal
-- Banks/Pharmacies: 10,000-18,000+ VPD ideal`;
+- Banks/Pharmacies: 10,000-18,000+ VPD ideal
 
-      businessSuitability = calculateBusinessSuitability(trafficData.estimatedVPD);
+TOP RECOMMENDED BUSINESSES (not already in area): ${topRecommendations.join(', ')}`;
     }
 
     // Prepare image content for Gemini
@@ -170,19 +254,20 @@ Please provide a comprehensive site analysis in the following JSON format:
   "existingStructures": "<any buildings, foundations, or structures visible>",
   "vegetation": "<trees, landscaping, clearing needed>",
   "lotSizeEstimate": "<estimated lot size in acres or sq ft>",
-  "businessRecommendation": "<Based on the VPD data and nearby businesses, provide a SPECIFIC recommendation. Example: 'With ${trafficData?.estimatedVPD?.toLocaleString() || 'the estimated'} VPD, this site is ${trafficData && trafficData.estimatedVPD >= 20000 ? 'well-suited' : 'suitable'} for [specific business types]. Given the existing [nearby business types], a [specific recommendation] would complement the area and capture drive-by traffic.'>",
+  "businessRecommendation": "<CRITICAL: Only recommend specific businesses that DO NOT already exist in the nearby area. With ${trafficData?.estimatedVPD?.toLocaleString() || 'the estimated'} VPD, recommend specific brands like: ${topRecommendations.slice(0, 5).join(', ')}. DO NOT recommend: ${existingBusinessNames || 'N/A'}. Explain why your specific recommendations would work at this location.>",
   "constructionPotential": "<detailed assessment of construction viability, challenges, and opportunities>",
   "keyFindings": ["<finding 1>", "<finding 2>", "<finding 3>", "<finding 4>", "<finding 5>"],
   "recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>", "<recommendation 4>", "<recommendation 5>"]
 }
 
-IMPORTANT: In your businessRecommendation, be VERY SPECIFIC about what types of businesses would work based on the VPD:
-- If VPD is 25,000+: Recommend big box retail, major gas stations, popular fast food chains
-- If VPD is 15,000-25,000: Recommend fast food, coffee shops, gas stations, banks
-- If VPD is 10,000-15,000: Recommend quick service restaurants, convenience stores, auto service
-- If VPD is below 10,000: Recommend local services, medical offices, smaller retail
+CRITICAL RULES:
+1. DO NOT recommend any business that already exists in the nearby businesses list
+2. Be VERY SPECIFIC - recommend actual brand names, not generic categories
+3. Base recommendations on the VPD data - higher VPD = can support more demanding concepts
+4. Consider what's MISSING from the area that would complement existing businesses
+5. If the area already has fast food, recommend a DIFFERENT fast food chain that's not there
+6. If area has Starbucks, recommend Dutch Bros or Dunkin instead
 
-Consider corner lot potential for gas stations. Consider clustering effects with existing nearby businesses.
 Return ONLY valid JSON, no markdown or explanation.`;
 
     const result = await model.generateContent([
@@ -206,9 +291,12 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     const analysis = JSON.parse(analysisText.trim());
 
-    // Add business suitability data
+    // Add business suitability data and top recommendations
     if (businessSuitability.length > 0) {
       analysis.businessSuitability = businessSuitability;
+    }
+    if (topRecommendations.length > 0) {
+      analysis.topRecommendations = topRecommendations;
     }
 
     return NextResponse.json(analysis);
@@ -230,25 +318,21 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
 function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null) {
   const vpd = trafficData?.estimatedVPD || 15000;
-  const businessSuitability = calculateBusinessSuitability(vpd);
+  const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses);
+  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses);
 
-  const hasRestaurants = nearbyBusinesses.some(b =>
-    b.type.toLowerCase().includes('restaurant') || b.type.toLowerCase().includes('food')
-  );
-
+  // Build recommendation excluding existing businesses
   let businessRec = '';
-  if (vpd >= 25000) {
-    businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this is a prime commercial location suitable for major retailers like Target or Walmart, high-traffic gas stations like Buc-ee's or RaceTrac, or popular fast food chains like Chick-fil-A. The high traffic volume supports any drive-through concept.`;
-  } else if (vpd >= 15000) {
-    businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this site is well-suited for fast food restaurants (McDonald's, Wendy's), coffee shops (Starbucks, Dunkin), gas stations, or banks. The traffic volume supports drive-through operations effectively.`;
-  } else if (vpd >= 10000) {
-    businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this location is suitable for quick service restaurants (Subway, Jersey Mike's), convenience stores, auto service centers, or smaller retail. Consider businesses that can capture local community traffic.`;
-  } else {
-    businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this location is better suited for local services, medical/dental offices, or neighborhood retail. High-traffic concepts requiring 15,000+ VPD may struggle at this location.`;
-  }
+  const topRecs = topRecommendations.slice(0, 5).join(', ');
 
-  if (hasRestaurants) {
-    businessRec += ` Given the existing restaurant cluster nearby, a complementary food concept or supporting retail would benefit from the established traffic pattern.`;
+  if (vpd >= 25000) {
+    businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this is a prime commercial location. Top recommendations not currently in the area: ${topRecs}. The high traffic volume supports major retail and drive-through concepts.`;
+  } else if (vpd >= 15000) {
+    businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this site supports strong commercial development. Recommended businesses not in the area: ${topRecs}. The traffic volume effectively supports drive-through operations.`;
+  } else if (vpd >= 10000) {
+    businessRec = `With an estimated ${vpd.toLocaleString()} VPD, suitable for neighborhood commercial. Consider: ${topRecs}. These businesses can capture local community traffic effectively.`;
+  } else {
+    businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this location suits local services. Consider: ${topRecs}. Focus on businesses serving the immediate community.`;
   }
 
   return {
@@ -270,10 +354,11 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     recommendations: [
       'Conduct formal land survey to confirm exact boundaries and acreage',
       'Verify zoning compliance and permitted uses with local planning department',
-      `Target businesses requiring ${vpd >= 15000 ? '15,000-25,000' : '8,000-15,000'} VPD based on traffic data`,
+      `Consider: ${topRecommendations.slice(0, 3).join(', ')} based on traffic and market gap`,
       'Assess corner lot potential for gas station or drive-through concepts',
       'Obtain utility availability letters from local providers',
     ],
     businessSuitability,
+    topRecommendations,
   };
 }
