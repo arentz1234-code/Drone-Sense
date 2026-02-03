@@ -31,12 +31,11 @@ export default function HomePage() {
   const [address, setAddress] = useState('');
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
-  const [manualBusinesses, setManualBusinesses] = useState<Business[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const allBusinesses = [...businesses, ...manualBusinesses];
+  const allBusinesses = businesses;
 
   const handleAnalyze = async () => {
     if (images.length === 0) {
@@ -137,8 +136,6 @@ export default function HomePage() {
                 coordinates={coordinates}
                 businesses={businesses}
                 setBusinesses={setBusinesses}
-                manualBusinesses={manualBusinesses}
-                setManualBusinesses={setManualBusinesses}
               />
             </div>
           </div>

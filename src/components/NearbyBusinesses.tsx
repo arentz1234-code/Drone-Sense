@@ -7,8 +7,6 @@ interface NearbyBusinessesProps {
   coordinates: { lat: number; lng: number } | null;
   businesses: Business[];
   setBusinesses: (businesses: Business[]) => void;
-  manualBusinesses: Business[];
-  setManualBusinesses: (businesses: Business[]) => void;
 }
 
 const RADIUS_OPTIONS = [
@@ -41,24 +39,15 @@ export default function NearbyBusinesses({
   coordinates,
   businesses,
   setBusinesses,
-  manualBusinesses,
-  setManualBusinesses,
 }: NearbyBusinessesProps) {
   const [loading, setLoading] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
   const [radiusMiles, setRadiusMiles] = useState(0.5);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [newBusiness, setNewBusiness] = useState({
-    name: '',
-    type: '',
-    distance: '',
-    address: '',
-  });
 
   const fetchNearbyBusinesses = async (radius?: number) => {
     if (!coordinates) return;
 
-    const radiusMeters = Math.round((radius ?? radiusMiles) * 1609.34); // Convert miles to meters
+    const radiusMeters = Math.round((radius ?? radiusMiles) * 1609.34);
 
     setLoading(true);
     try {
@@ -102,7 +91,7 @@ export default function NearbyBusinesses({
   // Auto-scan when coordinates change
   useEffect(() => {
     if (coordinates) {
-      setBusinesses([]); // Clear old results
+      setBusinesses([]);
       fetchNearbyBusinesses(radiusMiles);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -112,34 +101,6 @@ export default function NearbyBusinesses({
   const filteredBusinesses = selectedTypes.length === 0
     ? businesses
     : businesses.filter(b => selectedTypes.includes(b.type));
-
-  const addManualBusiness = () => {
-    if (!newBusiness.name || !newBusiness.type) return;
-
-    setManualBusinesses([
-      ...manualBusinesses,
-      {
-        ...newBusiness,
-        distance: newBusiness.distance || 'N/A',
-        address: newBusiness.address || 'Manually added',
-      },
-    ]);
-    setNewBusiness({ name: '', type: '', distance: '', address: '' });
-    setShowAddForm(false);
-  };
-
-  const removeBusiness = (index: number, isManual: boolean) => {
-    if (isManual) {
-      setManualBusinesses(manualBusinesses.filter((_, i) => i !== index));
-    } else {
-      setBusinesses(businesses.filter((_, i) => i !== index));
-    }
-  };
-
-  const filteredManual = selectedTypes.length === 0
-    ? manualBusinesses
-    : manualBusinesses.filter(b => selectedTypes.includes(b.type));
-  const allBusinesses = [...filteredBusinesses, ...filteredManual];
 
   const getTypeColor = (type: string) => {
     const t = type.toLowerCase();
@@ -163,12 +124,6 @@ export default function NearbyBusinesses({
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="btn-secondary text-xs py-1 px-3"
-          >
-            + Add
-          </button>
           <button
             onClick={() => fetchNearbyBusinesses()}
             disabled={loading || !coordinates}
@@ -221,50 +176,6 @@ export default function NearbyBusinesses({
         </div>
       )}
 
-      {/* Add Manual Business Form */}
-      {showAddForm && (
-        <div className="mb-4 p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <input
-              type="text"
-              placeholder="Business name"
-              value={newBusiness.name}
-              onChange={(e) => setNewBusiness({ ...newBusiness, name: e.target.value })}
-              className="terminal-input text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Type (e.g., Restaurant)"
-              value={newBusiness.type}
-              onChange={(e) => setNewBusiness({ ...newBusiness, type: e.target.value })}
-              className="terminal-input text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Distance (e.g., 0.2 mi)"
-              value={newBusiness.distance}
-              onChange={(e) => setNewBusiness({ ...newBusiness, distance: e.target.value })}
-              className="terminal-input text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Address (optional)"
-              value={newBusiness.address}
-              onChange={(e) => setNewBusiness({ ...newBusiness, address: e.target.value })}
-              className="terminal-input text-sm"
-            />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={addManualBusiness} className="btn-primary text-xs py-2 px-4">
-              Add Business
-            </button>
-            <button onClick={() => setShowAddForm(false)} className="btn-secondary text-xs py-2 px-4">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* No Location Warning */}
       {!coordinates && (
         <div className="text-center py-8 border border-dashed border-[var(--border-color)] rounded-lg">
@@ -278,70 +189,35 @@ export default function NearbyBusinesses({
       )}
 
       {/* Business List */}
-      {allBusinesses.length > 0 && (
+      {filteredBusinesses.length > 0 && (
         <div className="space-y-2 max-h-[300px] overflow-y-auto">
           {filteredBusinesses.map((business, index) => (
             <div
-              key={`api-${index}`}
-              className="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]"
+              key={`${business.name}-${index}`}
+              className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]"
             >
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{business.name}</span>
-                  <span className={`tag ${getTypeColor(business.type)}`}>{business.type}</span>
-                </div>
-                <div className="text-xs text-[var(--text-muted)] mt-1">
-                  {business.distance} • {business.address}
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">{business.name}</span>
+                <span className={`tag ${getTypeColor(business.type)}`}>{business.type}</span>
               </div>
-              <button
-                onClick={() => removeBusiness(index, false)}
-                className="text-[var(--text-muted)] hover:text-[var(--accent-red)] ml-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ))}
-          {filteredManual.map((business, index) => (
-            <div
-              key={`manual-${index}`}
-              className="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-cyan)] border-opacity-30"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{business.name}</span>
-                  <span className={`tag ${getTypeColor(business.type)}`}>{business.type}</span>
-                  <span className="text-xs text-[var(--accent-cyan)]">(manual)</span>
-                </div>
-                <div className="text-xs text-[var(--text-muted)] mt-1">
-                  {business.distance} • {business.address}
-                </div>
+              <div className="text-xs text-[var(--text-muted)] mt-1">
+                {business.distance} • {business.address}
               </div>
-              <button
-                onClick={() => removeBusiness(index, true)}
-                className="text-[var(--text-muted)] hover:text-[var(--accent-red)] ml-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
             </div>
           ))}
         </div>
       )}
 
-      {coordinates && allBusinesses.length === 0 && !loading && (
+      {coordinates && filteredBusinesses.length === 0 && !loading && (
         <div className="text-center py-6 text-[var(--text-muted)] text-sm">
           {businesses.length > 0 && selectedTypes.length > 0
             ? 'No businesses match your filters'
-            : 'Click "Scan" to find nearby businesses or add them manually'}
+            : 'Click "Scan" to find nearby businesses'}
         </div>
       )}
 
       {/* Summary */}
-      {(businesses.length > 0 || manualBusinesses.length > 0) && (
+      {businesses.length > 0 && (
         <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
           <div className="flex items-center justify-between text-sm">
             <span className="text-[var(--text-muted)]">
@@ -349,8 +225,8 @@ export default function NearbyBusinesses({
             </span>
             <span className="text-[var(--accent-green)] font-mono">
               {selectedTypes.length > 0
-                ? `${allBusinesses.length} of ${businesses.length + manualBusinesses.length}`
-                : allBusinesses.length}
+                ? `${filteredBusinesses.length} of ${businesses.length}`
+                : businesses.length}
             </span>
           </div>
         </div>
