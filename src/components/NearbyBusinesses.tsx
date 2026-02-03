@@ -11,6 +11,32 @@ interface NearbyBusinessesProps {
   setManualBusinesses: (businesses: Business[]) => void;
 }
 
+const RADIUS_OPTIONS = [
+  { value: 0.1, label: '0.1 mi' },
+  { value: 0.25, label: '0.25 mi' },
+  { value: 0.5, label: '0.5 mi' },
+  { value: 1, label: '1 mi' },
+  { value: 2, label: '2 mi' },
+  { value: 3, label: '3 mi' },
+  { value: 5, label: '5 mi' },
+  { value: 10, label: '10 mi' },
+  { value: 15, label: '15 mi' },
+  { value: 20, label: '20 mi' },
+  { value: 25, label: '25 mi' },
+];
+
+const BUSINESS_TYPES = [
+  'Restaurant',
+  'Cafe',
+  'Fast Food',
+  'Bank',
+  'Pharmacy',
+  'Gas Station',
+  'Grocery',
+  'Convenience',
+  'Mall',
+];
+
 export default function NearbyBusinesses({
   coordinates,
   businesses,
@@ -20,6 +46,8 @@ export default function NearbyBusinesses({
 }: NearbyBusinessesProps) {
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [radiusMiles, setRadiusMiles] = useState(0.5);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [newBusiness, setNewBusiness] = useState({
     name: '',
     type: '',
@@ -27,15 +55,17 @@ export default function NearbyBusinesses({
     address: '',
   });
 
-  const fetchNearbyBusinesses = async () => {
+  const fetchNearbyBusinesses = async (radius?: number) => {
     if (!coordinates) return;
+
+    const radiusMeters = Math.round((radius ?? radiusMiles) * 1609.34); // Convert miles to meters
 
     setLoading(true);
     try {
       const response = await fetch('/api/places', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ coordinates, radius: 800 }), // ~0.5 miles
+        body: JSON.stringify({ coordinates, radius: radiusMeters }),
       });
 
       if (response.ok) {
@@ -49,14 +79,39 @@ export default function NearbyBusinesses({
     }
   };
 
+  const handleRadiusChange = (newRadius: number) => {
+    setRadiusMiles(newRadius);
+    if (coordinates) {
+      setBusinesses([]);
+      fetchNearbyBusinesses(newRadius);
+    }
+  };
+
+  const toggleTypeFilter = (type: string) => {
+    setSelectedTypes(prev =>
+      prev.includes(type)
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
+
+  const clearFilters = () => {
+    setSelectedTypes([]);
+  };
+
   // Auto-scan when coordinates change
   useEffect(() => {
     if (coordinates) {
       setBusinesses([]); // Clear old results
-      fetchNearbyBusinesses();
+      fetchNearbyBusinesses(radiusMiles);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coordinates?.lat, coordinates?.lng]);
+
+  // Filter businesses based on selected types
+  const filteredBusinesses = selectedTypes.length === 0
+    ? businesses
+    : businesses.filter(b => selectedTypes.includes(b.type));
 
   const addManualBusiness = () => {
     if (!newBusiness.name || !newBusiness.type) return;
@@ -81,7 +136,10 @@ export default function NearbyBusinesses({
     }
   };
 
-  const allBusinesses = [...businesses, ...manualBusinesses];
+  const filteredManual = selectedTypes.length === 0
+    ? manualBusinesses
+    : manualBusinesses.filter(b => selectedTypes.includes(b.type));
+  const allBusinesses = [...filteredBusinesses, ...filteredManual];
 
   const getTypeColor = (type: string) => {
     const t = type.toLowerCase();
@@ -94,16 +152,25 @@ export default function NearbyBusinesses({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-[var(--text-primary)]">Nearby Businesses (0.5mi)</h3>
-        <div className="flex gap-2">
+        <h3 className="font-semibold text-[var(--text-primary)]">Nearby Businesses</h3>
+        <div className="flex gap-2 items-center">
+          <select
+            value={radiusMiles}
+            onChange={(e) => handleRadiusChange(parseFloat(e.target.value))}
+            className="terminal-input text-xs py-1 px-2 w-20"
+          >
+            {RADIUS_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
           <button
             onClick={() => setShowAddForm(true)}
             className="btn-secondary text-xs py-1 px-3"
           >
-            + Add Manual
+            + Add
           </button>
           <button
-            onClick={fetchNearbyBusinesses}
+            onClick={() => fetchNearbyBusinesses()}
             disabled={loading || !coordinates}
             className="btn-secondary text-xs py-1 px-3 flex items-center gap-1"
           >
@@ -117,10 +184,42 @@ export default function NearbyBusinesses({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             )}
-            Scan Area
+            Scan
           </button>
         </div>
       </div>
+
+      {/* Type Filters */}
+      {businesses.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-[var(--text-muted)]">Filter by type:</span>
+            {selectedTypes.length > 0 && (
+              <button
+                onClick={clearFilters}
+                className="text-xs text-[var(--accent-cyan)] hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {BUSINESS_TYPES.map(type => (
+              <button
+                key={type}
+                onClick={() => toggleTypeFilter(type)}
+                className={`text-xs px-2 py-1 rounded border transition-colors ${
+                  selectedTypes.includes(type)
+                    ? 'bg-[var(--accent-cyan)] text-black border-[var(--accent-cyan)]'
+                    : 'bg-transparent text-[var(--text-secondary)] border-[var(--border-color)] hover:border-[var(--accent-cyan)]'
+                }`}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Add Manual Business Form */}
       {showAddForm && (
@@ -181,7 +280,7 @@ export default function NearbyBusinesses({
       {/* Business List */}
       {allBusinesses.length > 0 && (
         <div className="space-y-2 max-h-[300px] overflow-y-auto">
-          {businesses.map((business, index) => (
+          {filteredBusinesses.map((business, index) => (
             <div
               key={`api-${index}`}
               className="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]"
@@ -205,7 +304,7 @@ export default function NearbyBusinesses({
               </button>
             </div>
           ))}
-          {manualBusinesses.map((business, index) => (
+          {filteredManual.map((business, index) => (
             <div
               key={`manual-${index}`}
               className="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-cyan)] border-opacity-30"
@@ -235,16 +334,24 @@ export default function NearbyBusinesses({
 
       {coordinates && allBusinesses.length === 0 && !loading && (
         <div className="text-center py-6 text-[var(--text-muted)] text-sm">
-          Click &quot;Scan Area&quot; to find nearby businesses or add them manually
+          {businesses.length > 0 && selectedTypes.length > 0
+            ? 'No businesses match your filters'
+            : 'Click "Scan" to find nearby businesses or add them manually'}
         </div>
       )}
 
       {/* Summary */}
-      {allBusinesses.length > 0 && (
+      {(businesses.length > 0 || manualBusinesses.length > 0) && (
         <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-[var(--text-muted)]">Total businesses found:</span>
-            <span className="text-[var(--accent-green)] font-mono">{allBusinesses.length}</span>
+            <span className="text-[var(--text-muted)]">
+              {selectedTypes.length > 0 ? 'Showing:' : 'Total businesses:'}
+            </span>
+            <span className="text-[var(--accent-green)] font-mono">
+              {selectedTypes.length > 0
+                ? `${allBusinesses.length} of ${businesses.length + manualBusinesses.length}`
+                : allBusinesses.length}
+            </span>
           </div>
         </div>
       )}
