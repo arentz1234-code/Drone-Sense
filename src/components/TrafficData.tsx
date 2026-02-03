@@ -173,41 +173,19 @@ export default function TrafficData({ coordinates, onDataLoad }: TrafficDataProp
             </div>
           </div>
 
-          {/* Traffic Level Badge */}
-          <div className={`p-4 rounded-lg border ${getTrafficBg(traffic.trafficLevel)}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Current Traffic</span>
-                <p className={`text-2xl font-bold ${getTrafficColor(traffic.trafficLevel)}`}>
-                  {traffic.trafficLevel}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-[var(--text-muted)]">Congestion</span>
-                <p className={`text-xl font-bold ${getTrafficColor(traffic.trafficLevel)}`}>
-                  {traffic.congestionPercent}%
-                </p>
-              </div>
+          {/* Speed, Road Type, Traffic - All on one line */}
+          <div className="grid grid-cols-3 gap-2 p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
+            <div className="text-center">
+              <span className="text-xs text-[var(--text-muted)]">Speed Limit</span>
+              <p className="font-semibold">{traffic.freeFlowSpeed} mph</p>
             </div>
-          </div>
-
-          {/* Speed Info */}
-          <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
-            <span className="text-xs text-[var(--text-muted)]">Speed Limit (Estimated)</span>
-            <p className="text-lg font-semibold">{traffic.freeFlowSpeed} mph</p>
-          </div>
-
-          {/* Road Info */}
-          <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs text-[var(--text-muted)]">Road Type</span>
-                <p className="font-medium">{traffic.roadType}</p>
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-[var(--text-muted)]">Data Confidence</span>
-                <p className="font-medium">{Math.round(traffic.confidence * 100)}%</p>
-              </div>
+            <div className="text-center border-x border-[var(--border-color)]">
+              <span className="text-xs text-[var(--text-muted)]">Road Type</span>
+              <p className="font-semibold text-sm">{traffic.roadType}</p>
+            </div>
+            <div className="text-center">
+              <span className="text-xs text-[var(--text-muted)]">Traffic</span>
+              <p className={`font-semibold ${getTrafficColor(traffic.trafficLevel)}`}>{traffic.trafficLevel}</p>
             </div>
           </div>
 
