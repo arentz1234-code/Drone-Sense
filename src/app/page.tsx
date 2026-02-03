@@ -4,6 +4,7 @@ import { useState } from 'react';
 import PhotoUpload from '@/components/PhotoUpload';
 import AddressInput from '@/components/AddressInput';
 import NearbyBusinesses from '@/components/NearbyBusinesses';
+import PropertyDetails from '@/components/PropertyDetails';
 import AnalysisReport from '@/components/AnalysisReport';
 
 export interface Business {
@@ -137,6 +138,19 @@ export default function HomePage() {
                 businesses={businesses}
                 setBusinesses={setBusinesses}
               />
+            </div>
+          </div>
+
+          {/* Property Details Section */}
+          <div className="terminal-card">
+            <div className="terminal-header">
+              <div className="terminal-dot red"></div>
+              <div className="terminal-dot yellow"></div>
+              <div className="terminal-dot green"></div>
+              <span className="terminal-title">property_data.module</span>
+            </div>
+            <div className="terminal-body">
+              <PropertyDetails address={address} />
             </div>
           </div>
         </div>
