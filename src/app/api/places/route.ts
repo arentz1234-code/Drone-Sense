@@ -21,103 +21,84 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No coordinates provided' }, { status: 400 });
     }
 
-    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    // Convert radius from meters to degrees (approximately)
+    const radiusDeg = (radius / 1000) / 111;
 
-    if (!apiKey) {
-      // Return mock data if no API key configured
-      return NextResponse.json({ businesses: getMockBusinesses() });
+    // Use Overpass API (OpenStreetMap) - completely FREE, no API key needed
+    const query = `
+      [out:json][timeout:25];
+      (
+        node["amenity"~"restaurant|cafe|fast_food|bank|pharmacy|fuel"](${coordinates.lat - radiusDeg},${coordinates.lng - radiusDeg},${coordinates.lat + radiusDeg},${coordinates.lng + radiusDeg});
+        node["shop"~"supermarket|convenience|mall|department_store"](${coordinates.lat - radiusDeg},${coordinates.lng - radiusDeg},${coordinates.lat + radiusDeg},${coordinates.lng + radiusDeg});
+        way["amenity"~"restaurant|cafe|fast_food|bank|pharmacy|fuel"](${coordinates.lat - radiusDeg},${coordinates.lng - radiusDeg},${coordinates.lat + radiusDeg},${coordinates.lng + radiusDeg});
+        way["shop"~"supermarket|convenience|mall|department_store"](${coordinates.lat - radiusDeg},${coordinates.lng - radiusDeg},${coordinates.lat + radiusDeg},${coordinates.lng + radiusDeg});
+      );
+      out center;
+    `;
+
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: `data=${encodeURIComponent(query)}`,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+
+    if (!response.ok) {
+      console.error('Overpass API error:', response.status);
+      return NextResponse.json({ businesses: [] });
     }
 
-    // Use Google Places API Nearby Search
-    const types = ['restaurant', 'store', 'gas_station', 'shopping_mall', 'supermarket', 'bank', 'cafe'];
+    const data = await response.json();
     const allBusinesses: Business[] = [];
 
-    for (const type of types) {
-      const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${coordinates.lat},${coordinates.lng}&radius=${radius}&type=${type}&key=${apiKey}`;
+    if (data.elements) {
+      for (const el of data.elements) {
+        const tags = el.tags || {};
+        if (!tags.name) continue;
 
-      const response = await fetch(url);
-      const data = await response.json();
+        const lat = el.lat || el.center?.lat;
+        const lon = el.lon || el.center?.lon;
+        if (!lat || !lon) continue;
 
-      if (data.results) {
-        for (const place of data.results.slice(0, 5)) {
-          const distance = calculateDistance(
-            coordinates.lat,
-            coordinates.lng,
-            place.geometry.location.lat,
-            place.geometry.location.lng
-          );
+        const dist = haversine(coordinates.lat, coordinates.lng, lat, lon);
+        if (dist > radius / 1000) continue;
 
-          allBusinesses.push({
-            name: place.name,
-            type: formatPlaceType(place.types?.[0] || type),
-            distance: `${distance.toFixed(2)} mi`,
-            address: place.vicinity || 'Address not available',
-          });
-        }
+        const type = tags.amenity || tags.shop || 'Business';
+        const address = [tags['addr:housenumber'], tags['addr:street'], tags['addr:city']]
+          .filter(Boolean).join(' ') || 'Address not available';
+
+        allBusinesses.push({
+          name: tags.name,
+          type: formatType(type),
+          distance: `${(dist * 0.621371).toFixed(2)} mi`,
+          address,
+        });
       }
     }
 
-    // Remove duplicates and sort by distance
-    const uniqueBusinesses = allBusinesses.filter(
-      (business, index, self) =>
-        index === self.findIndex((b) => b.name === business.name)
-    );
-
-    uniqueBusinesses.sort((a, b) => {
-      const distA = parseFloat(a.distance);
-      const distB = parseFloat(b.distance);
-      return distA - distB;
-    });
-
-    return NextResponse.json({ businesses: uniqueBusinesses.slice(0, 20) });
+    allBusinesses.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+    return NextResponse.json({ businesses: allBusinesses.slice(0, 25) });
   } catch (error) {
     console.error('Places API error:', error);
-    return NextResponse.json({ businesses: getMockBusinesses() });
+    return NextResponse.json({ businesses: [] });
   }
 }
 
-function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 3959; // Earth's radius in miles
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function toRad(deg: number): number {
-  return deg * (Math.PI / 180);
-}
-
-function formatPlaceType(type: string): string {
-  const typeMap: Record<string, string> = {
-    restaurant: 'Restaurant',
-    food: 'Food',
-    cafe: 'Cafe',
-    store: 'Retail',
-    shopping_mall: 'Shopping',
-    supermarket: 'Grocery',
-    gas_station: 'Gas Station',
-    bank: 'Bank',
-    pharmacy: 'Pharmacy',
-    convenience_store: 'Convenience',
-    fast_food: 'Fast Food',
-    meal_takeaway: 'Takeout',
+function formatType(type: string): string {
+  const map: Record<string, string> = {
+    restaurant: 'Restaurant', cafe: 'Cafe', fast_food: 'Fast Food',
+    bank: 'Bank', pharmacy: 'Pharmacy', fuel: 'Gas Station',
+    supermarket: 'Grocery', convenience: 'Convenience', mall: 'Mall',
   };
-  return typeMap[type] || type.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+  return map[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
-function getMockBusinesses(): Business[] {
-  return [
-    { name: "McDonald's", type: 'Fast Food', distance: '0.12 mi', address: '123 Main St' },
-    { name: "Chick-fil-A", type: 'Fast Food', distance: '0.18 mi', address: '456 Commerce Dr' },
-    { name: 'Shell Gas Station', type: 'Gas Station', distance: '0.22 mi', address: '789 Highway 280' },
-    { name: 'Walgreens', type: 'Pharmacy', distance: '0.28 mi', address: '321 Oak Ave' },
-    { name: 'Publix', type: 'Grocery', distance: '0.35 mi', address: '555 Market St' },
-    { name: 'Starbucks', type: 'Cafe', distance: '0.15 mi', address: '111 Coffee Lane' },
-    { name: "Wendy's", type: 'Fast Food', distance: '0.42 mi', address: '222 Burger Blvd' },
-    { name: 'Bank of America', type: 'Bank', distance: '0.31 mi', address: '444 Finance Dr' },
-  ];
-}

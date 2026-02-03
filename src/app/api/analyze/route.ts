@@ -26,12 +26,13 @@ export async function POST(request: Request) {
 
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!apiKey) {
+      console.error('GOOGLE_GEMINI_API_KEY not configured');
       // Return mock data if no API key configured
-      return NextResponse.json(getMockAnalysis(nearbyBusinesses));
+      return NextResponse.json({ ...getMockAnalysis(nearbyBusinesses), usingMockData: true, reason: 'API key not configured' });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     // Prepare business context
     const businessContext = nearbyBusinesses.length > 0
@@ -95,8 +96,18 @@ Be specific and practical in your analysis. Consider the commercial potential ba
   } catch (error) {
     console.error('Analysis error:', error);
 
+    // Return error details in development, mock data in production
+    if (process.env.NODE_ENV === 'development') {
+      return NextResponse.json({
+        error: 'Analysis failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        usingMockData: true,
+        ...getMockAnalysis([])
+      });
+    }
+
     // Return mock data on error
-    return NextResponse.json(getMockAnalysis([]));
+    return NextResponse.json({ ...getMockAnalysis([]), usingMockData: true });
   }
 }
 
