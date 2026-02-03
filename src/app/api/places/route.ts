@@ -1,3 +1,4 @@
+// Places API - uses OpenStreetMap Overpass API (free, no key needed)
 import { NextResponse } from 'next/server';
 
 interface PlacesRequest {
