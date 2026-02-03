@@ -37,18 +37,36 @@ export async function POST(request: Request) {
       out center;
     `;
 
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      body: `data=${encodeURIComponent(query)}`,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'DroneSense/1.0 (https://drone-sense.vercel.app)',
-      },
-    });
+    // Try multiple Overpass mirrors
+    const mirrors = [
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://overpass-api.de/api/interpreter',
+    ];
 
-    if (!response.ok) {
-      console.error('Overpass API error:', response.status, await response.text());
-      return NextResponse.json({ businesses: [], error: `Overpass API returned ${response.status}` });
+    let response = null;
+    let lastError = '';
+
+    for (const mirror of mirrors) {
+      try {
+        response = await fetch(mirror, {
+          method: 'POST',
+          body: `data=${encodeURIComponent(query)}`,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'DroneSense/1.0 (https://drone-sense.vercel.app)',
+          },
+        });
+
+        if (response.ok) break;
+        lastError = `${mirror} returned ${response.status}`;
+      } catch (e) {
+        lastError = `${mirror} failed: ${e}`;
+      }
+    }
+
+    if (!response || !response.ok) {
+      console.error('All Overpass mirrors failed:', lastError);
+      return NextResponse.json({ businesses: [], error: lastError });
     }
 
     const data = await response.json();
