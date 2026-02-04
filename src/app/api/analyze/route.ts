@@ -16,28 +16,138 @@ interface TrafficInfo {
   congestionPercent: number;
 }
 
+interface DemographicsInfo {
+  population: number;
+  medianHouseholdIncome: number;
+  perCapitaIncome: number;
+  incomeLevel: 'low' | 'moderate' | 'middle' | 'upper-middle' | 'high';
+  povertyRate: number;
+  medianAge: number;
+  educationBachelorsOrHigher: number;
+  employmentRate: number;
+  consumerProfile: {
+    type: string;
+    description: string;
+    preferredBusinesses: string[];
+  };
+}
+
 interface AnalyzeRequest {
   images: string[];
   address: string;
   coordinates: { lat: number; lng: number } | null;
   nearbyBusinesses: Business[];
   trafficData: TrafficInfo | null;
+  demographicsData: DemographicsInfo | null;
 }
 
-// VPD thresholds for different business types
+// VPD thresholds and income preferences for different business types
 const VPD_THRESHOLDS = {
-  bigBox: { min: 25000, ideal: 35000, examples: ['Walmart', 'Target', 'Costco', 'Home Depot', "Lowe's", 'Best Buy', 'Kohl\'s'] },
-  gasStation: { min: 15000, ideal: 25000, examples: ['Shell', 'BP', 'Chevron', 'RaceTrac', "Buc-ee's", 'QuikTrip', 'Wawa', 'Sheetz'] },
-  fastFood: { min: 15000, ideal: 20000, examples: ["Chick-fil-A", "McDonald's", "Wendy's", 'Taco Bell', "Zaxby's", "Popeyes", "Raising Cane's", "Whataburger", "Five Guys", "Shake Shack", "In-N-Out"] },
-  casualDining: { min: 12000, ideal: 18000, examples: ["Chili's", "Applebee's", 'Olive Garden', 'Red Lobster', 'Texas Roadhouse', 'Outback', 'Buffalo Wild Wings', 'Red Robin'] },
-  coffeeShop: { min: 12000, ideal: 18000, examples: ['Starbucks', 'Dunkin', 'Dutch Bros', 'Scooters', 'PJ\'s Coffee', '7 Brew', 'Black Rifle Coffee'] },
-  quickService: { min: 10000, ideal: 15000, examples: ['Subway', 'Jersey Mike\'s', 'Firehouse Subs', 'Jimmy John\'s', 'Chipotle', 'Moe\'s', 'Qdoba', 'Wingstop', 'Tropical Smoothie'] },
-  convenience: { min: 8000, ideal: 12000, examples: ['7-Eleven', 'Circle K', 'Wawa', 'QuikTrip', 'Speedway', 'Casey\'s'] },
-  bank: { min: 10000, ideal: 15000, examples: ['Chase', 'Bank of America', 'Wells Fargo', 'Regions', 'PNC', 'Truist', 'TD Bank'] },
-  pharmacy: { min: 12000, ideal: 18000, examples: ['CVS', 'Walgreens', 'Rite Aid'] },
-  autoService: { min: 10000, ideal: 15000, examples: ['Jiffy Lube', 'Tire Kingdom', 'AutoZone', "O'Reilly", 'Advance Auto Parts', 'Discount Tire', 'Take 5 Oil Change', 'Valvoline'] },
-  medical: { min: 8000, ideal: 12000, examples: ['Urgent Care', 'Dental Office', 'Medical Clinic', 'CareNow', 'AFC Urgent Care', 'MedExpress'] },
-  retail: { min: 10000, ideal: 18000, examples: ['Dollar General', 'Dollar Tree', 'Family Dollar', 'Ross', 'TJ Maxx', 'Marshalls', 'Five Below', 'Ulta', 'Sephora'] },
+  bigBox: {
+    min: 25000, ideal: 35000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    examples: ['Walmart', 'Target', 'Costco', 'Home Depot', "Lowe's", 'Best Buy', 'Kohl\'s']
+  },
+  gasStation: {
+    min: 15000, ideal: 25000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    examples: ['Shell', 'BP', 'Chevron', 'RaceTrac', "Buc-ee's", 'QuikTrip', 'Wawa', 'Sheetz']
+  },
+  fastFoodValue: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['low', 'moderate'] as const,
+    examples: ["Hardee's", "McDonald's", "Wendy's", 'Taco Bell', "Popeyes", "Little Caesars", "Checkers/Rally's", "Krystal", "Captain D's", "Cook Out"]
+  },
+  fastFoodPremium: {
+    min: 15000, ideal: 22000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    examples: ["Chick-fil-A", "Raising Cane's", "Five Guys", "Shake Shack", "In-N-Out", "Whataburger", "Culver's", "PDQ"]
+  },
+  casualDiningValue: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    examples: ["Applebee's", "IHOP", "Denny's", "Waffle House", "Cracker Barrel", "Golden Corral", "Huddle House"]
+  },
+  casualDiningPremium: {
+    min: 15000, ideal: 20000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    examples: ["Olive Garden", "Red Lobster", "Texas Roadhouse", "Outback", "The Cheesecake Factory", "P.F. Chang's", "BJ's Restaurant"]
+  },
+  coffeeValue: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    examples: ['Dunkin', 'Scooters', '7 Brew', "McDonald's McCafe"]
+  },
+  coffeePremium: {
+    min: 15000, ideal: 20000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    examples: ['Starbucks', 'Dutch Bros', 'Black Rifle Coffee', 'Peet\'s Coffee']
+  },
+  quickServiceValue: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['low', 'moderate'] as const,
+    examples: ['Subway', 'Wingstop', 'Zaxby\'s', 'Moe\'s', 'Tropical Smoothie']
+  },
+  quickServicePremium: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    examples: ['Chipotle', 'Jersey Mike\'s', 'Firehouse Subs', 'Panera Bread', 'Cava', 'Sweetgreen', 'MOD Pizza']
+  },
+  convenience: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    examples: ['7-Eleven', 'Circle K', 'Wawa', 'QuikTrip', 'Speedway', 'Casey\'s']
+  },
+  discountRetail: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['low', 'moderate'] as const,
+    examples: ['Dollar General', 'Dollar Tree', 'Family Dollar', 'Five Below', 'Big Lots', 'Save-A-Lot', 'ALDI']
+  },
+  retailPremium: {
+    min: 15000, ideal: 22000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    examples: ['Target', 'TJ Maxx', 'Ross', 'Marshalls', 'HomeGoods', 'Ulta', 'Sephora', 'Trader Joe\'s', 'Whole Foods']
+  },
+  bank: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['moderate', 'middle', 'upper-middle', 'high'] as const,
+    examples: ['Chase', 'Bank of America', 'Wells Fargo', 'Regions', 'PNC', 'Truist', 'TD Bank']
+  },
+  financialServices: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['low', 'moderate'] as const,
+    examples: ['Check Into Cash', 'Advance America', 'ACE Cash Express', 'Check \'n Go', 'Title Max', 'Rent-A-Center', 'Aaron\'s']
+  },
+  pharmacy: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    examples: ['CVS', 'Walgreens', 'Rite Aid']
+  },
+  autoService: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    examples: ['Jiffy Lube', 'AutoZone', "O'Reilly", 'Advance Auto Parts', 'Discount Tire', 'Take 5 Oil Change', 'Valvoline']
+  },
+  autoServicePremium: {
+    min: 15000, ideal: 20000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    examples: ['Firestone', 'Goodyear', 'Caliber Collision', 'Christian Brothers Auto']
+  },
+  fitness: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    examples: ['Planet Fitness', 'Crunch Fitness', 'Anytime Fitness', 'Gold\'s Gym']
+  },
+  fitnessPremium: {
+    min: 15000, ideal: 20000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    examples: ['LA Fitness', 'Lifetime Fitness', 'Orangetheory', 'F45', 'CrossFit', 'Equinox']
+  },
+  medical: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['low', 'moderate', 'middle', 'upper-middle', 'high'] as const,
+    examples: ['Urgent Care', 'Dental Office', 'Medical Clinic', 'CareNow', 'AFC Urgent Care', 'MedExpress']
+  },
 };
 
 // Check if a business name matches any of the examples (fuzzy match)
@@ -68,7 +178,11 @@ function filterExistingBusinesses(examples: string[], nearbyBusinesses: Business
   });
 }
 
-function calculateBusinessSuitability(vpd: number, nearbyBusinesses: Business[]) {
+function calculateBusinessSuitability(
+  vpd: number,
+  nearbyBusinesses: Business[],
+  demographics: DemographicsInfo | null
+) {
   const suitability: Array<{
     category: string;
     suitabilityScore: number;
@@ -77,37 +191,61 @@ function calculateBusinessSuitability(vpd: number, nearbyBusinesses: Business[])
     existingInArea: string[];
   }> = [];
 
+  const incomeLevel = demographics?.incomeLevel || 'middle';
+
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
     let score = 0;
     let reasoning = '';
 
+    // Check VPD fit
     if (vpd >= threshold.ideal) {
       score = 10;
-      reasoning = `Excellent fit - VPD of ${vpd.toLocaleString()} exceeds ideal threshold of ${threshold.ideal.toLocaleString()}`;
+      reasoning = `Excellent traffic - VPD of ${vpd.toLocaleString()} exceeds ideal threshold`;
     } else if (vpd >= threshold.min) {
       score = Math.round(5 + (5 * (vpd - threshold.min) / (threshold.ideal - threshold.min)));
-      reasoning = `Good fit - VPD of ${vpd.toLocaleString()} meets minimum threshold of ${threshold.min.toLocaleString()}`;
+      reasoning = `Good traffic - VPD of ${vpd.toLocaleString()} meets threshold`;
     } else if (vpd >= threshold.min * 0.7) {
       score = Math.round(3 + (2 * vpd / threshold.min));
-      reasoning = `Marginal fit - VPD of ${vpd.toLocaleString()} is below minimum of ${threshold.min.toLocaleString()} but may work with strong local demand`;
+      reasoning = `Marginal traffic - VPD of ${vpd.toLocaleString()} is below ideal`;
     } else {
       score = Math.round(3 * vpd / threshold.min);
-      reasoning = `Poor fit - VPD of ${vpd.toLocaleString()} is significantly below minimum threshold of ${threshold.min.toLocaleString()}`;
+      reasoning = `Low traffic - VPD of ${vpd.toLocaleString()} below threshold`;
+    }
+
+    // Check demographics/income fit
+    const incomeMatches = (threshold.incomePreference as readonly string[]).includes(incomeLevel);
+    if (demographics) {
+      if (incomeMatches) {
+        score = Math.min(10, score + 2);
+        reasoning += `. Demographics match - ${incomeLevel} income area is ideal for this concept`;
+      } else {
+        score = Math.max(1, score - 3);
+        reasoning += `. Demographics mismatch - ${incomeLevel} income area may not be optimal (prefers ${threshold.incomePreference.join('/')})`;
+      }
     }
 
     const categoryNames: Record<string, string> = {
       bigBox: 'Big Box Retail',
       gasStation: 'Gas Station / Fuel Center',
-      fastFood: 'Fast Food Restaurant',
-      casualDining: 'Casual Dining Restaurant',
-      coffeeShop: 'Coffee Shop / Drive-Thru',
-      quickService: 'Quick Service Restaurant',
+      fastFoodValue: 'Value Fast Food',
+      fastFoodPremium: 'Premium Fast Food',
+      casualDiningValue: 'Value Casual Dining',
+      casualDiningPremium: 'Premium Casual Dining',
+      coffeeValue: 'Value Coffee/Drive-Thru',
+      coffeePremium: 'Premium Coffee',
+      quickServiceValue: 'Value Quick Service',
+      quickServicePremium: 'Premium Quick Service',
       convenience: 'Convenience Store',
+      discountRetail: 'Discount Retail',
+      retailPremium: 'Premium Retail',
       bank: 'Bank / Financial Services',
+      financialServices: 'Check Cashing / Title Loans',
       pharmacy: 'Pharmacy / Drugstore',
       autoService: 'Auto Service / Parts',
+      autoServicePremium: 'Premium Auto Service',
+      fitness: 'Value Fitness',
+      fitnessPremium: 'Premium Fitness',
       medical: 'Medical / Healthcare',
-      retail: 'Discount Retail',
     };
 
     // Find which businesses from this category already exist in the area
@@ -124,10 +262,10 @@ function calculateBusinessSuitability(vpd: number, nearbyBusinesses: Business[])
 
     // If all examples exist, lower the score and note it
     if (availableExamples.length === 0) {
-      reasoning += '. All major brands in this category already exist in the area.';
+      reasoning += '. Market saturated - all major brands present.';
       score = Math.max(1, score - 3);
     } else if (existingInArea.length > 0) {
-      reasoning += `. Note: ${existingInArea.join(', ')} already in area.`;
+      reasoning += `. ${existingInArea.length} competitor(s) nearby.`;
     }
 
     suitability.push({
@@ -144,8 +282,13 @@ function calculateBusinessSuitability(vpd: number, nearbyBusinesses: Business[])
 }
 
 // Generate top specific recommendations excluding existing businesses
-function generateTopRecommendations(vpd: number, nearbyBusinesses: Business[]): string[] {
+function generateTopRecommendations(
+  vpd: number,
+  nearbyBusinesses: Business[],
+  demographics: DemographicsInfo | null
+): string[] {
   const recommendations: Array<{ name: string; score: number; reason: string }> = [];
+  const incomeLevel = demographics?.incomeLevel || 'middle';
 
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
     // Check if VPD supports this category
@@ -158,12 +301,38 @@ function generateTopRecommendations(vpd: number, nearbyBusinesses: Business[]): 
     else if (vpd >= threshold.min) categoryScore = 7;
     else categoryScore = 4;
 
+    // Boost score if demographics match
+    const incomeMatches = (threshold.incomePreference as readonly string[]).includes(incomeLevel);
+    if (incomeMatches) {
+      categoryScore += 3;
+    } else {
+      categoryScore -= 2;
+    }
+
     for (const example of availableExamples.slice(0, 3)) {
       recommendations.push({
         name: example,
         score: categoryScore,
         reason: `VPD supports ${key.replace(/([A-Z])/g, ' $1').toLowerCase()} concept`
       });
+    }
+  }
+
+  // Also add preferred businesses from demographics
+  if (demographics?.consumerProfile?.preferredBusinesses) {
+    const demoPreferred = filterExistingBusinesses(
+      demographics.consumerProfile.preferredBusinesses,
+      nearbyBusinesses
+    );
+    for (const business of demoPreferred.slice(0, 5)) {
+      // Check if not already in recommendations
+      if (!recommendations.some(r => r.name.toLowerCase() === business.toLowerCase())) {
+        recommendations.push({
+          name: business,
+          score: 12, // High priority for demographic matches
+          reason: `Matches ${demographics.consumerProfile.type} consumer profile`
+        });
+      }
     }
   }
 
@@ -175,7 +344,7 @@ function generateTopRecommendations(vpd: number, nearbyBusinesses: Business[]): 
 export async function POST(request: Request) {
   try {
     const body: AnalyzeRequest = await request.json();
-    const { images, address, nearbyBusinesses, trafficData } = body;
+    const { images, address, nearbyBusinesses, trafficData, demographicsData } = body;
 
     const hasImages = images && images.length > 0;
 
@@ -183,7 +352,7 @@ export async function POST(request: Request) {
     if (!apiKey) {
       console.error('GOOGLE_GEMINI_API_KEY not configured');
       return NextResponse.json({
-        ...getMockAnalysis(nearbyBusinesses, trafficData),
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData),
         usingMockData: true,
         reason: 'API key not configured'
       });
@@ -205,9 +374,32 @@ export async function POST(request: Request) {
     let businessSuitability: ReturnType<typeof calculateBusinessSuitability> = [];
     let topRecommendations: string[] = [];
 
+    // Prepare demographics context
+    let demographicsContext = '\n\nNo demographics data available.';
+    if (demographicsData) {
+      demographicsContext = `\n\nDemographics Data:
+- Median Household Income: $${demographicsData.medianHouseholdIncome.toLocaleString()}
+- Income Level: ${demographicsData.incomeLevel.toUpperCase()}
+- Consumer Profile: ${demographicsData.consumerProfile.type}
+- Profile Description: ${demographicsData.consumerProfile.description}
+- Population: ${demographicsData.population.toLocaleString()}
+- Median Age: ${demographicsData.medianAge}
+- Education (Bachelor's+): ${demographicsData.educationBachelorsOrHigher}%
+- Poverty Rate: ${demographicsData.povertyRate}%
+
+BUSINESSES THAT FIT THIS DEMOGRAPHIC: ${demographicsData.consumerProfile.preferredBusinesses.slice(0, 10).join(', ')}
+
+INCOME-BASED TARGETING:
+- LOW income areas ($0-35k): Dollar General, Hardee's, Waffle House, Little Caesars, Check Cashing
+- MODERATE income ($35-55k): Walmart, McDonald's, Wendy's, Applebee's, Planet Fitness
+- MIDDLE income ($55-85k): Target, Chick-fil-A, Starbucks, Olive Garden, LA Fitness
+- UPPER-MIDDLE income ($85-125k): Whole Foods, Trader Joe's, Panera, Orangetheory
+- HIGH income ($125k+): Premium dining, boutique fitness, luxury retail`;
+    }
+
     if (trafficData) {
-      businessSuitability = calculateBusinessSuitability(trafficData.estimatedVPD, nearbyBusinesses);
-      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses);
+      businessSuitability = calculateBusinessSuitability(trafficData.estimatedVPD, nearbyBusinesses, demographicsData);
+      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData);
 
       trafficContext = `\n\nTraffic Data:
 - Estimated VPD (Vehicles Per Day): ${trafficData.estimatedVPD.toLocaleString()}
@@ -318,10 +510,10 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
-function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null) {
+function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null) {
   const vpd = trafficData?.estimatedVPD || 15000;
-  const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses);
-  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses);
+  const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData);
+  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData);
 
   // Build recommendation excluding existing businesses
   let businessRec = '';

@@ -5,8 +5,10 @@ import PhotoUpload from '@/components/PhotoUpload';
 import AddressInput from '@/components/AddressInput';
 import NearbyBusinesses from '@/components/NearbyBusinesses';
 import TrafficData from '@/components/TrafficData';
+import DemographicsData from '@/components/DemographicsData';
 import MapView from '@/components/MapView';
 import AnalysisReport from '@/components/AnalysisReport';
+import { DemographicsData as DemographicsDataType } from '@/app/api/demographics/route';
 
 export interface Business {
   name: string;
@@ -52,6 +54,7 @@ export default function HomePage() {
   const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [trafficData, setTrafficData] = useState<TrafficInfo | null>(null);
+  const [demographicsData, setDemographicsData] = useState<DemographicsDataType | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +80,7 @@ export default function HomePage() {
           coordinates,
           nearbyBusinesses: allBusinesses,
           trafficData,
+          demographicsData,
         }),
       });
 
@@ -168,6 +172,19 @@ export default function HomePage() {
             </div>
             <div className="terminal-body">
               <TrafficData coordinates={coordinates} onDataLoad={setTrafficData} />
+            </div>
+          </div>
+
+          {/* Demographics Section */}
+          <div className="terminal-card">
+            <div className="terminal-header">
+              <div className="terminal-dot red"></div>
+              <div className="terminal-dot yellow"></div>
+              <div className="terminal-dot green"></div>
+              <span className="terminal-title">demographics.module</span>
+            </div>
+            <div className="terminal-body">
+              <DemographicsData coordinates={coordinates} onDataLoad={setDemographicsData} />
             </div>
           </div>
         </div>
