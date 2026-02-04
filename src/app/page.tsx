@@ -5,6 +5,7 @@ import PhotoUpload from '@/components/PhotoUpload';
 import AddressInput from '@/components/AddressInput';
 import NearbyBusinesses from '@/components/NearbyBusinesses';
 import TrafficData from '@/components/TrafficData';
+import MapView from '@/components/MapView';
 import AnalysisReport from '@/components/AnalysisReport';
 
 export interface Business {
@@ -168,6 +169,21 @@ export default function HomePage() {
             <div className="terminal-body">
               <TrafficData coordinates={coordinates} onDataLoad={setTrafficData} />
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Property Map Section - Full Width */}
+      <div className="mb-8">
+        <div className="terminal-card">
+          <div className="terminal-header">
+            <div className="terminal-dot red"></div>
+            <div className="terminal-dot yellow"></div>
+            <div className="terminal-dot green"></div>
+            <span className="terminal-title">property_map.module</span>
+          </div>
+          <div className="terminal-body">
+            <MapView coordinates={coordinates} address={address} />
           </div>
         </div>
       </div>
