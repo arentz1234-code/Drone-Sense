@@ -134,7 +134,7 @@ export async function POST(request: Request) {
       )
     );
 
-    // Filter out null results and find the most major road (lowest FRC number)
+    // Filter out null results
     const validResults = results.filter((r): r is FlowData => r !== null);
 
     if (validResults.length === 0) {
@@ -144,15 +144,20 @@ export async function POST(request: Request) {
       }, { status: 404 });
     }
 
-    // Sort by FRC priority (most major road first)
-    validResults.sort((a, b) => {
-      const priorityA = FRC_PRIORITY[a.frc] ?? 99;
-      const priorityB = FRC_PRIORITY[b.frc] ?? 99;
-      return priorityA - priorityB;
-    });
+    // Calculate VPD for each result and find the highest
+    const resultsWithVPD = validResults.map(result => ({
+      ...result,
+      vpd: estimateVPD(result.frc, result.freeFlowSpeed)
+    }));
 
-    // Use the most major road found
-    const flowData = validResults[0];
+    // Sort by VPD descending (highest first) to get the busiest road
+    resultsWithVPD.sort((a, b) => b.vpd.estimatedVPD - a.vpd.estimatedVPD);
+
+    // Use the road with the highest VPD
+    const flowData = resultsWithVPD[0];
+
+    console.log(`Found ${validResults.length} roads. Highest VPD: ${flowData.vpd.estimatedVPD} (${flowData.frc})`);
+    console.log('All roads found:', resultsWithVPD.map(r => `${r.frc}: ${r.vpd.estimatedVPD} VPD`).join(', '));
 
     // Calculate congestion percentage
     const congestionPercent = flowData.freeFlowSpeed > 0
@@ -183,9 +188,7 @@ export async function POST(request: Request) {
     };
     const roadType = frcMap[flowData.frc] || 'Road';
 
-    // Estimate VPD based on road class and speed
-    const vpdEstimate = estimateVPD(flowData.frc, flowData.freeFlowSpeed);
-
+    // Use the VPD already calculated (highest from all nearby roads)
     const trafficData: TrafficData = {
       currentSpeed: Math.round(flowData.currentSpeed),
       freeFlowSpeed: Math.round(flowData.freeFlowSpeed),
@@ -195,10 +198,10 @@ export async function POST(request: Request) {
       roadType,
       trafficLevel,
       congestionPercent: Math.max(0, congestionPercent),
-      // VPD estimate
-      estimatedVPD: vpdEstimate.estimatedVPD,
-      vpdRange: vpdEstimate.vpdRange,
-      vpdSource: vpdEstimate.source,
+      // VPD estimate - using highest from nearby roads
+      estimatedVPD: flowData.vpd.estimatedVPD,
+      vpdRange: flowData.vpd.vpdRange,
+      vpdSource: flowData.vpd.source + ' (highest nearby)',
     };
 
     return NextResponse.json(trafficData);
