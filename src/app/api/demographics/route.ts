@@ -27,33 +27,33 @@ export interface DemographicsData {
   };
 }
 
-// Get FIPS codes from coordinates using FCC API
+// Get FIPS codes from coordinates using Census Bureau Geocoder API
 async function getGeographyFromCoords(lat: number, lng: number): Promise<{
   stateCode: string;
   countyCode: string;
   tractCode: string;
-  blockGroup: string;
 } | null> {
   try {
-    const url = `https://geo.fcc.gov/api/census/block/find?latitude=${lat}&longitude=${lng}&format=json&showall=true`;
+    // Census Bureau's geocoder is more reliable than FCC API
+    const url = `https://geocoding.geo.census.gov/geocoder/geographies/coordinates?x=${lng}&y=${lat}&benchmark=Public_AR_Current&vintage=Current_Current&layers=Census%20Tracts&format=json`;
     const response = await fetch(url);
 
     if (!response.ok) return null;
 
     const data = await response.json();
 
-    if (!data.Block?.FIPS) return null;
+    // Extract from Census Tracts layer
+    const tracts = data.result?.geographies?.['Census Tracts'];
+    if (!tracts || tracts.length === 0) return null;
 
-    const fips = data.Block.FIPS;
-    // FIPS format: SSCCCTTTTTTB (State 2, County 3, Tract 6, Block 1+)
+    const tract = tracts[0];
     return {
-      stateCode: fips.substring(0, 2),
-      countyCode: fips.substring(2, 5),
-      tractCode: fips.substring(5, 11),
-      blockGroup: fips.substring(11, 12),
+      stateCode: tract.STATE,
+      countyCode: tract.COUNTY,
+      tractCode: tract.TRACT,
     };
   } catch (error) {
-    console.error('FCC API error:', error);
+    console.error('Census Geocoder API error:', error);
     return null;
   }
 }
