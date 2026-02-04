@@ -31,6 +31,7 @@ export interface BusinessSuitability {
   reasoning: string;
   examples: string[];
   existingInArea?: string[];
+  lotSizeIssue?: string;
 }
 
 export interface FeasibilityScore {

@@ -59,114 +59,168 @@ interface AnalyzeRequest {
   demographicsData: DemographicsInfo | null;
 }
 
-// VPD thresholds and income preferences for different business types
+// VPD thresholds, income preferences, and lot size requirements for different business types
+// Lot sizes in acres (min = minimum viable, ideal = optimal size)
 const VPD_THRESHOLDS = {
   bigBox: {
     min: 25000, ideal: 35000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 8, ideal: 15 }, // Big box stores need 8-15+ acres
     examples: ['Walmart', 'Target', 'Costco', 'Home Depot', "Lowe's", 'Best Buy', 'Kohl\'s']
   },
   gasStation: {
     min: 15000, ideal: 25000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.5, ideal: 1.5 }, // Gas stations need 0.5-1.5 acres
     examples: ['Shell', 'BP', 'Chevron', 'RaceTrac', "Buc-ee's", 'QuikTrip', 'Wawa', 'Sheetz']
   },
   fastFoodValue: {
     min: 12000, ideal: 18000,
     incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 0.4, ideal: 0.8 }, // Fast food needs 0.4-0.8 acres for building + drive-thru
     examples: ["Hardee's", "McDonald's", "Wendy's", 'Taco Bell', "Popeyes", "Little Caesars", "Checkers/Rally's", "Krystal", "Captain D's", "Cook Out"]
   },
   fastFoodPremium: {
     min: 15000, ideal: 22000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.5, ideal: 1.0 }, // Premium fast food needs 0.5-1 acre
     examples: ["Chick-fil-A", "Raising Cane's", "Five Guys", "Shake Shack", "In-N-Out", "Whataburger", "Culver's", "PDQ"]
   },
   casualDiningValue: {
     min: 12000, ideal: 18000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.8, ideal: 1.5 }, // Casual dining needs 0.8-1.5 acres
     examples: ["Applebee's", "IHOP", "Denny's", "Waffle House", "Cracker Barrel", "Golden Corral", "Huddle House"]
   },
   casualDiningPremium: {
     min: 15000, ideal: 20000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 1.0, ideal: 2.0 }, // Premium casual dining needs 1-2 acres
     examples: ["Olive Garden", "Red Lobster", "Texas Roadhouse", "Outback", "The Cheesecake Factory", "P.F. Chang's", "BJ's Restaurant"]
   },
   coffeeValue: {
     min: 10000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.2, ideal: 0.5 }, // Coffee shops need 0.2-0.5 acres
     examples: ['Dunkin', 'Scooters', '7 Brew', "McDonald's McCafe"]
   },
   coffeePremium: {
     min: 15000, ideal: 20000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.25, ideal: 0.6 }, // Premium coffee needs 0.25-0.6 acres
     examples: ['Starbucks', 'Dutch Bros', 'Black Rifle Coffee', 'Peet\'s Coffee']
   },
   quickServiceValue: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 0.2, ideal: 0.5 }, // Quick service needs 0.2-0.5 acres
     examples: ['Subway', 'Wingstop', 'Zaxby\'s', 'Moe\'s', 'Tropical Smoothie']
   },
   quickServicePremium: {
     min: 12000, ideal: 18000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.3, ideal: 0.6 }, // Premium quick service needs 0.3-0.6 acres
     examples: ['Chipotle', 'Jersey Mike\'s', 'Firehouse Subs', 'Panera Bread', 'Cava', 'Sweetgreen', 'MOD Pizza']
   },
   convenience: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.3, ideal: 0.8 }, // Convenience stores need 0.3-0.8 acres
     examples: ['7-Eleven', 'Circle K', 'Wawa', 'QuikTrip', 'Speedway', 'Casey\'s']
   },
   discountRetail: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 0.5, ideal: 1.2 }, // Discount retail needs 0.5-1.2 acres
     examples: ['Dollar General', 'Dollar Tree', 'Family Dollar', 'Five Below', 'Big Lots', 'Save-A-Lot', 'ALDI']
   },
   retailPremium: {
     min: 15000, ideal: 22000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 1.5, ideal: 3.0 }, // Premium retail needs 1.5-3 acres
     examples: ['Target', 'TJ Maxx', 'Ross', 'Marshalls', 'HomeGoods', 'Ulta', 'Sephora', 'Trader Joe\'s', 'Whole Foods']
   },
   bank: {
     min: 10000, ideal: 15000,
     incomePreference: ['moderate', 'middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.2, ideal: 0.5 }, // Banks need 0.2-0.5 acres
     examples: ['Chase', 'Bank of America', 'Wells Fargo', 'Regions', 'PNC', 'Truist', 'TD Bank']
   },
   financialServices: {
     min: 6000, ideal: 10000,
     incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 0.1, ideal: 0.3 }, // Financial services need 0.1-0.3 acres
     examples: ['Check Into Cash', 'Advance America', 'ACE Cash Express', 'Check \'n Go', 'Title Max', 'Rent-A-Center', 'Aaron\'s']
   },
   pharmacy: {
     min: 12000, ideal: 18000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.8, ideal: 1.5 }, // Pharmacies need 0.8-1.5 acres (with drive-thru)
     examples: ['CVS', 'Walgreens', 'Rite Aid']
   },
   autoService: {
     min: 10000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.3, ideal: 0.7 }, // Auto service needs 0.3-0.7 acres
     examples: ['Jiffy Lube', 'AutoZone', "O'Reilly", 'Advance Auto Parts', 'Discount Tire', 'Take 5 Oil Change', 'Valvoline']
   },
   autoServicePremium: {
     min: 15000, ideal: 20000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.5, ideal: 1.0 }, // Premium auto service needs 0.5-1 acre
     examples: ['Firestone', 'Goodyear', 'Caliber Collision', 'Christian Brothers Auto']
   },
   fitness: {
     min: 10000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 1.0, ideal: 2.0 }, // Fitness centers need 1-2 acres
     examples: ['Planet Fitness', 'Crunch Fitness', 'Anytime Fitness', 'Gold\'s Gym']
   },
   fitnessPremium: {
     min: 15000, ideal: 20000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 1.5, ideal: 3.0 }, // Premium fitness needs 1.5-3 acres
     examples: ['LA Fitness', 'Lifetime Fitness', 'Orangetheory', 'F45', 'CrossFit', 'Equinox']
   },
   medical: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate', 'middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.2, ideal: 0.5 }, // Medical offices need 0.2-0.5 acres
     examples: ['Urgent Care', 'Dental Office', 'Medical Clinic', 'CareNow', 'AFC Urgent Care', 'MedExpress']
   },
 };
+
+// Parse lot size estimate string to extract acreage
+function parseLotSize(lotSizeEstimate: string | undefined): number | null {
+  if (!lotSizeEstimate || lotSizeEstimate.toLowerCase().includes('unable')) {
+    return null;
+  }
+
+  // Try to extract numbers from strings like "1.2 - 1.5 acres", "Approximately 0.75 acres", etc.
+  const matches = lotSizeEstimate.match(/(\d+\.?\d*)\s*(?:-|to)?\s*(\d+\.?\d*)?\s*acre/i);
+  if (matches) {
+    // If range, take the average
+    if (matches[2]) {
+      return (parseFloat(matches[1]) + parseFloat(matches[2])) / 2;
+    }
+    return parseFloat(matches[1]);
+  }
+
+  // Try to extract just a number followed by acre
+  const simpleMatch = lotSizeEstimate.match(/(\d+\.?\d*)\s*acre/i);
+  if (simpleMatch) {
+    return parseFloat(simpleMatch[1]);
+  }
+
+  // Try square feet conversion (43,560 sq ft = 1 acre)
+  const sqftMatch = lotSizeEstimate.match(/(\d+,?\d*)\s*(?:sq\.?\s*ft|square\s*feet)/i);
+  if (sqftMatch) {
+    const sqft = parseFloat(sqftMatch[1].replace(',', ''));
+    return sqft / 43560;
+  }
+
+  return null;
+}
 
 // Calculate comprehensive feasibility score
 function calculateFeasibilityScore(
@@ -355,7 +409,8 @@ function filterExistingBusinesses(examples: string[], nearbyBusinesses: Business
 function calculateBusinessSuitability(
   vpd: number,
   nearbyBusinesses: Business[],
-  demographics: DemographicsInfo | null
+  demographics: DemographicsInfo | null,
+  lotSizeAcres: number | null = null
 ) {
   const suitability: Array<{
     category: string;
@@ -363,6 +418,7 @@ function calculateBusinessSuitability(
     reasoning: string;
     examples: string[];
     existingInArea: string[];
+    lotSizeIssue?: string;
   }> = [];
 
   const incomeLevel = demographics?.incomeLevel || 'middle';
@@ -370,6 +426,7 @@ function calculateBusinessSuitability(
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
     let score = 0;
     let reasoning = '';
+    let lotSizeIssue: string | undefined;
 
     // Check VPD fit
     if (vpd >= threshold.ideal) {
@@ -395,6 +452,26 @@ function calculateBusinessSuitability(
       } else {
         score = Math.max(1, score - 3);
         reasoning += `. Demographics mismatch - ${incomeLevel} income area may not be optimal (prefers ${threshold.incomePreference.join('/')})`;
+      }
+    }
+
+    // Check lot size fit
+    if (lotSizeAcres !== null && threshold.lotSize) {
+      if (lotSizeAcres >= threshold.lotSize.ideal) {
+        // Lot is ideal size or larger - bonus
+        score = Math.min(10, score + 1);
+        reasoning += `. Lot size (${lotSizeAcres.toFixed(2)} acres) is ideal for this concept`;
+      } else if (lotSizeAcres >= threshold.lotSize.min) {
+        // Lot meets minimum - no change to score
+        reasoning += `. Lot size (${lotSizeAcres.toFixed(2)} acres) meets minimum requirements`;
+      } else {
+        // Lot is too small - significant penalty
+        const shortfall = threshold.lotSize.min - lotSizeAcres;
+        const penaltyPercent = shortfall / threshold.lotSize.min;
+        const penalty = Math.min(8, Math.round(penaltyPercent * 10));
+        score = Math.max(1, score - penalty);
+        lotSizeIssue = `LOT TOO SMALL: Need ${threshold.lotSize.min} acres min, site has ~${lotSizeAcres.toFixed(2)} acres`;
+        reasoning += `. ${lotSizeIssue}`;
       }
     }
 
@@ -448,6 +525,7 @@ function calculateBusinessSuitability(
       reasoning,
       examples: availableExamples.length > 0 ? availableExamples : ['Market may be saturated'],
       existingInArea,
+      ...(lotSizeIssue && { lotSizeIssue }),
     });
   }
 
@@ -459,7 +537,8 @@ function calculateBusinessSuitability(
 function generateTopRecommendations(
   vpd: number,
   nearbyBusinesses: Business[],
-  demographics: DemographicsInfo | null
+  demographics: DemographicsInfo | null,
+  lotSizeAcres: number | null = null
 ): string[] {
   const recommendations: Array<{ name: string; score: number; reason: string }> = [];
   const incomeLevel = demographics?.incomeLevel || 'middle';
@@ -467,6 +546,12 @@ function generateTopRecommendations(
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
     // Check if VPD supports this category
     if (vpd < threshold.min * 0.7) continue;
+
+    // Check if lot size supports this category (if lot size is known)
+    if (lotSizeAcres !== null && threshold.lotSize && lotSizeAcres < threshold.lotSize.min) {
+      // Lot is too small for this category - skip it
+      continue;
+    }
 
     const availableExamples = filterExistingBusinesses(threshold.examples, nearbyBusinesses);
 
@@ -483,6 +568,11 @@ function generateTopRecommendations(
       categoryScore -= 2;
     }
 
+    // Boost score if lot size is ideal for this concept
+    if (lotSizeAcres !== null && threshold.lotSize && lotSizeAcres >= threshold.lotSize.ideal) {
+      categoryScore += 1;
+    }
+
     for (const example of availableExamples.slice(0, 3)) {
       recommendations.push({
         name: example,
@@ -492,7 +582,7 @@ function generateTopRecommendations(
     }
   }
 
-  // Also add preferred businesses from demographics
+  // Also add preferred businesses from demographics (but filter by lot size)
   if (demographics?.consumerProfile?.preferredBusinesses) {
     const demoPreferred = filterExistingBusinesses(
       demographics.consumerProfile.preferredBusinesses,
@@ -501,11 +591,33 @@ function generateTopRecommendations(
     for (const business of demoPreferred.slice(0, 5)) {
       // Check if not already in recommendations
       if (!recommendations.some(r => r.name.toLowerCase() === business.toLowerCase())) {
-        recommendations.push({
-          name: business,
-          score: 12, // High priority for demographic matches
-          reason: `Matches ${demographics.consumerProfile.type} consumer profile`
-        });
+        // Check if lot size can accommodate (estimate based on business type)
+        let canFit = true;
+        if (lotSizeAcres !== null) {
+          // Big box stores need 8+ acres
+          const bigBoxNames = ['walmart', 'target', 'costco', 'home depot', 'lowes', 'best buy', 'kohls'];
+          if (bigBoxNames.some(b => business.toLowerCase().includes(b)) && lotSizeAcres < 8) {
+            canFit = false;
+          }
+          // Premium retail needs 1.5+ acres
+          const premiumRetailNames = ['tj maxx', 'ross', 'marshalls', 'homegoods', 'whole foods', 'trader joe'];
+          if (premiumRetailNames.some(b => business.toLowerCase().includes(b)) && lotSizeAcres < 1.5) {
+            canFit = false;
+          }
+          // Fitness centers need 1+ acre
+          const fitnessNames = ['planet fitness', 'la fitness', 'lifetime', 'crunch', 'gold'];
+          if (fitnessNames.some(b => business.toLowerCase().includes(b)) && lotSizeAcres < 1.0) {
+            canFit = false;
+          }
+        }
+
+        if (canFit) {
+          recommendations.push({
+            name: business,
+            score: 12, // High priority for demographic matches
+            reason: `Matches ${demographics.consumerProfile.type} consumer profile`
+          });
+        }
       }
     }
   }
@@ -572,8 +684,8 @@ INCOME-BASED TARGETING:
     }
 
     if (trafficData) {
-      businessSuitability = calculateBusinessSuitability(trafficData.estimatedVPD, nearbyBusinesses, demographicsData);
-      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData);
+      // Initial recommendations for the prompt (will be recalculated with lot size after AI response)
+      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData, null);
 
       trafficContext = `\n\nTraffic Data:
 - Estimated VPD (Vehicles Per Day): ${trafficData.estimatedVPD.toLocaleString()}
@@ -621,7 +733,7 @@ Please provide a comprehensive site analysis in the following JSON format:
   "accessibility": "<road access, visibility from main roads, parking potential based on ${hasImages ? 'images and ' : ''}location data>",
   "existingStructures": "<${hasImages ? 'any buildings, foundations, or structures visible in images' : 'Unable to assess without images'}>",
   "vegetation": "<${hasImages ? 'trees, landscaping, clearing needed based on images' : 'Unable to assess without images'}>",
-  "lotSizeEstimate": "<${hasImages ? 'estimated lot size based on images' : 'Unable to estimate without images'}>",
+  "lotSizeEstimate": "<${hasImages ? 'estimated lot size in acres (e.g., \"Approximately 0.75 acres\" or \"1.2 - 1.5 acres\")' : 'Unable to estimate without images'}>",
   "businessRecommendation": "<CRITICAL: Only recommend specific businesses that DO NOT already exist in the nearby area. With ${trafficData?.estimatedVPD?.toLocaleString() || 'the estimated'} VPD, recommend specific brands like: ${topRecommendations.slice(0, 5).join(', ')}. DO NOT recommend: ${existingBusinessNames || 'N/A'}. Explain why your specific recommendations would work at this location.>",
   "constructionPotential": "<detailed assessment of construction viability, challenges, and opportunities>",
   "keyFindings": ["<finding 1>", "<finding 2>", "<finding 3>", "<finding 4>", "<finding 5>"],
@@ -659,6 +771,28 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     const analysis = JSON.parse(analysisText.trim());
 
+    // Parse lot size from AI analysis
+    const lotSizeAcres = parseLotSize(analysis.lotSizeEstimate);
+    if (lotSizeAcres !== null) {
+      analysis.parsedLotSize = lotSizeAcres;
+    }
+
+    // Recalculate business suitability with lot size (if available)
+    if (trafficData) {
+      businessSuitability = calculateBusinessSuitability(
+        trafficData.estimatedVPD,
+        nearbyBusinesses,
+        demographicsData,
+        lotSizeAcres
+      );
+      topRecommendations = generateTopRecommendations(
+        trafficData.estimatedVPD,
+        nearbyBusinesses,
+        demographicsData,
+        lotSizeAcres
+      );
+    }
+
     // Add business suitability data and top recommendations
     if (businessSuitability.length > 0) {
       analysis.businessSuitability = businessSuitability;
@@ -690,10 +824,10 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
-function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null) {
+function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = 1.35) {
   const vpd = trafficData?.estimatedVPD || 15000;
-  const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData);
-  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData);
+  const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
+  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
   const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses);
 
   // Build recommendation excluding existing businesses
