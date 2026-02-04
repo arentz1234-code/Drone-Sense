@@ -25,6 +25,8 @@ interface ParcelData {
     description?: string;
     allowedUses?: string[];
   } | null;
+  source?: string;
+  message?: string;
 }
 
 // Dynamic import for the entire map component to avoid SSR issues
@@ -230,6 +232,12 @@ export default function MapView({ coordinates, address }: MapViewProps) {
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: '#4ecdc4'}}></span>Residential</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: '#9b59b6'}}></span>Industrial</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: '#27ae60'}}></span>Agricultural</span>
+          </div>
+
+          {/* Data Source */}
+          <div className="text-xs text-[var(--text-muted)] text-center pt-2 border-t border-[var(--border-color)]">
+            {parcelData.source && <span>Data source: {parcelData.source}</span>}
+            {parcelData.message && <p className="text-[var(--accent-yellow)] mt-1">{parcelData.message}</p>}
           </div>
         </div>
       )}
