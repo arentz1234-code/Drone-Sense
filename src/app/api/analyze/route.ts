@@ -177,9 +177,7 @@ export async function POST(request: Request) {
     const body: AnalyzeRequest = await request.json();
     const { images, address, nearbyBusinesses, trafficData } = body;
 
-    if (!images || images.length === 0) {
-      return NextResponse.json({ error: 'No images provided' }, { status: 400 });
-    }
+    const hasImages = images && images.length > 0;
 
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!apiKey) {
@@ -228,8 +226,8 @@ VPD Guidelines for Business Types:
 TOP RECOMMENDED BUSINESSES (not already in area): ${topRecommendations.join(', ')}`;
     }
 
-    // Prepare image content for Gemini
-    const imageParts = images.map((img) => {
+    // Prepare image content for Gemini (if images provided)
+    const imageParts = hasImages ? images.map((img) => {
       const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
       if (match) {
         return {
@@ -240,20 +238,24 @@ TOP RECOMMENDED BUSINESSES (not already in area): ${topRecommendations.join(', '
         };
       }
       return null;
-    }).filter(Boolean);
+    }).filter(Boolean) : [];
 
-    const prompt = `You are an expert commercial real estate analyst and site evaluator. Analyze these drone/aerial images of a property located at: ${address}
+    const imageContext = hasImages
+      ? 'Analyze these drone/aerial images of the property.'
+      : 'No images provided - base your analysis on location data, traffic patterns, and nearby businesses only.';
+
+    const prompt = `You are an expert commercial real estate analyst and site evaluator. ${imageContext} Property located at: ${address}
 ${businessContext}
 ${trafficContext}
 
 Please provide a comprehensive site analysis in the following JSON format:
 {
   "viabilityScore": <number 1-10>,
-  "terrain": "<brief description of terrain - flat, sloped, rocky, etc.>",
-  "accessibility": "<road access, visibility from main roads, parking potential, corner lot status>",
-  "existingStructures": "<any buildings, foundations, or structures visible>",
-  "vegetation": "<trees, landscaping, clearing needed>",
-  "lotSizeEstimate": "<estimated lot size in acres or sq ft>",
+  "terrain": "<${hasImages ? 'brief description of terrain from images - flat, sloped, rocky, etc.' : 'Unable to assess without images'}>",
+  "accessibility": "<road access, visibility from main roads, parking potential based on ${hasImages ? 'images and ' : ''}location data>",
+  "existingStructures": "<${hasImages ? 'any buildings, foundations, or structures visible in images' : 'Unable to assess without images'}>",
+  "vegetation": "<${hasImages ? 'trees, landscaping, clearing needed based on images' : 'Unable to assess without images'}>",
+  "lotSizeEstimate": "<${hasImages ? 'estimated lot size based on images' : 'Unable to estimate without images'}>",
   "businessRecommendation": "<CRITICAL: Only recommend specific businesses that DO NOT already exist in the nearby area. With ${trafficData?.estimatedVPD?.toLocaleString() || 'the estimated'} VPD, recommend specific brands like: ${topRecommendations.slice(0, 5).join(', ')}. DO NOT recommend: ${existingBusinessNames || 'N/A'}. Explain why your specific recommendations would work at this location.>",
   "constructionPotential": "<detailed assessment of construction viability, challenges, and opportunities>",
   "keyFindings": ["<finding 1>", "<finding 2>", "<finding 3>", "<finding 4>", "<finding 5>"],

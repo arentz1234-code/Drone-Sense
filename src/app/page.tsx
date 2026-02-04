@@ -58,10 +58,6 @@ export default function HomePage() {
   const allBusinesses = businesses;
 
   const handleAnalyze = async () => {
-    if (images.length === 0) {
-      setError('Please upload at least one image');
-      return;
-    }
     if (!address) {
       setError('Please enter an address');
       return;
@@ -183,7 +179,7 @@ export default function HomePage() {
         )}
         <button
           onClick={handleAnalyze}
-          disabled={loading || images.length === 0 || !address}
+          disabled={loading || !address}
           className="btn-primary flex items-center gap-2"
         >
           {loading ? (
