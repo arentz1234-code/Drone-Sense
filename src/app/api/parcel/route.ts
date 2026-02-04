@@ -201,16 +201,19 @@ async function fetchParcelFromCountyGIS(lat: number, lng: number): Promise<Parce
   return null;
 }
 
-// Fetch from OpenStreetMap for building outlines
+// Fetch from OpenStreetMap for building outlines - improved version
 async function fetchBoundaryFromOSM(lat: number, lng: number): Promise<ParcelResponse | null> {
   try {
-    // Use Overpass API to get building footprints
+    // Use Overpass API to get building footprints with larger search radius
     const overpassUrl = 'https://overpass-api.de/api/interpreter';
+    // Search for buildings, landuse, and amenities within 50m
     const query = `
-      [out:json][timeout:10];
+      [out:json][timeout:15];
       (
-        way["building"](around:30,${lat},${lng});
-        relation["building"](around:30,${lat},${lng});
+        way["building"](around:50,${lat},${lng});
+        way["landuse"](around:50,${lat},${lng});
+        way["amenity"](around:50,${lat},${lng});
+        relation["building"](around:50,${lat},${lng});
       );
       out body;
       >;
@@ -225,15 +228,19 @@ async function fetchBoundaryFromOSM(lat: number, lng: number): Promise<ParcelRes
       body: `data=${encodeURIComponent(query)}`,
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.log('OSM Overpass response not ok:', response.status);
+      return null;
+    }
 
     const data = await response.json();
+    console.log('OSM data elements:', data.elements?.length || 0);
 
     if (!data.elements || data.elements.length === 0) return null;
 
     // Find nodes and ways
     const nodes: Record<number, { lat: number; lon: number }> = {};
-    const ways: Array<{ nodes: number[]; tags?: Record<string, string> }> = [];
+    const ways: Array<{ nodes: number[]; tags?: Record<string, string>; distance?: number }> = [];
 
     for (const el of data.elements) {
       if (el.type === 'node') {
@@ -245,19 +252,54 @@ async function fetchBoundaryFromOSM(lat: number, lng: number): Promise<ParcelRes
 
     if (ways.length === 0) return null;
 
-    // Convert ways to boundaries
-    const boundaries: Array<[number, number][]> = ways.map(way =>
-      way.nodes
+    // Convert ways to boundaries and calculate distance to center
+    const boundariesWithDistance = ways.map(way => {
+      const coords = way.nodes
         .map(nodeId => nodes[nodeId])
         .filter(node => node)
-        .map(node => [node.lat, node.lon] as [number, number])
-    ).filter(boundary => boundary.length > 2);
+        .map(node => [node.lat, node.lon] as [number, number]);
 
-    if (boundaries.length === 0) return null;
+      if (coords.length < 3) return null;
+
+      // Calculate centroid distance to search point
+      const centroidLat = coords.reduce((sum, c) => sum + c[0], 0) / coords.length;
+      const centroidLng = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
+      const distance = Math.sqrt(Math.pow(centroidLat - lat, 2) + Math.pow(centroidLng - lng, 2));
+
+      return { coords, distance, tags: way.tags };
+    }).filter(b => b !== null) as Array<{ coords: [number, number][]; distance: number; tags?: Record<string, string> }>;
+
+    if (boundariesWithDistance.length === 0) return null;
+
+    // Sort by distance and take the closest one (likely the target building)
+    boundariesWithDistance.sort((a, b) => a.distance - b.distance);
+    const closest = boundariesWithDistance[0];
+
+    // Determine land use from tags
+    let landUse = closest.tags?.building || closest.tags?.landuse || closest.tags?.amenity;
+    if (landUse === 'yes') landUse = 'Building';
+    if (landUse === 'commercial') landUse = 'Commercial';
+    if (landUse === 'retail') landUse = 'Retail';
+    if (landUse === 'industrial') landUse = 'Industrial';
+
+    // Calculate approximate area
+    const coords = closest.coords;
+    let area = 0;
+    for (let i = 0; i < coords.length - 1; i++) {
+      area += coords[i][1] * coords[i + 1][0];
+      area -= coords[i + 1][1] * coords[i][0];
+    }
+    area = Math.abs(area) / 2;
+    // Convert to square feet (rough approximation at this latitude)
+    const sqft = area * 111319 * 111319 * Math.cos(lat * Math.PI / 180) * 10.764;
 
     return {
-      boundaries,
-      parcelInfo: null,
+      boundaries: [closest.coords],
+      parcelInfo: {
+        sqft: Math.round(sqft),
+        acres: sqft / 43560,
+        landUse: landUse ? String(landUse).charAt(0).toUpperCase() + String(landUse).slice(1) : undefined,
+      },
       zoning: null,
       source: 'OpenStreetMap Building',
     };
@@ -312,27 +354,31 @@ async function fetchBoundaryFromNominatim(lat: number, lng: number): Promise<Par
 }
 
 // Generate approximate parcel boundary based on typical lot sizes
+// Creates a more realistic commercial lot shape
 function generateApproximateBoundary(lat: number, lng: number, address?: string): ParcelResponse {
-  // Create approximate 0.5-acre lot (roughly 150ft x 150ft for commercial)
-  const offset = 0.0007; // ~75m in each direction
+  // Typical commercial lot along a road: wider frontage, deeper lot
+  // Approximately 200ft wide x 300ft deep (~1.4 acres)
+  const widthOffset = 0.0009; // ~100m (200ft) half-width
+  const depthOffset = 0.00135; // ~150m (300ft) half-depth
 
+  // Create a rectangle oriented with the likely road frontage
   const boundaries: Array<[number, number][]> = [[
-    [lat - offset, lng - offset],
-    [lat - offset, lng + offset],
-    [lat + offset, lng + offset],
-    [lat + offset, lng - offset],
-    [lat - offset, lng - offset],
+    [lat - depthOffset, lng - widthOffset],
+    [lat - depthOffset, lng + widthOffset],
+    [lat + depthOffset, lng + widthOffset],
+    [lat + depthOffset, lng - widthOffset],
+    [lat - depthOffset, lng - widthOffset],
   ]];
 
   return {
     boundaries,
     parcelInfo: {
-      acres: 0.5,
-      sqft: 21780,
+      acres: 1.4,
+      sqft: 60984,
       address,
     },
     zoning: null,
-    source: 'Estimated',
+    source: 'Estimated (typical commercial lot)',
   };
 }
 

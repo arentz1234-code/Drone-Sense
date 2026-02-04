@@ -24,6 +24,7 @@ interface LeafletMapProps {
       description?: string;
       allowedUses?: string[];
     } | null;
+    source?: string;
   } | null;
 }
 
@@ -74,27 +75,36 @@ export default function LeafletMap({ coordinates, mapType, parcelData }: Leaflet
 
       {/* Parcel Boundary */}
       {parcelData?.boundaries && parcelData.boundaries.length > 0 && (
-        parcelData.boundaries.map((boundary, index) => (
-          <Polygon
-            key={index}
-            positions={boundary}
-            pathOptions={{
-              color: getZoningColor(parcelData.zoning?.code || parcelData.parcelInfo?.zoning),
-              weight: 3,
-              fillOpacity: 0.2,
-            }}
-          >
-            <Popup>
-              <div className="text-sm">
-                <strong>Parcel Info</strong>
-                {parcelData.parcelInfo?.address && <p>Address: {parcelData.parcelInfo.address}</p>}
-                {parcelData.parcelInfo?.acres && <p>Size: {parcelData.parcelInfo.acres.toFixed(2)} acres</p>}
-                {parcelData.parcelInfo?.zoning && <p>Zoning: {parcelData.parcelInfo.zoning}</p>}
-                {parcelData.parcelInfo?.landUse && <p>Land Use: {parcelData.parcelInfo.landUse}</p>}
-              </div>
-            </Popup>
-          </Polygon>
-        ))
+        parcelData.boundaries.map((boundary, index) => {
+          const isEstimated = parcelData.source?.toLowerCase().includes('estimated');
+          const isBuilding = parcelData.source?.toLowerCase().includes('building');
+
+          return (
+            <Polygon
+              key={index}
+              positions={boundary}
+              pathOptions={{
+                color: isEstimated ? '#f39c12' : isBuilding ? '#00bcd4' : getZoningColor(parcelData.zoning?.code || parcelData.parcelInfo?.zoning),
+                weight: isEstimated ? 2 : 3,
+                fillOpacity: isEstimated ? 0.1 : 0.2,
+                dashArray: isEstimated ? '10, 10' : undefined,
+              }}
+            >
+              <Popup>
+                <div className="text-sm">
+                  <strong>{isEstimated ? 'Estimated Area' : isBuilding ? 'Building Footprint' : 'Parcel Info'}</strong>
+                  {parcelData.parcelInfo?.address && <p>Address: {parcelData.parcelInfo.address}</p>}
+                  {parcelData.parcelInfo?.acres && <p>Size: {parcelData.parcelInfo.acres.toFixed(2)} acres</p>}
+                  {parcelData.parcelInfo?.sqft && <p>Sq Ft: {parcelData.parcelInfo.sqft.toLocaleString()}</p>}
+                  {parcelData.parcelInfo?.zoning && <p>Zoning: {parcelData.parcelInfo.zoning}</p>}
+                  {parcelData.parcelInfo?.landUse && <p>Land Use: {parcelData.parcelInfo.landUse}</p>}
+                  {isEstimated && <p style={{color: '#f39c12', marginTop: '8px', fontSize: '11px'}}>* Boundary is estimated</p>}
+                  {isBuilding && <p style={{color: '#00bcd4', marginTop: '8px', fontSize: '11px'}}>* Building footprint from OSM</p>}
+                </div>
+              </Popup>
+            </Polygon>
+          );
+        })
       )}
     </MapContainer>
   );
