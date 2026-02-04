@@ -188,6 +188,385 @@ const VPD_THRESHOLDS = {
     lotSize: { min: 0.2, ideal: 0.5 }, // Medical offices need 0.2-0.5 acres
     examples: ['Urgent Care', 'Dental Office', 'Medical Clinic', 'CareNow', 'AFC Urgent Care', 'MedExpress']
   },
+  // ============ CAR WASH ============
+  carWashExpress: {
+    min: 15000, ideal: 25000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.4, ideal: 0.8 }, // Express car wash needs 0.4-0.8 acres
+    examples: ['Zips Car Wash', 'Take 5 Car Wash', 'Splash Car Wash', 'Goo Goo Express', 'Whistle Express']
+  },
+  carWashFull: {
+    min: 12000, ideal: 20000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.8, ideal: 1.5 }, // Full service car wash needs 0.8-1.5 acres
+    examples: ['Mister Car Wash', 'Delta Sonic', 'Autobell', 'Flagship Carwash', 'Palms Car Wash']
+  },
+  // ============ AUTOMOTIVE ============
+  carDealershipUsed: {
+    min: 15000, ideal: 25000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 1.5, ideal: 3.0 }, // Used car lots need 1.5-3 acres
+    examples: ['CarMax', 'Carvana', 'DriveTime', 'AutoNation USA', 'Enterprise Car Sales']
+  },
+  carDealershipNew: {
+    min: 20000, ideal: 30000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 3.0, ideal: 6.0 }, // New car dealerships need 3-6 acres
+    examples: ['Toyota', 'Honda', 'Ford', 'Chevrolet', 'BMW', 'Mercedes-Benz', 'Lexus']
+  },
+  tireShop: {
+    min: 10000, ideal: 18000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.3, ideal: 0.6 }, // Tire shops need 0.3-0.6 acres
+    examples: ['Discount Tire', 'Tire Kingdom', 'Big O Tires', 'Firestone', 'NTB', 'Mavis Tire']
+  },
+  oilChange: {
+    min: 10000, ideal: 18000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.15, ideal: 0.3 }, // Oil change shops need 0.15-0.3 acres
+    examples: ['Jiffy Lube', 'Valvoline', 'Take 5 Oil Change', 'Express Oil Change', 'Grease Monkey']
+  },
+  autoBodyShop: {
+    min: 8000, ideal: 15000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.5, ideal: 1.0 }, // Body shops need 0.5-1 acre
+    examples: ['Caliber Collision', 'ABRA Auto Body', 'Gerber Collision', 'Service King', 'Maaco']
+  },
+  // ============ HOTELS & LODGING ============
+  hotelBudget: {
+    min: 15000, ideal: 25000,
+    incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 1.0, ideal: 2.0 }, // Budget hotels need 1-2 acres
+    examples: ['Motel 6', 'Super 8', 'Red Roof Inn', 'Days Inn', 'Econo Lodge', 'Americas Best Value']
+  },
+  hotelMidScale: {
+    min: 18000, ideal: 28000,
+    incomePreference: ['moderate', 'middle'] as const,
+    lotSize: { min: 1.5, ideal: 2.5 }, // Mid-scale hotels need 1.5-2.5 acres
+    examples: ['Hampton Inn', 'Holiday Inn Express', 'La Quinta', 'Best Western', 'Comfort Inn', 'Fairfield Inn']
+  },
+  hotelUpscale: {
+    min: 20000, ideal: 30000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 2.0, ideal: 4.0 }, // Upscale hotels need 2-4 acres
+    examples: ['Marriott', 'Hilton', 'Hyatt', 'Sheraton', 'DoubleTree', 'Embassy Suites', 'Courtyard']
+  },
+  // ============ STORAGE ============
+  selfStorage: {
+    min: 8000, ideal: 15000,
+    incomePreference: ['low', 'moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 2.0, ideal: 5.0 }, // Self storage needs 2-5 acres
+    examples: ['Public Storage', 'Extra Space Storage', 'CubeSmart', 'Life Storage', 'U-Haul', 'StorQuest']
+  },
+  rvBoatStorage: {
+    min: 5000, ideal: 10000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 3.0, ideal: 8.0 }, // RV/Boat storage needs 3-8 acres
+    examples: ['Boat & RV Storage', 'Good Neighbor RV', 'SecurCare RV Storage']
+  },
+  // ============ CHILDCARE & EDUCATION ============
+  daycare: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.5, ideal: 1.0 }, // Daycares need 0.5-1 acre
+    examples: ['KinderCare', 'Bright Horizons', 'The Learning Experience', 'Primrose Schools', 'Kiddie Academy', 'Goddard School']
+  },
+  tutoringCenter: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.1, ideal: 0.25 }, // Tutoring centers need 0.1-0.25 acres (strip mall)
+    examples: ['Kumon', 'Mathnasium', 'Sylvan Learning', 'Huntington Learning', 'Club Z', 'Eye Level']
+  },
+  tradeSchool: {
+    min: 10000, ideal: 18000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 1.0, ideal: 2.5 }, // Trade schools need 1-2.5 acres
+    examples: ['UTI', 'Lincoln Tech', 'Paul Mitchell', 'Aveda Institute', 'Empire Beauty School']
+  },
+  // ============ PET SERVICES ============
+  petStore: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.8, ideal: 1.5 }, // Pet stores need 0.8-1.5 acres
+    examples: ['PetSmart', 'Petco', 'Pet Supplies Plus', 'Hollywood Feed', 'Chuck & Don\'s']
+  },
+  vetClinic: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['moderate', 'middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.25, ideal: 0.5 }, // Vet clinics need 0.25-0.5 acres
+    examples: ['Banfield Pet Hospital', 'VCA Animal Hospital', 'BluePearl', 'Veterinary Emergency Group']
+  },
+  petGrooming: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.1, ideal: 0.2 }, // Pet grooming needs 0.1-0.2 acres
+    examples: ['PetSmart Grooming', 'Petco Grooming', 'Dogtopia', 'Scenthound', 'Aussie Pet Mobile']
+  },
+  doggyDaycare: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.5, ideal: 1.0 }, // Doggy daycare needs 0.5-1 acre
+    examples: ['Camp Bow Wow', 'Dogtopia', 'Wag Hotels', 'K9 Resorts', 'Central Bark']
+  },
+  // ============ PERSONAL SERVICES ============
+  hairSalon: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.1, ideal: 0.2 }, // Hair salons need 0.1-0.2 acres
+    examples: ['Great Clips', 'Sport Clips', 'Supercuts', 'Cost Cutters', 'Fantastic Sams']
+  },
+  salonPremium: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.15, ideal: 0.3 }, // Premium salons need 0.15-0.3 acres
+    examples: ['Ulta Salon', 'Drybar', 'Madison Reed', 'Regis Salons', 'JC Penney Salon']
+  },
+  nailSalon: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.08, ideal: 0.15 }, // Nail salons need 0.08-0.15 acres
+    examples: ['Nail Garden', 'Regal Nails', 'Tips & Toes', 'Polished Perfect']
+  },
+  spa: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.15, ideal: 0.3 }, // Spas need 0.15-0.3 acres
+    examples: ['Massage Envy', 'Hand & Stone', 'European Wax Center', 'Elements Massage', 'Spavia']
+  },
+  barbershop: {
+    min: 5000, ideal: 8000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.05, ideal: 0.1 }, // Barbershops need 0.05-0.1 acres
+    examples: ['Floyd\'s 99 Barbershop', 'The Boardroom', 'Roosters', 'V\'s Barbershop']
+  },
+  tattooShop: {
+    min: 5000, ideal: 10000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.05, ideal: 0.1 }, // Tattoo shops need 0.05-0.1 acres
+    examples: ['Ink & Iron', 'Studio 21', 'Sacred Art', 'Black Ink']
+  },
+  // ============ RETAIL SPECIALTY ============
+  cellPhoneStore: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['low', 'moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.08, ideal: 0.15 }, // Cell phone stores need 0.08-0.15 acres
+    examples: ['Verizon', 'AT&T', 'T-Mobile', 'Sprint', 'Cricket', 'Metro by T-Mobile', 'Boost Mobile']
+  },
+  liquorStore: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.15, ideal: 0.3 }, // Liquor stores need 0.15-0.3 acres
+    examples: ['Total Wine', 'BevMo', 'ABC Fine Wine & Spirits', 'Spec\'s', 'Twin Liquors']
+  },
+  tobaccoVape: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 0.05, ideal: 0.1 }, // Tobacco/vape shops need 0.05-0.1 acres
+    examples: ['Smoker Friendly', 'Wild Bill\'s Tobacco', 'Tobacco Plus', 'VaporFi']
+  },
+  pawnShop: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 0.1, ideal: 0.2 }, // Pawn shops need 0.1-0.2 acres
+    examples: ['Cash America', 'First Cash', 'EZCorp', 'SuperPawn', 'Cash Pawn']
+  },
+  mattressStore: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.2, ideal: 0.4 }, // Mattress stores need 0.2-0.4 acres
+    examples: ['Mattress Firm', 'Sleep Number', 'Tempur-Pedic', 'Ashley Sleep', 'Purple']
+  },
+  furnitureValue: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 1.0, ideal: 2.0 }, // Value furniture stores need 1-2 acres
+    examples: ['Big Lots', 'At Home', 'Tuesday Morning', 'Rooms To Go', 'American Freight']
+  },
+  furniturePremium: {
+    min: 15000, ideal: 22000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 1.5, ideal: 3.0 }, // Premium furniture stores need 1.5-3 acres
+    examples: ['Ashley Furniture', 'Pottery Barn', 'Crate & Barrel', 'West Elm', 'Ethan Allen', 'Restoration Hardware']
+  },
+  // ============ SERVICES ============
+  laundromat: {
+    min: 5000, ideal: 8000,
+    incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 0.15, ideal: 0.3 }, // Laundromats need 0.15-0.3 acres
+    examples: ['Speed Queen', 'Wash House', 'Spin Cycle', 'Clean Laundry']
+  },
+  dryCleaner: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.1, ideal: 0.2 }, // Dry cleaners need 0.1-0.2 acres
+    examples: ['Martinizing', 'ZIPS Dry Cleaners', 'Tide Cleaners', 'Lapels']
+  },
+  shippingStore: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.08, ideal: 0.15 }, // Shipping stores need 0.08-0.15 acres
+    examples: ['The UPS Store', 'FedEx Office', 'Postal Connections', 'PostNet', 'Pak Mail']
+  },
+  printCopy: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.1, ideal: 0.2 }, // Print shops need 0.1-0.2 acres
+    examples: ['FedEx Office', 'Staples', 'Office Depot', 'AlphaGraphics', 'Minuteman Press']
+  },
+  // ============ FOOD & BEVERAGE SPECIALTY ============
+  pizzaDelivery: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.1, ideal: 0.2 }, // Pizza delivery needs 0.1-0.2 acres
+    examples: ['Domino\'s', 'Pizza Hut', 'Papa John\'s', 'Little Caesars', 'Marco\'s Pizza', 'Hungry Howie\'s']
+  },
+  pizzaSitDown: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.4, ideal: 0.8 }, // Sit-down pizza needs 0.4-0.8 acres
+    examples: ['Mellow Mushroom', 'Blaze Pizza', 'MOD Pizza', 'Pieology', 'Your Pie', '&pizza']
+  },
+  iceCream: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.08, ideal: 0.15 }, // Ice cream shops need 0.08-0.15 acres
+    examples: ['Baskin-Robbins', 'Cold Stone Creamery', 'Dairy Queen', 'Marble Slab', 'Bruster\'s', 'Handel\'s']
+  },
+  frozenYogurt: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.08, ideal: 0.15 }, // Frozen yogurt needs 0.08-0.15 acres
+    examples: ['Menchie\'s', 'sweetFrog', 'Orange Leaf', 'TCBY', 'Pinkberry', 'Yogurtland']
+  },
+  smoothieJuice: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['moderate', 'middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.1, ideal: 0.2 }, // Smoothie/juice bars need 0.1-0.2 acres
+    examples: ['Smoothie King', 'Jamba', 'Tropical Smoothie', 'Juice It Up!', 'Clean Juice', 'Nekter']
+  },
+  donutBakery: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.1, ideal: 0.2 }, // Donut/bakery shops need 0.1-0.2 acres
+    examples: ['Krispy Kreme', 'Dunkin\'', 'Duck Donuts', 'Shipley Do-Nuts', 'Hurts Donut', 'Cinnabon']
+  },
+  sportsBar: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['moderate', 'middle'] as const,
+    lotSize: { min: 0.6, ideal: 1.2 }, // Sports bars need 0.6-1.2 acres
+    examples: ['Buffalo Wild Wings', 'Hooters', 'Twin Peaks', 'Walk-On\'s', 'Tilted Kilt', 'Miller\'s Ale House']
+  },
+  breweryTaproom: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.4, ideal: 1.0 }, // Breweries/taprooms need 0.4-1 acre
+    examples: ['World of Beer', 'Yard House', 'BJ\'s Brewhouse', 'Gordon Biersch', 'Rock Bottom']
+  },
+  wineBar: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.1, ideal: 0.25 }, // Wine bars need 0.1-0.25 acres
+    examples: ['Cooper\'s Hawk', 'The Wine Loft', 'Vino Volo', 'Total Wine Bar']
+  },
+  mexicanCasual: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.4, ideal: 0.8 }, // Casual Mexican needs 0.4-0.8 acres
+    examples: ['Taco Bell', 'Del Taco', 'Taco Cabana', 'Taco Bueno', 'Qdoba', 'Moe\'s']
+  },
+  mexicanSitDown: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.8, ideal: 1.5 }, // Sit-down Mexican needs 0.8-1.5 acres
+    examples: ['Chili\'s', 'On The Border', 'Chuy\'s', 'El Fenix', 'Abuelo\'s', 'El Torito']
+  },
+  asianFastCasual: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.3, ideal: 0.6 }, // Asian fast casual needs 0.3-0.6 acres
+    examples: ['Panda Express', 'Pei Wei', 'Noodles & Company', 'Pick Up Stix', 'Teriyaki Madness']
+  },
+  asianSitDown: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.6, ideal: 1.2 }, // Sit-down Asian needs 0.6-1.2 acres
+    examples: ['P.F. Chang\'s', 'Benihana', 'Kona Grill', 'RA Sushi', 'Seasons 52']
+  },
+  // ============ ENTERTAINMENT ============
+  movieTheater: {
+    min: 20000, ideal: 30000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 4.0, ideal: 8.0 }, // Movie theaters need 4-8 acres
+    examples: ['AMC', 'Regal', 'Cinemark', 'Marcus Theatres', 'Alamo Drafthouse', 'Studio Movie Grill']
+  },
+  bowlingAlley: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['moderate', 'middle'] as const,
+    lotSize: { min: 2.0, ideal: 4.0 }, // Bowling alleys need 2-4 acres
+    examples: ['Bowlero', 'AMF', 'Main Event', 'Lucky Strike', 'Round1', 'Dave & Buster\'s']
+  },
+  arcadeFEC: {
+    min: 15000, ideal: 22000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 1.5, ideal: 3.0 }, // Family entertainment centers need 1.5-3 acres
+    examples: ['Dave & Buster\'s', 'Main Event', 'Round1', 'Chuck E. Cheese', 'Scene75', 'Andretti']
+  },
+  trampolinePark: {
+    min: 12000, ideal: 18000,
+    incomePreference: ['moderate', 'middle'] as const,
+    lotSize: { min: 1.5, ideal: 2.5 }, // Trampoline parks need 1.5-2.5 acres
+    examples: ['Sky Zone', 'Urban Air', 'Launch Trampoline', 'Altitude', 'Rockin\' Jump', 'Defy']
+  },
+  miniGolf: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['moderate', 'middle'] as const,
+    lotSize: { min: 1.0, ideal: 2.0 }, // Mini golf needs 1-2 acres
+    examples: ['Topgolf', 'Drive Shack', 'PopStroke', 'Puttshack', 'Monster Mini Golf']
+  },
+  martialArts: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.15, ideal: 0.3 }, // Martial arts studios need 0.15-0.3 acres
+    examples: ['ATA Martial Arts', 'Premier Martial Arts', 'TITLE Boxing', '9Round', 'UFC Gym']
+  },
+  yogaPilates: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['middle', 'upper-middle', 'high'] as const,
+    lotSize: { min: 0.1, ideal: 0.2 }, // Yoga/Pilates studios need 0.1-0.2 acres
+    examples: ['CorePower Yoga', 'Club Pilates', 'Pure Barre', 'YogaWorks', 'Bikram Yoga']
+  },
+  danceStudio: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.15, ideal: 0.3 }, // Dance studios need 0.15-0.3 acres
+    examples: ['Arthur Murray', 'Fred Astaire', 'Dance With Me', 'Jazzercise']
+  },
+  // ============ GROCERY ============
+  groceryValue: {
+    min: 15000, ideal: 22000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 1.5, ideal: 3.0 }, // Value grocers need 1.5-3 acres
+    examples: ['ALDI', 'Lidl', 'Save-A-Lot', 'WinCo', 'Food 4 Less', 'Grocery Outlet']
+  },
+  groceryMid: {
+    min: 18000, ideal: 28000,
+    incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 3.0, ideal: 5.0 }, // Mid-tier grocers need 3-5 acres
+    examples: ['Kroger', 'Publix', 'H-E-B', 'Albertsons', 'Safeway', 'Food Lion', 'Harris Teeter']
+  },
+  groceryPremium: {
+    min: 20000, ideal: 30000,
+    incomePreference: ['upper-middle', 'high'] as const,
+    lotSize: { min: 2.0, ideal: 4.0 }, // Premium grocers need 2-4 acres
+    examples: ['Whole Foods', 'Trader Joe\'s', 'Sprouts', 'Fresh Market', 'Natural Grocers']
+  },
+  // ============ TRUCK STOP ============
+  truckStop: {
+    min: 25000, ideal: 40000,
+    incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 5.0, ideal: 15.0 }, // Truck stops need 5-15 acres
+    examples: ['Pilot Flying J', 'Love\'s Travel Stops', 'TA Travel Centers', 'Petro', 'Sapp Bros']
+  },
 };
 
 // Parse lot size estimate string to extract acreage
@@ -497,6 +876,80 @@ function calculateBusinessSuitability(
       fitness: 'Value Fitness',
       fitnessPremium: 'Premium Fitness',
       medical: 'Medical / Healthcare',
+      // Car Wash
+      carWashExpress: 'Express Car Wash',
+      carWashFull: 'Full Service Car Wash',
+      // Automotive
+      carDealershipUsed: 'Used Car Dealership',
+      carDealershipNew: 'New Car Dealership',
+      tireShop: 'Tire Shop',
+      oilChange: 'Oil Change / Lube',
+      autoBodyShop: 'Auto Body / Collision',
+      // Hotels
+      hotelBudget: 'Budget Hotel / Motel',
+      hotelMidScale: 'Mid-Scale Hotel',
+      hotelUpscale: 'Upscale Hotel',
+      // Storage
+      selfStorage: 'Self Storage',
+      rvBoatStorage: 'RV / Boat Storage',
+      // Childcare & Education
+      daycare: 'Daycare / Childcare',
+      tutoringCenter: 'Tutoring Center',
+      tradeSchool: 'Trade School / Vocational',
+      // Pet Services
+      petStore: 'Pet Store',
+      vetClinic: 'Veterinary Clinic',
+      petGrooming: 'Pet Grooming',
+      doggyDaycare: 'Doggy Daycare / Boarding',
+      // Personal Services
+      hairSalon: 'Hair Salon (Value)',
+      salonPremium: 'Salon (Premium)',
+      nailSalon: 'Nail Salon',
+      spa: 'Spa / Massage',
+      barbershop: 'Barbershop',
+      tattooShop: 'Tattoo Shop',
+      // Retail Specialty
+      cellPhoneStore: 'Cell Phone Store',
+      liquorStore: 'Liquor Store',
+      tobaccoVape: 'Tobacco / Vape Shop',
+      pawnShop: 'Pawn Shop',
+      mattressStore: 'Mattress Store',
+      furnitureValue: 'Furniture (Value)',
+      furniturePremium: 'Furniture (Premium)',
+      // Services
+      laundromat: 'Laundromat',
+      dryCleaner: 'Dry Cleaner',
+      shippingStore: 'Shipping / Pack Store',
+      printCopy: 'Print / Copy Center',
+      // Food & Beverage Specialty
+      pizzaDelivery: 'Pizza (Delivery)',
+      pizzaSitDown: 'Pizza (Sit-Down)',
+      iceCream: 'Ice Cream Shop',
+      frozenYogurt: 'Frozen Yogurt',
+      smoothieJuice: 'Smoothie / Juice Bar',
+      donutBakery: 'Donut / Bakery',
+      sportsBar: 'Sports Bar / Wings',
+      breweryTaproom: 'Brewery / Taproom',
+      wineBar: 'Wine Bar',
+      mexicanCasual: 'Mexican (Fast Casual)',
+      mexicanSitDown: 'Mexican (Sit-Down)',
+      asianFastCasual: 'Asian (Fast Casual)',
+      asianSitDown: 'Asian (Sit-Down)',
+      // Entertainment
+      movieTheater: 'Movie Theater',
+      bowlingAlley: 'Bowling Alley',
+      arcadeFEC: 'Arcade / Family Entertainment',
+      trampolinePark: 'Trampoline Park',
+      miniGolf: 'Mini Golf / Driving Range',
+      martialArts: 'Martial Arts Studio',
+      yogaPilates: 'Yoga / Pilates Studio',
+      danceStudio: 'Dance Studio',
+      // Grocery
+      groceryValue: 'Grocery (Value)',
+      groceryMid: 'Grocery (Mid-Tier)',
+      groceryPremium: 'Grocery (Premium)',
+      // Truck Stop
+      truckStop: 'Truck Stop / Travel Center',
     };
 
     // Find which businesses from this category already exist in the area
