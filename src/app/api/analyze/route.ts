@@ -8,6 +8,24 @@ interface Business {
   address: string;
 }
 
+// Feasibility score breakdown
+export interface FeasibilityScore {
+  overall: number;
+  breakdown: {
+    trafficScore: number;
+    demographicsScore: number;
+    competitionScore: number;
+    accessScore: number;
+  };
+  details: {
+    traffic: string;
+    demographics: string;
+    competition: string;
+    access: string;
+  };
+  rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
+}
+
 interface TrafficInfo {
   estimatedVPD: number;
   vpdRange: string;
@@ -149,6 +167,162 @@ const VPD_THRESHOLDS = {
     examples: ['Urgent Care', 'Dental Office', 'Medical Clinic', 'CareNow', 'AFC Urgent Care', 'MedExpress']
   },
 };
+
+// Calculate comprehensive feasibility score
+function calculateFeasibilityScore(
+  trafficData: TrafficInfo | null,
+  demographicsData: DemographicsInfo | null,
+  nearbyBusinesses: Business[]
+): FeasibilityScore {
+  let trafficScore = 5; // Default middle score
+  let demographicsScore = 5;
+  let competitionScore = 5;
+  let accessScore = 5;
+
+  let trafficDetail = 'No traffic data available';
+  let demographicsDetail = 'No demographics data available';
+  let competitionDetail = 'No nearby business data';
+  let accessDetail = 'Unable to assess access';
+
+  // TRAFFIC SCORE (0-10)
+  if (trafficData) {
+    const vpd = trafficData.estimatedVPD;
+    if (vpd >= 30000) {
+      trafficScore = 10;
+      trafficDetail = `Excellent traffic: ${vpd.toLocaleString()} VPD supports all business types`;
+    } else if (vpd >= 20000) {
+      trafficScore = 9;
+      trafficDetail = `Very high traffic: ${vpd.toLocaleString()} VPD ideal for most retail`;
+    } else if (vpd >= 15000) {
+      trafficScore = 8;
+      trafficDetail = `High traffic: ${vpd.toLocaleString()} VPD supports drive-thru concepts`;
+    } else if (vpd >= 10000) {
+      trafficScore = 6;
+      trafficDetail = `Moderate traffic: ${vpd.toLocaleString()} VPD suitable for quick service`;
+    } else if (vpd >= 5000) {
+      trafficScore = 4;
+      trafficDetail = `Low-moderate traffic: ${vpd.toLocaleString()} VPD limits options`;
+    } else {
+      trafficScore = 2;
+      trafficDetail = `Low traffic: ${vpd.toLocaleString()} VPD - local service only`;
+    }
+
+    // Bonus for road type
+    if (trafficData.roadType.includes('Major') || trafficData.roadType.includes('Motorway')) {
+      accessScore = Math.min(10, accessScore + 2);
+      accessDetail = `${trafficData.roadType} with high visibility`;
+    } else if (trafficData.roadType.includes('Secondary')) {
+      accessScore = 6;
+      accessDetail = `${trafficData.roadType} - good local access`;
+    } else {
+      accessScore = 4;
+      accessDetail = `${trafficData.roadType} - limited visibility`;
+    }
+  }
+
+  // DEMOGRAPHICS SCORE (0-10)
+  if (demographicsData) {
+    const income = demographicsData.medianHouseholdIncome;
+    const employment = demographicsData.employmentRate;
+    const population = demographicsData.population;
+
+    // Income scoring
+    let incomeScore = 5;
+    if (income >= 85000) incomeScore = 9;
+    else if (income >= 65000) incomeScore = 8;
+    else if (income >= 50000) incomeScore = 7;
+    else if (income >= 35000) incomeScore = 5;
+    else incomeScore = 4;
+
+    // Employment bonus
+    const employmentBonus = employment >= 95 ? 1 : employment >= 90 ? 0.5 : 0;
+
+    // Population density consideration
+    const populationBonus = population >= 5000 ? 1 : population >= 2000 ? 0.5 : 0;
+
+    demographicsScore = Math.min(10, Math.round(incomeScore + employmentBonus + populationBonus));
+    demographicsDetail = `${demographicsData.consumerProfile.type} market - $${income.toLocaleString()} median income, ${population.toLocaleString()} pop, ${employment}% employed`;
+  }
+
+  // COMPETITION SCORE (0-10) - Balance is good, oversaturation is bad
+  if (nearbyBusinesses.length > 0) {
+    const businessCount = nearbyBusinesses.length;
+
+    // Count business types
+    const typeCount: Record<string, number> = {};
+    nearbyBusinesses.forEach(b => {
+      const type = b.type || 'Other';
+      typeCount[type] = (typeCount[type] || 0) + 1;
+    });
+
+    const uniqueTypes = Object.keys(typeCount).length;
+
+    // Some competition is good (shows area is viable), too much is bad
+    if (businessCount >= 5 && businessCount <= 20 && uniqueTypes >= 3) {
+      competitionScore = 9;
+      competitionDetail = `Healthy mix: ${businessCount} businesses, ${uniqueTypes} categories - proven commercial area`;
+    } else if (businessCount >= 3 && businessCount <= 30) {
+      competitionScore = 7;
+      competitionDetail = `Good activity: ${businessCount} businesses nearby - established area`;
+    } else if (businessCount > 30) {
+      competitionScore = 5;
+      competitionDetail = `High density: ${businessCount} businesses - competitive market`;
+    } else if (businessCount < 3) {
+      competitionScore = 4;
+      competitionDetail = `Limited activity: Only ${businessCount} businesses - unproven area`;
+    }
+
+    // Check for anchor stores (positive signal)
+    const hasAnchor = nearbyBusinesses.some(b =>
+      ['walmart', 'target', 'costco', 'home depot', 'lowes', 'publix', 'kroger'].some(
+        anchor => b.name.toLowerCase().includes(anchor)
+      )
+    );
+    if (hasAnchor) {
+      competitionScore = Math.min(10, competitionScore + 1);
+      competitionDetail += ' + anchor tenant present';
+    }
+  }
+
+  // Calculate overall score (weighted average)
+  const weights = {
+    traffic: 0.35,      // 35% - traffic is critical
+    demographics: 0.25, // 25% - demographics matter
+    competition: 0.20,  // 20% - market validation
+    access: 0.20        // 20% - visibility/access
+  };
+
+  const overall = Math.round(
+    trafficScore * weights.traffic +
+    demographicsScore * weights.demographics +
+    competitionScore * weights.competition +
+    accessScore * weights.access
+  );
+
+  // Determine rating
+  let rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
+  if (overall >= 8) rating = 'Excellent';
+  else if (overall >= 6) rating = 'Good';
+  else if (overall >= 4) rating = 'Fair';
+  else rating = 'Poor';
+
+  return {
+    overall,
+    breakdown: {
+      trafficScore,
+      demographicsScore,
+      competitionScore,
+      accessScore
+    },
+    details: {
+      traffic: trafficDetail,
+      demographics: demographicsDetail,
+      competition: competitionDetail,
+      access: accessDetail
+    },
+    rating
+  };
+}
 
 // Check if a business name matches any of the examples (fuzzy match)
 function businessExistsInArea(businessName: string, examples: string[]): boolean {
@@ -493,6 +667,12 @@ Return ONLY valid JSON, no markdown or explanation.`;
       analysis.topRecommendations = topRecommendations;
     }
 
+    // Calculate comprehensive feasibility score
+    const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses);
+    analysis.feasibilityScore = feasibilityScore;
+    // Override viabilityScore with our calculated score
+    analysis.viabilityScore = feasibilityScore.overall;
+
     return NextResponse.json(analysis);
   } catch (error) {
     console.error('Analysis error:', error);
@@ -514,6 +694,7 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
   const vpd = trafficData?.estimatedVPD || 15000;
   const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData);
   const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData);
+  const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses);
 
   // Build recommendation excluding existing businesses
   let businessRec = '';
@@ -530,7 +711,8 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
   }
 
   return {
-    viabilityScore: 7,
+    viabilityScore: feasibilityScore.overall,
+    feasibilityScore,
     terrain: 'Relatively flat terrain with gentle slope towards the rear of the property. Good drainage potential.',
     accessibility: 'Good visibility from main road. Multiple access points possible. Adequate space for parking configuration.',
     existingStructures: 'No significant existing structures visible. Possible remnants of previous foundation or utilities.',

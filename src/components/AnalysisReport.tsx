@@ -96,7 +96,7 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
 
   return (
     <div>
-      {/* Header with Score */}
+      {/* Header with Feasibility Score */}
       <div className="flex items-start justify-between mb-8">
         <div>
           <h2 className="text-2xl font-bold mb-1">Site Analysis Report</h2>
@@ -109,10 +109,115 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
           <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${getScoreColor(analysis.viabilityScore)} flex items-center justify-center`}>
             <span className="text-4xl font-bold text-white">{analysis.viabilityScore}</span>
           </div>
-          <p className="text-sm mt-2 font-medium">{getScoreLabel(analysis.viabilityScore)}</p>
-          <p className="text-xs text-[var(--text-muted)]">Viability Score</p>
+          <p className="text-sm mt-2 font-medium">{analysis.feasibilityScore?.rating || getScoreLabel(analysis.viabilityScore)}</p>
+          <p className="text-xs text-[var(--text-muted)]">Feasibility Score</p>
         </div>
       </div>
+
+      {/* Feasibility Score Breakdown */}
+      {analysis.feasibilityScore && (
+        <div className="mb-8 p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <svg className="w-5 h-5 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Feasibility Score Breakdown
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Traffic Score */}
+            <div className="text-center">
+              <div className="relative w-16 h-16 mx-auto mb-2">
+                <svg className="w-16 h-16 transform -rotate-90">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
+                  <circle
+                    cx="32" cy="32" r="28" fill="none"
+                    stroke={analysis.feasibilityScore.breakdown.trafficScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.trafficScore >= 5 ? '#eab308' : '#ef4444'}
+                    strokeWidth="6"
+                    strokeDasharray={`${analysis.feasibilityScore.breakdown.trafficScore * 17.6} 176`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+                  {analysis.feasibilityScore.breakdown.trafficScore}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-[var(--accent-cyan)]">Traffic</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.traffic.split(' - ')[0]}</p>
+            </div>
+
+            {/* Demographics Score */}
+            <div className="text-center">
+              <div className="relative w-16 h-16 mx-auto mb-2">
+                <svg className="w-16 h-16 transform -rotate-90">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
+                  <circle
+                    cx="32" cy="32" r="28" fill="none"
+                    stroke={analysis.feasibilityScore.breakdown.demographicsScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.demographicsScore >= 5 ? '#eab308' : '#ef4444'}
+                    strokeWidth="6"
+                    strokeDasharray={`${analysis.feasibilityScore.breakdown.demographicsScore * 17.6} 176`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+                  {analysis.feasibilityScore.breakdown.demographicsScore}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-[var(--accent-green)]">Demographics</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.demographics.split(' - ')[0]}</p>
+            </div>
+
+            {/* Competition Score */}
+            <div className="text-center">
+              <div className="relative w-16 h-16 mx-auto mb-2">
+                <svg className="w-16 h-16 transform -rotate-90">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
+                  <circle
+                    cx="32" cy="32" r="28" fill="none"
+                    stroke={analysis.feasibilityScore.breakdown.competitionScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.competitionScore >= 5 ? '#eab308' : '#ef4444'}
+                    strokeWidth="6"
+                    strokeDasharray={`${analysis.feasibilityScore.breakdown.competitionScore * 17.6} 176`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+                  {analysis.feasibilityScore.breakdown.competitionScore}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-[var(--accent-orange)]">Competition</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.competition.split(' - ')[0]}</p>
+            </div>
+
+            {/* Access Score */}
+            <div className="text-center">
+              <div className="relative w-16 h-16 mx-auto mb-2">
+                <svg className="w-16 h-16 transform -rotate-90">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
+                  <circle
+                    cx="32" cy="32" r="28" fill="none"
+                    stroke={analysis.feasibilityScore.breakdown.accessScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.accessScore >= 5 ? '#eab308' : '#ef4444'}
+                    strokeWidth="6"
+                    strokeDasharray={`${analysis.feasibilityScore.breakdown.accessScore * 17.6} 176`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+                  {analysis.feasibilityScore.breakdown.accessScore}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-[var(--accent-blue)]">Access</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.access.split(' - ')[0]}</p>
+            </div>
+          </div>
+
+          {/* Details */}
+          <div className="mt-4 pt-4 border-t border-[var(--border-color)] grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+            <p><span className="text-[var(--accent-cyan)]">Traffic:</span> {analysis.feasibilityScore.details.traffic}</p>
+            <p><span className="text-[var(--accent-green)]">Demographics:</span> {analysis.feasibilityScore.details.demographics}</p>
+            <p><span className="text-[var(--accent-orange)]">Competition:</span> {analysis.feasibilityScore.details.competition}</p>
+            <p><span className="text-[var(--accent-blue)]">Access:</span> {analysis.feasibilityScore.details.access}</p>
+          </div>
+        </div>
+      )}
 
       {/* Site Analysis Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">

@@ -33,8 +33,26 @@ export interface BusinessSuitability {
   existingInArea?: string[];
 }
 
+export interface FeasibilityScore {
+  overall: number;
+  breakdown: {
+    trafficScore: number;
+    demographicsScore: number;
+    competitionScore: number;
+    accessScore: number;
+  };
+  details: {
+    traffic: string;
+    demographics: string;
+    competition: string;
+    access: string;
+  };
+  rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
+}
+
 export interface AnalysisResult {
   viabilityScore: number;
+  feasibilityScore?: FeasibilityScore;
   terrain: string;
   accessibility: string;
   existingStructures: string;
