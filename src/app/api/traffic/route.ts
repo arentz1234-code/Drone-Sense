@@ -113,18 +113,40 @@ export async function POST(request: Request) {
 
     const { lat, lng } = coordinates;
 
-    // Sample multiple points around the address to find the nearest major road
-    // This helps when addresses are geocoded to parking lots or set back from main roads
+    // Sample multiple points around the address to find nearby major roads
+    // Extended radius to capture major roads that properties have access to
     const offsets = [
       { lat: 0, lng: 0 },           // Center point
-      { lat: 0.0005, lng: 0 },      // ~55m North
-      { lat: -0.0005, lng: 0 },     // ~55m South
-      { lat: 0, lng: 0.0005 },      // ~55m East
-      { lat: 0, lng: -0.0005 },     // ~55m West
-      { lat: 0.001, lng: 0 },       // ~110m North
-      { lat: -0.001, lng: 0 },      // ~110m South
-      { lat: 0, lng: 0.001 },       // ~110m East
-      { lat: 0, lng: -0.001 },      // ~110m West
+      // ~55m in cardinal directions
+      { lat: 0.0005, lng: 0 },
+      { lat: -0.0005, lng: 0 },
+      { lat: 0, lng: 0.0005 },
+      { lat: 0, lng: -0.0005 },
+      // ~110m in cardinal directions
+      { lat: 0.001, lng: 0 },
+      { lat: -0.001, lng: 0 },
+      { lat: 0, lng: 0.001 },
+      { lat: 0, lng: -0.001 },
+      // ~220m in cardinal directions (to reach nearby major roads)
+      { lat: 0.002, lng: 0 },
+      { lat: -0.002, lng: 0 },
+      { lat: 0, lng: 0.002 },
+      { lat: 0, lng: -0.002 },
+      // ~330m in cardinal directions
+      { lat: 0.003, lng: 0 },
+      { lat: -0.003, lng: 0 },
+      { lat: 0, lng: 0.003 },
+      { lat: 0, lng: -0.003 },
+      // Diagonal points at ~150m
+      { lat: 0.001, lng: 0.001 },
+      { lat: 0.001, lng: -0.001 },
+      { lat: -0.001, lng: 0.001 },
+      { lat: -0.001, lng: -0.001 },
+      // Diagonal points at ~300m
+      { lat: 0.002, lng: 0.002 },
+      { lat: 0.002, lng: -0.002 },
+      { lat: -0.002, lng: 0.002 },
+      { lat: -0.002, lng: -0.002 },
     ];
 
     // Fetch traffic data for all sample points in parallel
