@@ -4,6 +4,14 @@ interface DemographicsRequest {
   coordinates: { lat: number; lng: number };
 }
 
+export interface NearbyUniversity {
+  name: string;
+  enrollment: number;
+  city: string;
+  state: string;
+  distance?: number;
+}
+
 export interface DemographicsData {
   population: number;
   medianHouseholdIncome: number;
@@ -23,6 +31,9 @@ export interface DemographicsData {
   isCollegeTown: boolean;
   collegeEnrollment: number;
   collegeEnrollmentPercent: number;
+  // Nearby university data (from College Scorecard)
+  nearbyUniversities?: NearbyUniversity[];
+  totalNearbyUniversityEnrollment?: number;
   // Consumer spending indicators
   consumerProfile: {
     type: string;
@@ -59,6 +70,56 @@ async function getGeographyFromCoords(lat: number, lng: number): Promise<{
   } catch (error) {
     console.error('Census Geocoder API error:', error);
     return null;
+  }
+}
+
+// Fetch nearby universities from College Scorecard API
+async function fetchNearbyUniversities(lat: number, lng: number): Promise<NearbyUniversity[]> {
+  try {
+    const apiKey = process.env.COLLEGE_SCORECARD_API_KEY;
+    if (!apiKey) {
+      console.log('No College Scorecard API key configured');
+      return [];
+    }
+
+    // Search within 10 miles of the location
+    // Use lat/lng to find nearby schools with enrollment > 1000
+    const url = `https://api.data.gov/ed/collegescorecard/v1/schools?api_key=${apiKey}&location.lat=${lat}&location.lon=${lng}&distance=10mi&latest.student.size__range=1000..&fields=id,school.name,school.city,school.state,latest.student.size,location.lat,location.lon&per_page=10`;
+
+    console.log('Fetching universities from College Scorecard...');
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      console.log('College Scorecard API error:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+
+    if (!data.results || data.results.length === 0) {
+      return [];
+    }
+
+    // Map results to our interface
+    const universities: NearbyUniversity[] = data.results
+      .filter((school: Record<string, unknown>) => {
+        const size = school['latest.student.size'] as number | null;
+        return size && size > 0;
+      })
+      .map((school: Record<string, unknown>) => ({
+        name: school['school.name'] as string,
+        enrollment: school['latest.student.size'] as number,
+        city: school['school.city'] as string,
+        state: school['school.state'] as string,
+      }))
+      .sort((a: NearbyUniversity, b: NearbyUniversity) => b.enrollment - a.enrollment);
+
+    console.log(`Found ${universities.length} universities nearby`);
+    return universities;
+
+  } catch (error) {
+    console.error('College Scorecard API error:', error);
+    return [];
   }
 }
 
@@ -443,18 +504,47 @@ export async function POST(request: Request) {
 
     console.log('Geography:', geography);
 
-    // Fetch census data
-    const demographics = await fetchCensusData(
-      geography.stateCode,
-      geography.countyCode,
-      geography.tractCode
-    );
+    // Fetch census data and university data in parallel
+    const [demographics, nearbyUniversities] = await Promise.all([
+      fetchCensusData(geography.stateCode, geography.countyCode, geography.tractCode),
+      fetchNearbyUniversities(lat, lng)
+    ]);
 
     if (!demographics) {
       return NextResponse.json({
         error: 'Could not fetch census data',
         message: 'Census data may not be available for this tract',
       }, { status: 404 });
+    }
+
+    // Enhance demographics with university data
+    if (nearbyUniversities.length > 0) {
+      const totalUniversityEnrollment = nearbyUniversities.reduce((sum, u) => sum + u.enrollment, 0);
+      demographics.nearbyUniversities = nearbyUniversities;
+      demographics.totalNearbyUniversityEnrollment = totalUniversityEnrollment;
+
+      // Override college enrollment with actual university data if significant
+      if (totalUniversityEnrollment > demographics.collegeEnrollment) {
+        demographics.collegeEnrollment = totalUniversityEnrollment;
+        // Recalculate percent based on actual university enrollment
+        demographics.collegeEnrollmentPercent = demographics.population > 0
+          ? Math.round((totalUniversityEnrollment / demographics.population) * 1000) / 10
+          : 0;
+
+        // Update isCollegeTown based on actual enrollment
+        if (totalUniversityEnrollment >= 5000) {
+          demographics.isCollegeTown = true;
+          // Update consumer profile for college town
+          const studentPercent = demographics.collegeEnrollmentPercent;
+          if (studentPercent >= 25 || demographics.medianAge < 24) {
+            demographics.consumerProfile = {
+              type: 'College Town - Major University',
+              description: `Near ${nearbyUniversities[0].name} with ${totalUniversityEnrollment.toLocaleString()} students. High student spending power despite low census income.`,
+              preferredBusinesses: demographics.consumerProfile.preferredBusinesses
+            };
+          }
+        }
+      }
     }
 
     return NextResponse.json(demographics);

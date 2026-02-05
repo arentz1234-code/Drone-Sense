@@ -162,7 +162,11 @@ export default function DemographicsData({ coordinates, onDataLoad }: Demographi
                 <div>
                   <p className="font-semibold text-purple-300">College Town Market</p>
                   <p className="text-xs text-purple-300/80">
-                    {demographics.collegeEnrollmentPercent}% students ({demographics.collegeEnrollment.toLocaleString()} enrolled)
+                    {demographics.nearbyUniversities && demographics.nearbyUniversities.length > 0 ? (
+                      <>Near {demographics.nearbyUniversities[0].name} ({demographics.collegeEnrollment.toLocaleString()} students)</>
+                    ) : (
+                      <>{demographics.collegeEnrollmentPercent}% students ({demographics.collegeEnrollment.toLocaleString()} enrolled)</>
+                    )}
                   </p>
                 </div>
               </div>
