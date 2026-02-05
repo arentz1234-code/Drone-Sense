@@ -205,13 +205,19 @@ export default function HomePage() {
               <div className="terminal-dot red"></div>
               <div className="terminal-dot yellow"></div>
               <div className="terminal-dot green"></div>
-              <span className="terminal-title">nearby_scan.module</span>
+              <span className="terminal-title">market_analysis.module</span>
             </div>
             <div className="terminal-body">
               <NearbyBusinesses
                 coordinates={coordinates}
                 businesses={businesses}
                 setBusinesses={setBusinesses}
+                marketContext={{
+                  population: demographicsData?.population,
+                  medianIncome: demographicsData?.medianHouseholdIncome,
+                  isCollegeTown: demographicsData?.isCollegeTown,
+                  vpd: trafficData?.estimatedVPD,
+                }}
               />
             </div>
           </div>

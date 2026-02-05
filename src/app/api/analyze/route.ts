@@ -47,6 +47,9 @@ interface DemographicsInfo {
   medianAge: number;
   educationBachelorsOrHigher: number;
   employmentRate: number;
+  isCollegeTown?: boolean;
+  collegeEnrollment?: number;
+  collegeEnrollmentPercent?: number;
   consumerProfile: {
     type: string;
     description: string;
@@ -571,6 +574,38 @@ const VPD_THRESHOLDS = {
     lotSize: { min: 5.0, ideal: 15.0 }, // Truck stops need 5-15 acres
     examples: ['Pilot Flying J', 'Love\'s Travel Stops', 'TA Travel Centers', 'Petro', 'Sapp Bros']
   },
+  // ============ COLLEGE TOWN FAVORITES ============
+  // These businesses thrive in college markets despite low census income
+  collegeTownFastCasual: {
+    min: 10000, ideal: 18000,
+    incomePreference: ['low', 'moderate', 'middle', 'upper-middle'] as const, // Works across income levels in college towns
+    lotSize: { min: 0.4, ideal: 0.8 },
+    examples: ["Chick-fil-A", "Chipotle", "Raising Cane's", "Wingstop", "Panda Express", "Moe's Southwest Grill", "Blaze Pizza", "Five Guys"]
+  },
+  collegeTownCoffee: {
+    min: 8000, ideal: 15000,
+    incomePreference: ['low', 'moderate', 'middle', 'upper-middle'] as const,
+    lotSize: { min: 0.2, ideal: 0.5 },
+    examples: ["Starbucks", "Dunkin'", "Panera Bread", "McAlister's Deli", "Scooters Coffee", "Dutch Bros"]
+  },
+  collegeTownLateNight: {
+    min: 8000, ideal: 12000,
+    incomePreference: ['low', 'moderate'] as const,
+    lotSize: { min: 0.3, ideal: 0.6 },
+    examples: ["Insomnia Cookies", "Waffle House", "Cookout", "Taco Bell", "Jimmy John's", "Domino's", "Papa John's"]
+  },
+  collegeTownServices: {
+    min: 6000, ideal: 10000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.2, ideal: 0.5 },
+    examples: ["Planet Fitness", "Urgent Care", "Phone Repair", "Print/Copy Shop", "Great Clips", "Sport Clips"]
+  },
+  collegeTownEntertainment: {
+    min: 10000, ideal: 15000,
+    incomePreference: ['low', 'moderate', 'middle'] as const,
+    lotSize: { min: 0.5, ideal: 1.5 },
+    examples: ["Buffalo Wild Wings", "Sports Bar", "Brewpub", "Topgolf", "Dave & Buster's", "Main Event"]
+  },
 };
 
 // Parse lot size estimate string to extract acreage
@@ -662,23 +697,46 @@ function calculateFeasibilityScore(
     const income = demographicsData.medianHouseholdIncome;
     const employment = demographicsData.employmentRate;
     const population = demographicsData.population;
+    const isCollegeTown = demographicsData.isCollegeTown || false;
+    const collegePercent = demographicsData.collegeEnrollmentPercent || 0;
 
-    // Income scoring
+    // Income scoring - adjusted for college towns
     let incomeScore = 5;
-    if (income >= 85000) incomeScore = 9;
-    else if (income >= 65000) incomeScore = 8;
-    else if (income >= 50000) incomeScore = 7;
-    else if (income >= 35000) incomeScore = 5;
-    else incomeScore = 4;
+    if (isCollegeTown) {
+      // College towns: student spending power exceeds census income data
+      // Parents, loans, and financial aid boost effective purchasing power
+      // Treat college towns as middle-to-upper-middle income markets
+      if (collegePercent >= 25) {
+        incomeScore = 8; // Major university = strong spending power
+      } else if (collegePercent >= 15) {
+        incomeScore = 7.5;
+      } else {
+        incomeScore = 7;
+      }
+    } else {
+      // Standard income scoring for non-college areas
+      if (income >= 85000) incomeScore = 9;
+      else if (income >= 65000) incomeScore = 8;
+      else if (income >= 50000) incomeScore = 7;
+      else if (income >= 35000) incomeScore = 5;
+      else incomeScore = 4;
+    }
 
-    // Employment bonus
-    const employmentBonus = employment >= 95 ? 1 : employment >= 90 ? 0.5 : 0;
+    // Employment bonus - lower for college towns since students aren't employed
+    const employmentBonus = isCollegeTown
+      ? 0.5 // College towns get partial bonus regardless of employment rate
+      : (employment >= 95 ? 1 : employment >= 90 ? 0.5 : 0);
 
-    // Population density consideration
+    // Population density consideration - college towns often have high density
     const populationBonus = population >= 5000 ? 1 : population >= 2000 ? 0.5 : 0;
 
     demographicsScore = Math.min(10, Math.round(incomeScore + employmentBonus + populationBonus));
-    demographicsDetail = `${demographicsData.consumerProfile.type} market - $${income.toLocaleString()} median income, ${population.toLocaleString()} pop, ${employment}% employed`;
+
+    if (isCollegeTown) {
+      demographicsDetail = `College Town market (${collegePercent}% students) - Strong student spending power despite $${income.toLocaleString()} census income, ${population.toLocaleString()} pop`;
+    } else {
+      demographicsDetail = `${demographicsData.consumerProfile.type} market - $${income.toLocaleString()} median income, ${population.toLocaleString()} pop, ${employment}% employed`;
+    }
   }
 
   // COMPETITION SCORE (0-10) - Balance is good, oversaturation is bad

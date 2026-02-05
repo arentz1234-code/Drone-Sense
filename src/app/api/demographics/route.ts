@@ -19,6 +19,10 @@ export interface DemographicsData {
   renterOccupiedHousing: number;
   source: string;
   tractId?: string;
+  // College town indicators
+  isCollegeTown: boolean;
+  collegeEnrollment: number;
+  collegeEnrollmentPercent: number;
   // Consumer spending indicators
   consumerProfile: {
     type: string;
@@ -84,6 +88,8 @@ async function fetchCensusData(
       'B11001_001E', // Total Households
       'B25003_002E', // Owner-occupied housing
       'B25003_003E', // Renter-occupied housing
+      'B14001_008E', // Enrolled in college undergraduate
+      'B14001_009E', // Enrolled in graduate/professional school
     ].join(',');
 
     const url = `https://api.census.gov/data/2022/acs/acs5?get=${variables}&for=tract:${tractCode}&in=state:${stateCode}%20county:${countyCode}`;
@@ -136,10 +142,25 @@ function parseCensusData(
   const totalHouseholds = values[13] || 0;
   const ownerOccupied = values[14] || 0;
   const renterOccupied = values[15] || 0;
+  const collegeUndergrad = values[16] || 0;
+  const collegeGrad = values[17] || 0;
 
   const povertyRate = population > 0 ? (povertyPopulation / population) * 100 : 0;
   const educationBachelorsOrHigher = ((bachelors + masters + professional + doctorate) / totalEducation) * 100;
   const employmentRate = (employed / laborForce) * 100;
+
+  // College enrollment calculations
+  const collegeEnrollment = collegeUndergrad + collegeGrad;
+  const collegeEnrollmentPercent = population > 0 ? (collegeEnrollment / population) * 100 : 0;
+  const renterPercent = totalHouseholds > 0 ? (renterOccupied / totalHouseholds) * 100 : 0;
+
+  // Detect college town: high student %, young median age, high renter %
+  // A college town typically has: 15%+ students, median age under 30, 50%+ renters
+  const isCollegeTown = (
+    collegeEnrollmentPercent >= 15 ||
+    (collegeEnrollmentPercent >= 10 && medianAge < 28) ||
+    (collegeEnrollmentPercent >= 8 && medianAge < 26 && renterPercent >= 60)
+  );
 
   // Determine income level
   let incomeLevel: 'low' | 'moderate' | 'middle' | 'upper-middle' | 'high';
@@ -155,8 +176,10 @@ function parseCensusData(
     incomeLevel = 'high';
   }
 
-  // Determine consumer profile
-  const consumerProfile = getConsumerProfile(medianHouseholdIncome, educationBachelorsOrHigher, medianAge);
+  // Determine consumer profile - use college town profile if detected
+  const consumerProfile = isCollegeTown
+    ? getCollegeTownProfile(medianAge, collegeEnrollmentPercent)
+    : getConsumerProfile(medianHouseholdIncome, educationBachelorsOrHigher, medianAge);
 
   return {
     population,
@@ -173,7 +196,99 @@ function parseCensusData(
     renterOccupiedHousing: Math.round((renterOccupied / (totalHouseholds || 1)) * 100),
     source: 'US Census ACS 5-Year Estimates',
     tractId: `${stateCode}${countyCode}${tractCode}`,
+    isCollegeTown,
+    collegeEnrollment,
+    collegeEnrollmentPercent: Math.round(collegeEnrollmentPercent * 10) / 10,
     consumerProfile,
+  };
+}
+
+// College town consumer profile - students have different spending patterns
+function getCollegeTownProfile(
+  medianAge: number,
+  studentPercent: number
+): { type: string; description: string; preferredBusinesses: string[] } {
+  // Large university town (very high student concentration)
+  if (studentPercent >= 25 || medianAge < 24) {
+    return {
+      type: 'College Town - Major University',
+      description: 'High student population with strong parent-funded spending power. Students spend on food, entertainment, and convenience despite low personal income.',
+      preferredBusinesses: [
+        // Fast casual favorites for students
+        "Chick-fil-A",
+        "Chipotle",
+        "Raising Cane's",
+        "Wingstop",
+        "Buffalo Wild Wings",
+        "Moe's Southwest Grill",
+        "Panda Express",
+        "Five Guys",
+        "Shake Shack",
+        "Blaze Pizza",
+        // Coffee & study spots
+        "Starbucks",
+        "Dunkin'",
+        "Panera Bread",
+        "McAlister's Deli",
+        // Late night & delivery
+        "Domino's",
+        "Papa John's",
+        "Jimmy John's",
+        "Insomnia Cookies",
+        "Waffle House",
+        "Cookout",
+        "Taco Bell",
+        // Student services
+        "Planet Fitness",
+        "Student housing",
+        "Phone repair shops",
+        "Print/copy shops",
+        "Urgent care clinics",
+        // Retail
+        "Target",
+        "TJ Maxx",
+        "Five Below",
+        "GameStop",
+        "Vape shops",
+        // Bars & nightlife
+        "Sports bars",
+        "Brewpubs",
+        "Late-night eateries",
+      ],
+    };
+  }
+
+  // Moderate college town
+  return {
+    type: 'College Town',
+    description: 'Significant student population mixed with permanent residents. Blend of student-oriented and family businesses thrive.',
+    preferredBusinesses: [
+      // Fast casual
+      "Chick-fil-A",
+      "Chipotle",
+      "Panera Bread",
+      "Zaxby's",
+      "Wingstop",
+      "McAlister's Deli",
+      "Newk's Eatery",
+      // Quick service
+      "Starbucks",
+      "Dunkin'",
+      "McDonald's",
+      "Chili's",
+      "Applebee's",
+      // Student-friendly retail
+      "Target",
+      "Walmart",
+      "Kroger/Publix",
+      "ALDI",
+      "Planet Fitness",
+      "Great Clips",
+      // Services
+      "Urgent care",
+      "CVS/Walgreens",
+      "Banks with student accounts",
+    ],
   };
 }
 
