@@ -90,6 +90,14 @@ export interface AnalysisResult {
   businessSuitability?: BusinessSuitability[];
   topRecommendations?: string[];
   retailerMatches?: RetailerMatchResult;
+  districtType?: string;
+  districtDescription?: string;
+  downtownRecommendations?: {
+    dining: string[];
+    retail: string[];
+    services: string[];
+    entertainment: string[];
+  };
 }
 
 export default function HomePage() {

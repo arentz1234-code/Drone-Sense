@@ -608,6 +608,147 @@ const VPD_THRESHOLDS = {
   },
 };
 
+// District types for location-appropriate recommendations
+type DistrictType = 'historic_downtown' | 'suburban_retail' | 'highway_corridor' | 'neighborhood' | 'college_campus' | 'general';
+
+interface DistrictInfo {
+  type: DistrictType;
+  description: string;
+  appropriateCategories: string[];
+  inappropriateCategories: string[];
+}
+
+// Detect district type based on address, nearby businesses, and context
+function detectDistrictType(
+  address: string,
+  nearbyBusinesses: Business[],
+  lotSizeAcres: number | null,
+  vpd: number | null,
+  isCollegeTown: boolean
+): DistrictInfo {
+  const addressLower = address.toLowerCase();
+  const businessNames = nearbyBusinesses.map(b => b.name.toLowerCase()).join(' ');
+  const businessTypes = nearbyBusinesses.map(b => b.type.toLowerCase()).join(' ');
+
+  // Downtown/Historic District indicators
+  const downtownKeywords = ['downtown', 'main st', 'main street', 'historic', 'town square', 'court square', 'city center', 'old town'];
+  const downtownBusinessIndicators = ['boutique', 'gallery', 'antique', 'cafe', 'bistro', 'tavern', 'brewery', 'bookstore', 'salon'];
+
+  const hasDowntownAddress = downtownKeywords.some(kw => addressLower.includes(kw));
+  const hasDowntownBusinesses = downtownBusinessIndicators.some(ind =>
+    businessNames.includes(ind) || businessTypes.includes(ind)
+  );
+  const isSmallLot = lotSizeAcres !== null && lotSizeAcres < 0.5;
+  const isLowVPD = vpd !== null && vpd < 15000; // Pedestrian areas have less car traffic
+  const hasHighBusinessDensity = nearbyBusinesses.length > 15;
+
+  // Score downtown likelihood
+  let downtownScore = 0;
+  if (hasDowntownAddress) downtownScore += 3;
+  if (hasDowntownBusinesses) downtownScore += 2;
+  if (isSmallLot) downtownScore += 1;
+  if (hasHighBusinessDensity) downtownScore += 1;
+
+  // Highway corridor indicators
+  const highwayKeywords = ['highway', 'hwy', 'interstate', 'i-', 'exit', 'frontage'];
+  const hasHighwayAddress = highwayKeywords.some(kw => addressLower.includes(kw));
+  const isHighVPD = vpd !== null && vpd >= 25000;
+
+  // College campus area
+  if (isCollegeTown && (addressLower.includes('university') || addressLower.includes('college') || businessNames.includes('university'))) {
+    return {
+      type: 'college_campus',
+      description: 'College campus area - student-focused retail and dining',
+      appropriateCategories: [
+        'collegeTownFastCasual', 'collegeTownCoffee', 'collegeTownLateNight',
+        'collegeTownServices', 'collegeTownEntertainment', 'fastFoodPremium',
+        'coffeePremium', 'fastCasual'
+      ],
+      inappropriateCategories: [
+        'bigBox', 'carDealershipNew', 'carDealershipUsed', 'truckStop',
+        'discountRetail', 'financialServices'
+      ]
+    };
+  }
+
+  // Historic Downtown
+  if (downtownScore >= 3 || (hasDowntownAddress && isSmallLot)) {
+    return {
+      type: 'historic_downtown',
+      description: 'Historic downtown district - boutique retail, dining, and specialty shops',
+      appropriateCategories: [
+        'coffeePremium', 'coffeeValue', 'fastCasual', 'casualDiningPremium',
+        'retailPremium', 'bank', 'medical', 'fitness'
+      ],
+      inappropriateCategories: [
+        'gasStation', 'discountRetail', 'bigBox', 'truckStop', 'carWashExpress',
+        'carWashFull', 'carDealershipNew', 'carDealershipUsed', 'fastFoodValue',
+        'financialServices', 'autoService', 'convenienceStore'
+      ]
+    };
+  }
+
+  // Highway corridor
+  if (hasHighwayAddress || isHighVPD) {
+    return {
+      type: 'highway_corridor',
+      description: 'Highway corridor - high visibility, drive-thru friendly, travel services',
+      appropriateCategories: [
+        'gasStation', 'fastFoodValue', 'fastFoodPremium', 'convenienceStore',
+        'hotelBudget', 'hotelMidscale', 'truckStop', 'autoService', 'carWashExpress'
+      ],
+      inappropriateCategories: [
+        'retailPremium', 'fitnessPremium'
+      ]
+    };
+  }
+
+  // Suburban retail (default for most commercial areas)
+  if (lotSizeAcres && lotSizeAcres >= 1) {
+    return {
+      type: 'suburban_retail',
+      description: 'Suburban retail corridor - diverse mix of retail and services',
+      appropriateCategories: [], // All categories allowed
+      inappropriateCategories: ['truckStop'] // Only truck stops inappropriate
+    };
+  }
+
+  // Neighborhood commercial
+  return {
+    type: 'neighborhood',
+    description: 'Neighborhood commercial - local services and convenience',
+    appropriateCategories: [
+      'coffeeValue', 'coffeePremium', 'fastFoodValue', 'fastFoodPremium',
+      'convenienceStore', 'pharmacy', 'medical', 'bank', 'fitness'
+    ],
+    inappropriateCategories: [
+      'bigBox', 'truckStop', 'carDealershipNew', 'carDealershipUsed'
+    ]
+  };
+}
+
+// Downtown-specific business recommendations
+const DOWNTOWN_BUSINESSES = {
+  dining: [
+    'Farm-to-table Restaurant', 'Craft Brewery/Brewpub', 'Wine Bar', 'Tapas Bar',
+    'Upscale Bistro', 'Artisan Pizza', 'Specialty Coffee Roaster', 'Brunch Spot',
+    'Cocktail Lounge', 'Rooftop Bar', 'Fine Dining'
+  ],
+  retail: [
+    'Boutique Clothing', 'Art Gallery', 'Antique Shop', 'Bookstore',
+    'Gift Shop', 'Jewelry Store', 'Home Decor', 'Specialty Food Market',
+    'Flower Shop', 'Record/Vinyl Shop'
+  ],
+  services: [
+    'Upscale Salon/Spa', 'Yoga/Pilates Studio', 'Boutique Fitness',
+    'Co-working Space', 'Photography Studio', 'Law Office', 'Architecture Firm'
+  ],
+  entertainment: [
+    'Live Music Venue', 'Comedy Club', 'Theater', 'Escape Room',
+    'Axe Throwing', 'Board Game Cafe'
+  ]
+};
+
 // Parse lot size estimate string to extract acreage
 function parseLotSize(lotSizeEstimate: string | undefined): number | null {
   if (!lotSizeEstimate || lotSizeEstimate.toLowerCase().includes('unable')) {
@@ -918,19 +1059,52 @@ function calculateRetailerMatches(
     weightedFactors += demoWeight;
     let demoScore = 0;
     const demoNotes: string[] = [];
+    let disqualifiedByIncome = false;
 
+    // STRICT income level check - disqualify if significantly mismatched
     if (incomeLevel && retailer.incomePreference.includes(incomeLevel)) {
       demoScore += 0.4;
       demoNotes.push(`Income level (${incomeLevel}) matches target`);
     } else if (incomeLevel) {
-      demoNotes.push(`Income level (${incomeLevel}) may not be ideal`);
+      // Check for severe mismatch - value retailers in high income areas
+      const isValueRetailer = retailer.incomePreference.includes('low') && !retailer.incomePreference.includes('upper-middle') && !retailer.incomePreference.includes('high');
+      const isHighIncomeArea = incomeLevel === 'upper-middle' || incomeLevel === 'high';
+      const isPremiumRetailer = retailer.incomePreference.includes('high') || retailer.incomePreference.includes('upper-middle');
+      const isLowIncomeArea = incomeLevel === 'low';
+
+      if (isValueRetailer && isHighIncomeArea) {
+        // Disqualify value retailers from high income areas
+        disqualifiedByIncome = true;
+        demoNotes.push(`DISQUALIFIED: ${retailer.name} targets low-income areas, not ${incomeLevel} ($${medianIncome?.toLocaleString() || 'N/A'})`);
+      } else if (isPremiumRetailer && isLowIncomeArea) {
+        // Disqualify premium retailers from low income areas
+        disqualifiedByIncome = true;
+        demoNotes.push(`DISQUALIFIED: ${retailer.name} targets affluent areas, not ${incomeLevel}`);
+      } else {
+        demoNotes.push(`Income level (${incomeLevel}) may not be ideal`);
+        demoScore += 0.1; // Small score for partial match
+      }
+    }
+
+    // Skip this retailer if disqualified by income
+    if (disqualifiedByIncome) {
+      continue;
     }
 
     if (medianIncome !== null) {
-      if (retailer.minMedianIncome && medianIncome < retailer.minMedianIncome) {
+      // STRICT check: if income exceeds max by more than 30%, disqualify
+      if (retailer.maxMedianIncome && medianIncome > retailer.maxMedianIncome * 1.3) {
+        // Disqualify - income way too high for this retailer
+        continue;
+      } else if (retailer.minMedianIncome && medianIncome < retailer.minMedianIncome * 0.7) {
+        // Disqualify - income way too low for this retailer
+        continue;
+      } else if (retailer.minMedianIncome && medianIncome < retailer.minMedianIncome) {
         demoNotes.push(`Income below minimum ($${medianIncome.toLocaleString()} vs $${retailer.minMedianIncome.toLocaleString()})`);
+        demoScore += 0.1;
       } else if (retailer.maxMedianIncome && medianIncome > retailer.maxMedianIncome) {
         demoNotes.push(`Income above target ($${medianIncome.toLocaleString()} vs $${retailer.maxMedianIncome.toLocaleString()} max)`);
+        demoScore += 0.1;
       } else if (retailer.minMedianIncome && medianIncome >= retailer.minMedianIncome) {
         demoScore += 0.3;
       } else {
@@ -1048,7 +1222,8 @@ function calculateBusinessSuitability(
   vpd: number,
   nearbyBusinesses: Business[],
   demographics: DemographicsInfo | null,
-  lotSizeAcres: number | null = null
+  lotSizeAcres: number | null = null,
+  districtInfo: DistrictInfo | null = null
 ) {
   const suitability: Array<{
     category: string;
@@ -1057,11 +1232,26 @@ function calculateBusinessSuitability(
     examples: string[];
     existingInArea: string[];
     lotSizeIssue?: string;
+    districtIssue?: string;
   }> = [];
 
   const incomeLevel = demographics?.incomeLevel || 'middle';
 
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
+    // Check if this category is inappropriate for the district
+    if (districtInfo?.inappropriateCategories.includes(key)) {
+      // Skip this category entirely for this district type
+      continue;
+    }
+
+    // Skip value-oriented categories in high income areas
+    // These businesses target budget-conscious consumers, not affluent markets
+    const valueCategories = ['fastFoodValue', 'casualDiningValue', 'coffeeValue', 'quickServiceValue', 'discountRetail'];
+    const isHighIncomeArea = incomeLevel === 'upper-middle' || incomeLevel === 'high';
+    if (valueCategories.includes(key) && isHighIncomeArea) {
+      continue;
+    }
+
     let score = 0;
     let reasoning = '';
     let lotSizeIssue: string | undefined;
@@ -1250,12 +1440,36 @@ function generateTopRecommendations(
   vpd: number,
   nearbyBusinesses: Business[],
   demographics: DemographicsInfo | null,
-  lotSizeAcres: number | null = null
+  lotSizeAcres: number | null = null,
+  districtInfo: DistrictInfo | null = null
 ): string[] {
   const recommendations: Array<{ name: string; score: number; reason: string }> = [];
   const incomeLevel = demographics?.incomeLevel || 'middle';
 
+  // If historic downtown, add downtown-specific recommendations first
+  if (districtInfo?.type === 'historic_downtown') {
+    const allDowntownOptions = [
+      ...DOWNTOWN_BUSINESSES.dining,
+      ...DOWNTOWN_BUSINESSES.retail,
+      ...DOWNTOWN_BUSINESSES.services,
+      ...DOWNTOWN_BUSINESSES.entertainment
+    ];
+    const availableDowntown = filterExistingBusinesses(allDowntownOptions, nearbyBusinesses);
+    for (const business of availableDowntown.slice(0, 10)) {
+      recommendations.push({
+        name: business,
+        score: 12, // High score for downtown-appropriate businesses
+        reason: 'Ideal for historic downtown district'
+      });
+    }
+  }
+
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
+    // Skip categories inappropriate for this district
+    if (districtInfo?.inappropriateCategories.includes(key)) {
+      continue;
+    }
+
     // Check if VPD supports this category
     if (vpd < threshold.min * 0.7) continue;
 
@@ -1489,20 +1703,38 @@ Return ONLY valid JSON, no markdown or explanation.`;
       analysis.parsedLotSize = lotSizeAcres;
     }
 
-    // Recalculate business suitability with lot size (if available)
+    // Detect district type for appropriate recommendations
+    const districtInfo = detectDistrictType(
+      address,
+      nearbyBusinesses,
+      lotSizeAcres,
+      trafficData?.estimatedVPD || null,
+      demographicsData?.isCollegeTown || false
+    );
+    analysis.districtType = districtInfo.type;
+    analysis.districtDescription = districtInfo.description;
+
+    // Recalculate business suitability with lot size and district context
     if (trafficData) {
       businessSuitability = calculateBusinessSuitability(
         trafficData.estimatedVPD,
         nearbyBusinesses,
         demographicsData,
-        lotSizeAcres
+        lotSizeAcres,
+        districtInfo
       );
       topRecommendations = generateTopRecommendations(
         trafficData.estimatedVPD,
         nearbyBusinesses,
         demographicsData,
-        lotSizeAcres
+        lotSizeAcres,
+        districtInfo
       );
+
+      // Add downtown-specific recommendations if in historic downtown
+      if (districtInfo.type === 'historic_downtown') {
+        analysis.downtownRecommendations = DOWNTOWN_BUSINESSES;
+      }
     }
 
     // Add business suitability data and top recommendations

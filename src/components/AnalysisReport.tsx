@@ -222,6 +222,110 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
         </div>
       )}
 
+      {/* District Type Indicator */}
+      {analysis.districtType && (
+        <div className={`mb-8 p-4 rounded-lg border ${
+          analysis.districtType === 'historic_downtown'
+            ? 'bg-amber-500/10 border-amber-500/30'
+            : analysis.districtType === 'college_campus'
+            ? 'bg-purple-500/10 border-purple-500/30'
+            : analysis.districtType === 'highway_corridor'
+            ? 'bg-blue-500/10 border-blue-500/30'
+            : 'bg-[var(--bg-tertiary)] border-[var(--border-color)]'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${
+              analysis.districtType === 'historic_downtown'
+                ? 'bg-amber-500/20'
+                : analysis.districtType === 'college_campus'
+                ? 'bg-purple-500/20'
+                : analysis.districtType === 'highway_corridor'
+                ? 'bg-blue-500/20'
+                : 'bg-[var(--accent-cyan)]/20'
+            }`}>
+              {analysis.districtType === 'historic_downtown' ? (
+                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              ) : analysis.districtType === 'college_campus' ? (
+                <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                </svg>
+              ) : analysis.districtType === 'highway_corridor' ? (
+                <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                </svg>
+              )}
+            </div>
+            <div>
+              <h3 className={`font-semibold ${
+                analysis.districtType === 'historic_downtown' ? 'text-amber-400' :
+                analysis.districtType === 'college_campus' ? 'text-purple-400' :
+                analysis.districtType === 'highway_corridor' ? 'text-blue-400' :
+                'text-[var(--accent-cyan)]'
+              }`}>
+                {analysis.districtType === 'historic_downtown' ? 'Historic Downtown District' :
+                 analysis.districtType === 'college_campus' ? 'College Campus Area' :
+                 analysis.districtType === 'highway_corridor' ? 'Highway Corridor' :
+                 analysis.districtType === 'suburban_retail' ? 'Suburban Retail' :
+                 'Neighborhood Commercial'}
+              </h3>
+              <p className="text-sm text-[var(--text-secondary)]">{analysis.districtDescription}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Downtown-Specific Recommendations */}
+      {analysis.downtownRecommendations && (
+        <div className="mb-8 p-4 bg-amber-500/5 rounded-lg border border-amber-500/20">
+          <h3 className="text-lg font-semibold mb-4 text-amber-400 flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
+            Downtown-Appropriate Businesses
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <h4 className="text-xs text-amber-400/70 uppercase tracking-wider mb-2">Dining</h4>
+              <div className="space-y-1">
+                {analysis.downtownRecommendations.dining.slice(0, 4).map((item, i) => (
+                  <p key={i} className="text-sm text-[var(--text-secondary)]">{item}</p>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-xs text-amber-400/70 uppercase tracking-wider mb-2">Retail</h4>
+              <div className="space-y-1">
+                {analysis.downtownRecommendations.retail.slice(0, 4).map((item, i) => (
+                  <p key={i} className="text-sm text-[var(--text-secondary)]">{item}</p>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-xs text-amber-400/70 uppercase tracking-wider mb-2">Services</h4>
+              <div className="space-y-1">
+                {analysis.downtownRecommendations.services.slice(0, 4).map((item, i) => (
+                  <p key={i} className="text-sm text-[var(--text-secondary)]">{item}</p>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-xs text-amber-400/70 uppercase tracking-wider mb-2">Entertainment</h4>
+              <div className="space-y-1">
+                {analysis.downtownRecommendations.entertainment.slice(0, 4).map((item, i) => (
+                  <p key={i} className="text-sm text-[var(--text-secondary)]">{item}</p>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Selections Summary */}
       {(analysis.businessSuitability?.length > 0 || analysis.retailerMatches?.matches?.length > 0) && (
         <div className="mb-8 p-4 bg-gradient-to-br from-[var(--accent-cyan)]/10 to-[var(--accent-green)]/10 rounded-lg border border-[var(--accent-cyan)]/30">

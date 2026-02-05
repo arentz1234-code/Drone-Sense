@@ -154,12 +154,18 @@ function parseCensusData(
   const collegeEnrollmentPercent = population > 0 ? (collegeEnrollment / population) * 100 : 0;
   const renterPercent = totalHouseholds > 0 ? (renterOccupied / totalHouseholds) * 100 : 0;
 
-  // Detect college town: high student %, young median age, high renter %
-  // A college town typically has: 15%+ students, median age under 30, 50%+ renters
-  const isCollegeTown = (
-    collegeEnrollmentPercent >= 15 ||
-    (collegeEnrollmentPercent >= 10 && medianAge < 28) ||
-    (collegeEnrollmentPercent >= 8 && medianAge < 26 && renterPercent >= 60)
+  // Detect college town: need BOTH high percentage AND significant absolute numbers
+  // A census tract with 400 students isn't a college town market even if it's 25% of the tract
+  // True college towns have thousands of students creating real market demand
+  const hasSignificantStudentCount = collegeEnrollment >= 1500; // Minimum students to matter
+  const hasHighStudentPercent = collegeEnrollmentPercent >= 18;
+  const hasVeryYoungPopulation = medianAge < 25;
+  const hasMostlyRenters = renterPercent >= 65;
+
+  // Must have significant student count PLUS other signals
+  const isCollegeTown = hasSignificantStudentCount && (
+    hasHighStudentPercent ||
+    (collegeEnrollmentPercent >= 12 && hasVeryYoungPopulation && hasMostlyRenters)
   );
 
   // Determine income level
