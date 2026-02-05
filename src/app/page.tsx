@@ -105,6 +105,9 @@ export default function HomePage() {
 
   const allBusinesses = businesses;
 
+  // Check if user has provided input (address or images)
+  const hasInput = address.trim().length > 0 || images.length > 0;
+
   const handleAnalyze = async () => {
     if (!address) {
       setError('Please enter an address');
@@ -190,7 +193,14 @@ export default function HomePage() {
         {/* Right Column */}
         <div className="space-y-6">
           {/* Nearby Businesses Section */}
-          <div className="terminal-card">
+          <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
+            {!hasInput && (
+              <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
+                <p className="text-[var(--text-muted)] text-sm text-center px-4">
+                  Enter an address or upload photos to enable
+                </p>
+              </div>
+            )}
             <div className="terminal-header">
               <div className="terminal-dot red"></div>
               <div className="terminal-dot yellow"></div>
@@ -207,7 +217,14 @@ export default function HomePage() {
           </div>
 
           {/* Traffic Data Section */}
-          <div className="terminal-card">
+          <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
+            {!hasInput && (
+              <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
+                <p className="text-[var(--text-muted)] text-sm text-center px-4">
+                  Enter an address or upload photos to enable
+                </p>
+              </div>
+            )}
             <div className="terminal-header">
               <div className="terminal-dot red"></div>
               <div className="terminal-dot yellow"></div>
@@ -220,7 +237,14 @@ export default function HomePage() {
           </div>
 
           {/* Demographics Section */}
-          <div className="terminal-card">
+          <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
+            {!hasInput && (
+              <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
+                <p className="text-[var(--text-muted)] text-sm text-center px-4">
+                  Enter an address or upload photos to enable
+                </p>
+              </div>
+            )}
             <div className="terminal-header">
               <div className="terminal-dot red"></div>
               <div className="terminal-dot yellow"></div>
@@ -236,7 +260,14 @@ export default function HomePage() {
 
       {/* Property Map Section - Full Width */}
       <div className="mb-8">
-        <div className="terminal-card">
+        <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
+          {!hasInput && (
+            <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
+              <p className="text-[var(--text-muted)] text-sm text-center px-4">
+                Enter an address or upload photos to enable
+              </p>
+            </div>
+          )}
           <div className="terminal-header">
             <div className="terminal-dot red"></div>
             <div className="terminal-dot yellow"></div>
