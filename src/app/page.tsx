@@ -34,6 +34,30 @@ export interface BusinessSuitability {
   lotSizeIssue?: string;
 }
 
+export interface RetailerMatch {
+  name: string;
+  category: string;
+  matchScore: number;
+  matchDetails: {
+    lotSize: { matches: boolean; note: string };
+    traffic: { matches: boolean; note: string };
+    demographics: { matches: boolean; note: string };
+    region: { matches: boolean; note: string };
+  };
+  activelyExpanding: boolean;
+  franchiseAvailable: boolean;
+  corporateOnly: boolean;
+  franchiseFee?: number;
+  totalInvestment?: string;
+  expansionRegions: string[];
+  notes?: string;
+}
+
+export interface RetailerMatchResult {
+  matches: RetailerMatch[];
+  totalMatches: number;
+}
+
 export interface FeasibilityScore {
   overall: number;
   breakdown: {
@@ -65,6 +89,7 @@ export interface AnalysisResult {
   recommendations: string[];
   businessSuitability?: BusinessSuitability[];
   topRecommendations?: string[];
+  retailerMatches?: RetailerMatchResult;
 }
 
 export default function HomePage() {

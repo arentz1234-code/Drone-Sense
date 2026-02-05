@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { RETAILER_REQUIREMENTS, RetailerRequirements, getRegionFromState } from '@/data/retailerRequirements';
+
+// Re-export for use in other files
+export type { RetailerMatch } from '@/app/api/retailer-match/route';
 
 interface Business {
   name: string;
@@ -757,6 +761,203 @@ function calculateFeasibilityScore(
   };
 }
 
+// Calculate retailer matches for expansion intelligence
+interface RetailerMatchResult {
+  name: string;
+  category: string;
+  matchScore: number;
+  matchDetails: {
+    lotSize: { matches: boolean; note: string };
+    traffic: { matches: boolean; note: string };
+    demographics: { matches: boolean; note: string };
+    region: { matches: boolean; note: string };
+  };
+  activelyExpanding: boolean;
+  franchiseAvailable: boolean;
+  corporateOnly: boolean;
+  franchiseFee?: number;
+  totalInvestment?: string;
+  expansionRegions: string[];
+  notes?: string;
+}
+
+function calculateRetailerMatches(
+  lotSizeAcres: number | null,
+  vpd: number | null,
+  medianIncome: number | null,
+  incomeLevel: 'low' | 'moderate' | 'middle' | 'upper-middle' | 'high' | null,
+  population: number | null,
+  stateCode: string | null
+): { matches: RetailerMatchResult[]; totalMatches: number } {
+  const matches: RetailerMatchResult[] = [];
+
+  for (const retailer of RETAILER_REQUIREMENTS) {
+    // Only include actively expanding retailers
+    if (!retailer.activelyExpanding) continue;
+
+    const matchDetails = {
+      lotSize: { matches: false, note: '' },
+      traffic: { matches: false, note: '' },
+      demographics: { matches: false, note: '' },
+      region: { matches: false, note: '' },
+    };
+
+    let totalScore = 0;
+    let weightedFactors = 0;
+
+    // === LOT SIZE MATCHING (30% weight) ===
+    if (lotSizeAcres !== null) {
+      const lotWeight = 30;
+      weightedFactors += lotWeight;
+
+      if (lotSizeAcres >= retailer.minLotSize && lotSizeAcres <= retailer.maxLotSize * 1.5) {
+        matchDetails.lotSize.matches = true;
+        matchDetails.lotSize.note = `${retailer.minLotSize}-${retailer.maxLotSize} acres needed, site has ${lotSizeAcres.toFixed(1)} acres`;
+        totalScore += lotWeight;
+      } else if (lotSizeAcres >= retailer.minLotSize * 0.8) {
+        matchDetails.lotSize.matches = true;
+        matchDetails.lotSize.note = `Site is slightly small (${lotSizeAcres.toFixed(1)} vs ${retailer.minLotSize} min)`;
+        totalScore += lotWeight * 0.6;
+      } else {
+        matchDetails.lotSize.matches = false;
+        matchDetails.lotSize.note = `Site too small: needs ${retailer.minLotSize}+ acres, has ${lotSizeAcres.toFixed(1)}`;
+        if (lotSizeAcres < retailer.minLotSize * 0.5) {
+          continue; // Disqualify
+        }
+        totalScore += lotWeight * 0.2;
+      }
+    } else {
+      matchDetails.lotSize.note = 'Lot size not available';
+    }
+
+    // === TRAFFIC/VPD MATCHING (25% weight) ===
+    if (vpd !== null) {
+      const vpdWeight = 25;
+      weightedFactors += vpdWeight;
+
+      if (vpd >= retailer.idealVPD) {
+        matchDetails.traffic.matches = true;
+        matchDetails.traffic.note = `Excellent: ${vpd.toLocaleString()} VPD (ideal is ${retailer.idealVPD.toLocaleString()}+)`;
+        totalScore += vpdWeight;
+      } else if (vpd >= retailer.minVPD) {
+        matchDetails.traffic.matches = true;
+        matchDetails.traffic.note = `Good: ${vpd.toLocaleString()} VPD meets minimum of ${retailer.minVPD.toLocaleString()}`;
+        totalScore += vpdWeight * 0.7;
+      } else if (vpd >= retailer.minVPD * 0.7) {
+        matchDetails.traffic.matches = false;
+        matchDetails.traffic.note = `Below ideal: ${vpd.toLocaleString()} VPD (needs ${retailer.minVPD.toLocaleString()}+)`;
+        totalScore += vpdWeight * 0.3;
+      } else {
+        matchDetails.traffic.matches = false;
+        matchDetails.traffic.note = `Insufficient: ${vpd.toLocaleString()} VPD (needs ${retailer.minVPD.toLocaleString()}+)`;
+      }
+    } else {
+      matchDetails.traffic.note = 'Traffic data not available';
+    }
+
+    // === DEMOGRAPHICS MATCHING (25% weight) ===
+    const demoWeight = 25;
+    weightedFactors += demoWeight;
+    let demoScore = 0;
+    const demoNotes: string[] = [];
+
+    if (incomeLevel && retailer.incomePreference.includes(incomeLevel)) {
+      demoScore += 0.4;
+      demoNotes.push(`Income level (${incomeLevel}) matches target`);
+    } else if (incomeLevel) {
+      demoNotes.push(`Income level (${incomeLevel}) may not be ideal`);
+    }
+
+    if (medianIncome !== null) {
+      if (retailer.minMedianIncome && medianIncome < retailer.minMedianIncome) {
+        demoNotes.push(`Income below minimum ($${medianIncome.toLocaleString()} vs $${retailer.minMedianIncome.toLocaleString()})`);
+      } else if (retailer.maxMedianIncome && medianIncome > retailer.maxMedianIncome) {
+        demoNotes.push(`Income above target ($${medianIncome.toLocaleString()} vs $${retailer.maxMedianIncome.toLocaleString()} max)`);
+      } else if (retailer.minMedianIncome && medianIncome >= retailer.minMedianIncome) {
+        demoScore += 0.3;
+      } else {
+        demoScore += 0.2;
+      }
+    }
+
+    if (population !== null) {
+      if (population >= retailer.minPopulation) {
+        demoScore += 0.3;
+        demoNotes.push(`Population (${population.toLocaleString()}) meets minimum`);
+      } else if (population >= retailer.minPopulation * 0.7) {
+        demoScore += 0.15;
+        demoNotes.push(`Population slightly below target (${population.toLocaleString()} vs ${retailer.minPopulation.toLocaleString()})`);
+      } else {
+        demoNotes.push(`Population too low (${population.toLocaleString()} vs ${retailer.minPopulation.toLocaleString()} needed)`);
+      }
+    }
+
+    matchDetails.demographics.matches = demoScore >= 0.5;
+    matchDetails.demographics.note = demoNotes.join('; ') || 'Demographics data not available';
+    totalScore += demoWeight * demoScore;
+
+    // === REGION MATCHING (20% weight) ===
+    const regionWeight = 20;
+    weightedFactors += regionWeight;
+
+    if (stateCode) {
+      const siteRegions = getRegionFromState(stateCode);
+      const expandingInRegion = retailer.expansionRegions.some(r =>
+        r === 'National' || siteRegions.includes(r) || r === stateCode
+      );
+
+      if (expandingInRegion) {
+        matchDetails.region.matches = true;
+        if (retailer.expansionRegions.includes('National')) {
+          matchDetails.region.note = 'Expanding nationally';
+        } else {
+          matchDetails.region.note = `Actively targeting: ${retailer.expansionRegions.join(', ')}`;
+        }
+        totalScore += regionWeight;
+      } else {
+        matchDetails.region.matches = false;
+        matchDetails.region.note = `Not currently expanding in this region (targeting: ${retailer.expansionRegions.join(', ')})`;
+        totalScore += regionWeight * 0.2;
+      }
+    } else {
+      matchDetails.region.note = 'Location data not available';
+      totalScore += regionWeight * 0.5;
+    }
+
+    // Calculate final score
+    const finalScore = weightedFactors > 0
+      ? Math.round((totalScore / weightedFactors) * 100)
+      : 50;
+
+    // Only include if score is reasonable
+    if (finalScore < 30) continue;
+
+    matches.push({
+      name: retailer.name,
+      category: retailer.category,
+      matchScore: finalScore,
+      matchDetails,
+      activelyExpanding: retailer.activelyExpanding,
+      franchiseAvailable: retailer.franchiseAvailable,
+      corporateOnly: retailer.corporateOnly,
+      franchiseFee: retailer.franchiseFee,
+      totalInvestment: retailer.totalInvestmentMin && retailer.totalInvestmentMax
+        ? `$${(retailer.totalInvestmentMin / 1000000).toFixed(1)}M - $${(retailer.totalInvestmentMax / 1000000).toFixed(1)}M`
+        : undefined,
+      expansionRegions: retailer.expansionRegions,
+      notes: retailer.notes,
+    });
+  }
+
+  // Sort by match score descending
+  matches.sort((a, b) => b.matchScore - a.matchScore);
+
+  return {
+    matches: matches.slice(0, 20),
+    totalMatches: matches.length,
+  };
+}
+
 // Check if a business name matches any of the examples (fuzzy match)
 function businessExistsInArea(businessName: string, examples: string[]): boolean {
   const normalizedName = businessName.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1091,7 +1292,7 @@ export async function POST(request: Request) {
     if (!apiKey) {
       console.error('GOOGLE_GEMINI_API_KEY not configured');
       return NextResponse.json({
-        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData),
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, 1.35, address),
         usingMockData: true,
         reason: 'API key not configured'
       });
@@ -1260,6 +1461,24 @@ Return ONLY valid JSON, no markdown or explanation.`;
     // Override viabilityScore with our calculated score
     analysis.viabilityScore = feasibilityScore.overall;
 
+    // Calculate retailer expansion matches
+    // Extract state code from address (simple extraction - last two chars before zip)
+    let stateCode: string | null = null;
+    const stateMatch = address.match(/\b([A-Z]{2})\s*\d{5}/);
+    if (stateMatch) {
+      stateCode = stateMatch[1];
+    }
+
+    const retailerMatches = calculateRetailerMatches(
+      lotSizeAcres,
+      trafficData?.estimatedVPD || null,
+      demographicsData?.medianHouseholdIncome || null,
+      demographicsData?.incomeLevel || null,
+      demographicsData?.population || null,
+      stateCode
+    );
+    analysis.retailerMatches = retailerMatches;
+
     return NextResponse.json(analysis);
   } catch (error) {
     console.error('Analysis error:', error);
@@ -1277,11 +1496,27 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
-function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = 1.35) {
+function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = 1.35, address: string = '') {
   const vpd = trafficData?.estimatedVPD || 15000;
   const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
   const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
   const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses);
+
+  // Extract state code from address
+  let stateCode: string | null = null;
+  const stateMatch = address.match(/\b([A-Z]{2})\s*\d{5}/);
+  if (stateMatch) {
+    stateCode = stateMatch[1];
+  }
+
+  const retailerMatches = calculateRetailerMatches(
+    lotSizeAcres,
+    vpd,
+    demographicsData?.medianHouseholdIncome || null,
+    demographicsData?.incomeLevel || null,
+    demographicsData?.population || null,
+    stateCode
+  );
 
   // Build recommendation excluding existing businesses
   let businessRec = '';
@@ -1323,5 +1558,6 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     ],
     businessSuitability,
     topRecommendations,
+    retailerMatches,
   };
 }

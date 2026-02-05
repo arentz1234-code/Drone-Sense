@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { AnalysisResult } from '@/app/page';
 
 interface AnalysisReportProps {
@@ -8,6 +9,8 @@ interface AnalysisReportProps {
 }
 
 export default function AnalysisReport({ analysis, address }: AnalysisReportProps) {
+  const [showAllSuitability, setShowAllSuitability] = useState(false);
+  const INITIAL_SUITABILITY_COUNT = 4;
   const getScoreColor = (score: number) => {
     if (score >= 8) return 'from-green-400 to-emerald-500';
     if (score >= 6) return 'from-cyan-400 to-blue-500';
@@ -219,6 +222,96 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
         </div>
       )}
 
+      {/* Top Selections Summary */}
+      {(analysis.businessSuitability?.length > 0 || analysis.retailerMatches?.matches?.length > 0) && (
+        <div className="mb-8 p-4 bg-gradient-to-br from-[var(--accent-cyan)]/10 to-[var(--accent-green)]/10 rounded-lg border border-[var(--accent-cyan)]/30">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <svg className="w-5 h-5 text-[var(--accent-yellow)]" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            Top Selections for This Site
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Top Business Categories */}
+            {analysis.businessSuitability && analysis.businessSuitability.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-[var(--accent-cyan)] mb-2 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                  Best Business Categories
+                </h4>
+                <div className="space-y-2">
+                  {[...analysis.businessSuitability]
+                    .sort((a, b) => b.suitabilityScore - a.suitabilityScore)
+                    .slice(0, 3)
+                    .map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-[var(--bg-primary)]/50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                            index === 0 ? 'bg-yellow-500 text-black' :
+                            index === 1 ? 'bg-gray-300 text-black' :
+                            'bg-amber-700 text-white'
+                          }`}>
+                            {index + 1}
+                          </span>
+                          <span className="text-sm font-medium">{item.category}</span>
+                        </div>
+                        <span className={`text-sm font-bold ${
+                          item.suitabilityScore >= 8 ? 'text-green-400' :
+                          item.suitabilityScore >= 6 ? 'text-cyan-400' : 'text-yellow-400'
+                        }`}>
+                          {item.suitabilityScore}/10
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Top Retailer Matches */}
+            {analysis.retailerMatches && analysis.retailerMatches.matches.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-[var(--accent-purple)] mb-2 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  Best Retailer Matches
+                </h4>
+                <div className="space-y-2">
+                  {analysis.retailerMatches.matches
+                    .slice(0, 3)
+                    .map((retailer, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-[var(--bg-primary)]/50 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                            index === 0 ? 'bg-yellow-500 text-black' :
+                            index === 1 ? 'bg-gray-300 text-black' :
+                            'bg-amber-700 text-white'
+                          }`}>
+                            {index + 1}
+                          </span>
+                          <div>
+                            <span className="text-sm font-medium">{retailer.name}</span>
+                            <span className="text-xs text-[var(--text-muted)] ml-2">{retailer.category}</span>
+                          </div>
+                        </div>
+                        <span className={`text-sm font-bold ${
+                          retailer.matchScore >= 70 ? 'text-green-400' :
+                          retailer.matchScore >= 50 ? 'text-cyan-400' : 'text-yellow-400'
+                        }`}>
+                          {retailer.matchScore}%
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Site Analysis Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg">
@@ -315,12 +408,18 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
             Business Suitability Analysis
+            <span className="text-xs text-[var(--text-muted)] font-normal ml-2">
+              ({analysis.businessSuitability.length} categories)
+            </span>
           </h3>
           <p className="text-sm text-[var(--text-muted)] mb-4">
             Suitability scores based on traffic volume, demographics, and lot size requirements
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {analysis.businessSuitability.map((item, index) => (
+            {(showAllSuitability
+              ? analysis.businessSuitability
+              : analysis.businessSuitability.slice(0, INITIAL_SUITABILITY_COUNT)
+            ).map((item, index) => (
               <div
                 key={index}
                 className={`p-3 rounded-lg border ${getSuitabilityBg(item.suitabilityScore)}`}
@@ -360,6 +459,120 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
                 <p className="text-xs text-[var(--text-secondary)]">
                   Available: {item.examples.slice(0, 3).join(', ')}
                 </p>
+              </div>
+            ))}
+          </div>
+          {analysis.businessSuitability.length > INITIAL_SUITABILITY_COUNT && (
+            <button
+              onClick={() => setShowAllSuitability(!showAllSuitability)}
+              className="mt-4 w-full py-2 px-4 bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors flex items-center justify-center gap-2"
+            >
+              {showAllSuitability ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  </svg>
+                  Show Less
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  Show More ({analysis.businessSuitability.length - INITIAL_SUITABILITY_COUNT} more)
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Retailer Expansion Intelligence */}
+      {analysis.retailerMatches && analysis.retailerMatches.matches.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <svg className="w-5 h-5 text-[var(--accent-purple)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            Retailer Expansion Intelligence
+          </h3>
+          <p className="text-sm text-[var(--text-muted)] mb-4">
+            {analysis.retailerMatches.totalMatches} retailers actively expanding match this site's characteristics
+          </p>
+          <div className="space-y-3">
+            {analysis.retailerMatches.matches.slice(0, 10).map((retailer, index) => (
+              <div
+                key={index}
+                className={`p-4 rounded-lg border ${
+                  retailer.matchScore >= 70 ? 'bg-green-500/10 border-green-500/30' :
+                  retailer.matchScore >= 50 ? 'bg-cyan-500/10 border-cyan-500/30' :
+                  'bg-yellow-500/10 border-yellow-500/30'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h4 className="font-semibold text-base">{retailer.name}</h4>
+                    <p className="text-xs text-[var(--text-muted)]">{retailer.category}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-lg font-bold ${
+                      retailer.matchScore >= 70 ? 'text-green-400' :
+                      retailer.matchScore >= 50 ? 'text-cyan-400' : 'text-yellow-400'
+                    }`}>
+                      {retailer.matchScore}%
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">Match</p>
+                  </div>
+                </div>
+
+                {/* Match Details Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 text-xs">
+                  <div className={`px-2 py-1 rounded ${retailer.matchDetails.lotSize.matches ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+                    <span className="font-medium">Lot:</span> {retailer.matchDetails.lotSize.matches ? '✓' : '✗'}
+                  </div>
+                  <div className={`px-2 py-1 rounded ${retailer.matchDetails.traffic.matches ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+                    <span className="font-medium">Traffic:</span> {retailer.matchDetails.traffic.matches ? '✓' : '✗'}
+                  </div>
+                  <div className={`px-2 py-1 rounded ${retailer.matchDetails.demographics.matches ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+                    <span className="font-medium">Demo:</span> {retailer.matchDetails.demographics.matches ? '✓' : '✗'}
+                  </div>
+                  <div className={`px-2 py-1 rounded ${retailer.matchDetails.region.matches ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+                    <span className="font-medium">Region:</span> {retailer.matchDetails.region.matches ? '✓' : '✗'}
+                  </div>
+                </div>
+
+                {/* Expansion & Franchise Info */}
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {retailer.activelyExpanding && (
+                    <span className="px-2 py-0.5 bg-green-500/30 text-green-300 text-xs rounded-full font-medium">
+                      Actively Expanding
+                    </span>
+                  )}
+                  {retailer.franchiseAvailable && (
+                    <span className="px-2 py-0.5 bg-blue-500/30 text-blue-300 text-xs rounded-full">
+                      Franchise Available
+                    </span>
+                  )}
+                  {retailer.corporateOnly && (
+                    <span className="px-2 py-0.5 bg-purple-500/30 text-purple-300 text-xs rounded-full">
+                      Corporate Only
+                    </span>
+                  )}
+                </div>
+
+                {/* Investment Info */}
+                <div className="text-xs text-[var(--text-muted)] space-y-1">
+                  {retailer.franchiseFee && (
+                    <p>Franchise Fee: ${retailer.franchiseFee.toLocaleString()}</p>
+                  )}
+                  {retailer.totalInvestment && (
+                    <p>Total Investment: {retailer.totalInvestment}</p>
+                  )}
+                  <p>Target Regions: {retailer.expansionRegions.join(', ')}</p>
+                  {retailer.notes && (
+                    <p className="italic text-[var(--accent-cyan)]">{retailer.notes}</p>
+                  )}
+                </div>
               </div>
             ))}
           </div>
