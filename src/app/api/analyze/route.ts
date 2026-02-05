@@ -986,13 +986,19 @@ function calculateRetailerMatches(
   medianIncome: number | null,
   incomeLevel: 'low' | 'moderate' | 'middle' | 'upper-middle' | 'high' | null,
   population: number | null,
-  stateCode: string | null
+  stateCode: string | null,
+  isCollegeTown: boolean = false
 ): { matches: RetailerMatchResult[]; totalMatches: number } {
   const matches: RetailerMatchResult[] = [];
 
   for (const retailer of RETAILER_REQUIREMENTS) {
     // Only include actively expanding retailers
     if (!retailer.activelyExpanding) continue;
+
+    // Skip discount retailers in college town markets (student income is deceptively low)
+    if (isCollegeTown && retailer.category === 'Discount Retail') {
+      continue;
+    }
 
     const matchDetails = {
       lotSize: { matches: false, note: '' },
@@ -1235,7 +1241,9 @@ function calculateBusinessSuitability(
     districtIssue?: string;
   }> = [];
 
+  console.log('DEBUG demographics object:', JSON.stringify(demographics, null, 2));
   const incomeLevel = demographics?.incomeLevel || 'middle';
+  console.log('DEBUG calculateBusinessSuitability - incomeLevel:', incomeLevel, 'demographics.incomeLevel:', demographics?.incomeLevel);
 
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
     // Check if this category is inappropriate for the district
@@ -1765,7 +1773,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
       demographicsData?.medianHouseholdIncome || null,
       demographicsData?.incomeLevel || null,
       demographicsData?.population || null,
-      stateCode
+      stateCode,
+      demographicsData?.isCollegeTown || false
     );
     analysis.retailerMatches = retailerMatches;
 
@@ -1805,7 +1814,8 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     demographicsData?.medianHouseholdIncome || null,
     demographicsData?.incomeLevel || null,
     demographicsData?.population || null,
-    stateCode
+    stateCode,
+    demographicsData?.isCollegeTown || false
   );
 
   // Build recommendation excluding existing businesses
