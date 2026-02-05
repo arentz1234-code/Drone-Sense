@@ -188,11 +188,31 @@ export default function HomePage() {
               />
             </div>
           </div>
+
+          {/* Demographics Section */}
+          <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
+            {!hasInput && (
+              <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
+                <p className="text-[var(--text-muted)] text-sm text-center px-4">
+                  Enter an address or upload photos to enable
+                </p>
+              </div>
+            )}
+            <div className="terminal-header">
+              <div className="terminal-dot red"></div>
+              <div className="terminal-dot yellow"></div>
+              <div className="terminal-dot green"></div>
+              <span className="terminal-title">demographics.module</span>
+            </div>
+            <div className="terminal-body">
+              <DemographicsData coordinates={coordinates} onDataLoad={setDemographicsData} />
+            </div>
+          </div>
         </div>
 
         {/* Right Column */}
         <div className="space-y-6">
-          {/* Nearby Businesses Section */}
+          {/* Market Analysis Section */}
           <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
             {!hasInput && (
               <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
@@ -239,26 +259,6 @@ export default function HomePage() {
             </div>
             <div className="terminal-body">
               <TrafficData coordinates={coordinates} onDataLoad={setTrafficData} />
-            </div>
-          </div>
-
-          {/* Demographics Section */}
-          <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
-            {!hasInput && (
-              <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
-                <p className="text-[var(--text-muted)] text-sm text-center px-4">
-                  Enter an address or upload photos to enable
-                </p>
-              </div>
-            )}
-            <div className="terminal-header">
-              <div className="terminal-dot red"></div>
-              <div className="terminal-dot yellow"></div>
-              <div className="terminal-dot green"></div>
-              <span className="terminal-title">demographics.module</span>
-            </div>
-            <div className="terminal-body">
-              <DemographicsData coordinates={coordinates} onDataLoad={setDemographicsData} />
             </div>
           </div>
         </div>
