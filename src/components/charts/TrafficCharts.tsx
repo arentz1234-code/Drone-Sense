@@ -9,6 +9,10 @@ interface TrafficChartsProps {
 }
 
 export default function TrafficCharts({ trafficData }: TrafficChartsProps) {
+  // DEBUG: Log received traffic data
+  console.log('[TrafficCharts] Received trafficData:', JSON.stringify(trafficData, null, 2));
+  console.log('[TrafficCharts] VPD value:', trafficData.estimatedVPD, 'Type:', typeof trafficData.estimatedVPD);
+
   // VPD comparison data
   const vpdComparison = [
     { category: 'Low Traffic', vpd: 5000, fill: '#22c55e' },

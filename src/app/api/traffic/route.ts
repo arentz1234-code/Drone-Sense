@@ -563,7 +563,17 @@ export async function POST(request: Request) {
       ? `Official count: ${officialAADT.aadt.toLocaleString()}`
       : flowData.vpd.vpdRange;
 
-    console.log(`Final road: ${displayRoadName}, VPD: ${finalVPD}`);
+    // Validate VPD is a reasonable number (100 - 500,000)
+    let validatedVPD = finalVPD;
+    if (typeof validatedVPD !== 'number' || isNaN(validatedVPD)) {
+      console.warn(`[API] VPD is not a valid number: ${validatedVPD}, type: ${typeof validatedVPD}`);
+      validatedVPD = parseInt(String(validatedVPD), 10) || 0;
+    }
+    if (validatedVPD < 100 || validatedVPD > 500000) {
+      console.warn(`[API] VPD out of reasonable range (100-500,000): ${validatedVPD}`);
+    }
+
+    console.log(`[API] Final road: ${displayRoadName}, VPD: ${validatedVPD}`);
 
     // Use the VPD - official if available, otherwise estimated
     const trafficData: TrafficData = {
@@ -576,10 +586,12 @@ export async function POST(request: Request) {
       trafficLevel,
       congestionPercent: Math.max(0, congestionPercent),
       // VPD - prefer official AADT when available
-      estimatedVPD: finalVPD,
+      estimatedVPD: validatedVPD,
       vpdRange: finalVPDRange,
       vpdSource: finalVPDSource,
     };
+
+    console.log(`[API] Returning trafficData:`, JSON.stringify(trafficData));
 
     return NextResponse.json(trafficData);
   } catch (error) {

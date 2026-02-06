@@ -38,14 +38,29 @@ export default function TrafficData({ coordinates, address, onDataLoad }: Traffi
 
       const data = await response.json();
 
+      // DEBUG: Log raw API response
+      console.log('[TrafficData] Raw API response:', JSON.stringify(data, null, 2));
+
       if (!response.ok) {
         setError(data.message || data.error || 'Failed to fetch traffic data');
         setTraffic(null);
         onDataLoad?.(null);
       } else {
-        setTraffic(data);
-        onDataLoad?.({
-          estimatedVPD: data.estimatedVPD,
+        // Validate VPD is a reasonable number (100 - 500,000)
+        let validatedVPD = data.estimatedVPD;
+        if (typeof validatedVPD !== 'number' || isNaN(validatedVPD)) {
+          console.warn('[TrafficData] VPD is not a number:', validatedVPD, 'Type:', typeof validatedVPD);
+          validatedVPD = parseInt(String(validatedVPD), 10) || 0;
+        }
+        if (validatedVPD < 100 || validatedVPD > 500000) {
+          console.warn('[TrafficData] VPD out of reasonable range (100-500,000):', validatedVPD);
+        }
+
+        // DEBUG: Log parsed values
+        console.log('[TrafficData] Parsed VPD:', validatedVPD, 'Road:', data.roadType, 'Source:', data.vpdSource);
+
+        const trafficInfo = {
+          estimatedVPD: validatedVPD,
           vpdRange: data.vpdRange,
           vpdSource: data.vpdSource,
           roadType: data.roadType,
@@ -53,7 +68,13 @@ export default function TrafficData({ coordinates, address, onDataLoad }: Traffi
           congestionPercent: data.congestionPercent,
           currentSpeed: data.currentSpeed,
           freeFlowSpeed: data.freeFlowSpeed,
-        });
+        };
+
+        // DEBUG: Log data being sent to parent
+        console.log('[TrafficData] Sending to parent (onDataLoad):', JSON.stringify(trafficInfo, null, 2));
+
+        setTraffic({ ...data, estimatedVPD: validatedVPD });
+        onDataLoad?.(trafficInfo);
       }
     } catch (err) {
       setError('Failed to fetch traffic data');
