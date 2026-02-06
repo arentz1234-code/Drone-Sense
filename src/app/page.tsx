@@ -391,7 +391,7 @@ export default function HomePage() {
               vpd: trafficData?.estimatedVPD,
             }}
           />
-          <TrafficData coordinates={coordinates} onDataLoad={setTrafficData} />
+          <TrafficData coordinates={coordinates} address={address} onDataLoad={setTrafficData} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

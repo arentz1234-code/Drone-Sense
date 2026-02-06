@@ -5,16 +5,20 @@ import { TrafficData as TrafficDataType } from '@/app/api/traffic/route';
 
 interface TrafficDataProps {
   coordinates: { lat: number; lng: number } | null;
+  address?: string;  // Property address to determine fronting road
   onDataLoad?: (data: {
     estimatedVPD: number;
     vpdRange: string;
+    vpdSource?: string;
     roadType: string;
     trafficLevel: string;
     congestionPercent: number;
+    currentSpeed?: number;
+    freeFlowSpeed?: number;
   } | null) => void;
 }
 
-export default function TrafficData({ coordinates, onDataLoad }: TrafficDataProps) {
+export default function TrafficData({ coordinates, address, onDataLoad }: TrafficDataProps) {
   const [loading, setLoading] = useState(false);
   const [traffic, setTraffic] = useState<TrafficDataType | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +33,7 @@ export default function TrafficData({ coordinates, onDataLoad }: TrafficDataProp
       const response = await fetch('/api/traffic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ coordinates }),
+        body: JSON.stringify({ coordinates, address }),
       });
 
       const data = await response.json();
@@ -43,9 +47,12 @@ export default function TrafficData({ coordinates, onDataLoad }: TrafficDataProp
         onDataLoad?.({
           estimatedVPD: data.estimatedVPD,
           vpdRange: data.vpdRange,
+          vpdSource: data.vpdSource,
           roadType: data.roadType,
           trafficLevel: data.trafficLevel,
           congestionPercent: data.congestionPercent,
+          currentSpeed: data.currentSpeed,
+          freeFlowSpeed: data.freeFlowSpeed,
         });
       }
     } catch (err) {
@@ -56,13 +63,13 @@ export default function TrafficData({ coordinates, onDataLoad }: TrafficDataProp
     }
   };
 
-  // Auto-fetch when coordinates change
+  // Auto-fetch when coordinates or address change
   useEffect(() => {
     if (coordinates) {
       fetchTrafficData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coordinates?.lat, coordinates?.lng]);
+  }, [coordinates?.lat, coordinates?.lng, address]);
 
   const getTrafficColor = (level: string) => {
     switch (level) {
