@@ -60,9 +60,12 @@ export interface Business {
 export interface TrafficInfo {
   estimatedVPD: number;
   vpdRange: string;
+  vpdSource?: string;
   roadType: string;
   trafficLevel: string;
   congestionPercent: number;
+  currentSpeed?: number;
+  freeFlowSpeed?: number;
 }
 
 export interface BusinessSuitability {

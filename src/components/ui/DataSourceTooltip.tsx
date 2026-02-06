@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ReactNode } from 'react';
+import { useState, ReactNode, useRef, useCallback } from 'react';
 
 export interface DataSource {
   name: string;
@@ -17,6 +17,23 @@ interface DataSourceTooltipProps {
 
 export default function DataSourceTooltip({ children, source, className = '' }: DataSourceTooltipProps) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    // Clear any pending hide timeout
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+    setShowTooltip(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    // Delay hiding to allow cursor to move to tooltip
+    hideTimeoutRef.current = setTimeout(() => {
+      setShowTooltip(false);
+    }, 150);
+  }, []);
 
   const getTypeIcon = () => {
     switch (source.type) {
@@ -68,8 +85,8 @@ export default function DataSourceTooltip({ children, source, className = '' }: 
   return (
     <span
       className={`relative inline-flex items-center cursor-help ${className}`}
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {children}
       <span className="ml-1 opacity-40 hover:opacity-100 transition-opacity">
@@ -79,7 +96,14 @@ export default function DataSourceTooltip({ children, source, className = '' }: 
       </span>
 
       {showTooltip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none">
+        <div
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
+          {/* Invisible bridge to prevent gap between trigger and tooltip */}
+          <div className="absolute top-full left-0 right-0 h-3" />
+
           <div className="bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-xl p-3 min-w-[200px] max-w-[280px]">
             {/* Arrow */}
             <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
@@ -106,7 +130,7 @@ export default function DataSourceTooltip({ children, source, className = '' }: 
                   href={source.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-[var(--accent-cyan)] hover:underline flex items-center gap-1 pointer-events-auto"
+                  className="text-xs text-[var(--accent-cyan)] hover:underline flex items-center gap-1"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

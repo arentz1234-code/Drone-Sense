@@ -206,6 +206,92 @@ export default function TrafficCharts({ trafficData }: TrafficChartsProps) {
         </div>
       </div>
 
+      {/* Road Information */}
+      <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <svg className="w-5 h-5 text-[var(--accent-purple)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <DataSourceTooltip source={{
+            name: 'Traffic Data Sources',
+            description: 'VPD from Florida DOT official counts when available, otherwise estimated from TomTom road classification',
+            type: 'api'
+          }}>Road Information</DataSourceTooltip>
+        </h3>
+
+        <div className="space-y-4">
+          {/* Primary Road */}
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[var(--accent-cyan)]/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-[var(--text-primary)]">{trafficData.roadType}</p>
+              <p className="text-sm text-[var(--text-muted)]">Primary road for VPD calculation</p>
+            </div>
+          </div>
+
+          {/* VPD Source */}
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[var(--accent-green)]/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-[var(--accent-green)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-[var(--text-primary)]">
+                {trafficData.vpdSource?.includes('Florida DOT') ? 'Official AADT Count' : 'Estimated VPD'}
+              </p>
+              <p className="text-sm text-[var(--text-muted)]">{trafficData.vpdSource || 'Estimated from road classification'}</p>
+            </div>
+          </div>
+
+          {/* Speed Data */}
+          {(trafficData.currentSpeed !== undefined && trafficData.freeFlowSpeed !== undefined) && (
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-[var(--accent-orange)]/20 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-[var(--accent-orange)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-[var(--text-primary)]">Speed Data</p>
+                <p className="text-sm text-[var(--text-muted)]">
+                  Current: {trafficData.currentSpeed} mph | Free Flow: {trafficData.freeFlowSpeed} mph
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* VPD Range */}
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[var(--accent-blue)]/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-[var(--accent-blue)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-[var(--text-primary)]">VPD Range</p>
+              <p className="text-sm text-[var(--text-muted)]">{trafficData.vpdRange}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Data Quality Note */}
+        <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
+          <p className="text-xs text-[var(--text-muted)] flex items-center gap-2">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {trafficData.vpdSource?.includes('Florida DOT')
+              ? 'Official traffic count from Florida Department of Transportation. Data is updated annually.'
+              : 'VPD estimated based on road functional classification (FRC) from TomTom. For official counts, check your state DOT website.'}
+          </p>
+        </div>
+      </div>
+
       {/* Congestion Info */}
       <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
         <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
