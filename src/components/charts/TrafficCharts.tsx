@@ -76,13 +76,23 @@ export default function TrafficCharts({ trafficData }: TrafficChartsProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="metric-card">
           <p className="metric-card-label">
-            <DataSourceTooltip source={DATA_SOURCES.trafficEstimate}>Vehicles Per Day</DataSourceTooltip>
+            <DataSourceTooltip source={{
+              name: trafficData.vpdSource?.includes('Florida DOT') ? 'Florida DOT AADT' : 'Traffic Estimation',
+              description: `Traffic count for ${trafficData.roadType !== 'N/A' ? trafficData.roadType : 'nearby roads'}. ${trafficData.vpdSource || 'Estimated from road classification.'}`,
+              url: trafficData.vpdSource?.includes('Florida DOT') ? 'https://tdaappsprod.dot.state.fl.us/fto/' : undefined,
+              type: trafficData.vpdSource?.includes('Florida DOT') ? 'api' : 'estimate'
+            }}>Vehicles Per Day</DataSourceTooltip>
           </p>
           <p className="metric-card-value">{trafficData.estimatedVPD.toLocaleString()}</p>
         </div>
         <div className="metric-card">
           <p className="metric-card-label">
-            <DataSourceTooltip source={DATA_SOURCES.trafficEstimate}>VPD Range</DataSourceTooltip>
+            <DataSourceTooltip source={{
+              name: trafficData.vpdSource?.includes('Florida DOT') ? 'Florida DOT AADT' : 'Traffic Estimation',
+              description: `VPD range for ${trafficData.roadType !== 'N/A' ? trafficData.roadType : 'nearby roads'}. ${trafficData.vpdSource || 'Estimated from road classification.'}`,
+              url: trafficData.vpdSource?.includes('Florida DOT') ? 'https://tdaappsprod.dot.state.fl.us/fto/' : undefined,
+              type: trafficData.vpdSource?.includes('Florida DOT') ? 'api' : 'estimate'
+            }}>VPD Range</DataSourceTooltip>
           </p>
           <p className="text-lg font-semibold text-[var(--text-primary)]">{trafficData.vpdRange}</p>
         </div>

@@ -37,6 +37,34 @@ interface FlowData {
   confidence: number;
 }
 
+// Get road name via reverse geocoding
+async function getRoadName(lat: number, lng: number): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=17`,
+      {
+        headers: {
+          'User-Agent': 'DroneSense/1.0 (https://drone-sense.vercel.app; Commercial Site Analysis)',
+        },
+      }
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+
+    // Try to get the road name from the address
+    if (data.address) {
+      return data.address.road || data.address.street || data.address.highway || null;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Road name lookup error:', error);
+    return null;
+  }
+}
+
 // Fetch official AADT from Florida DOT's ArcGIS service
 async function fetchFloridaAADT(lat: number, lng: number): Promise<FDOTAADTResult | null> {
   try {
@@ -291,11 +319,31 @@ export async function POST(request: Request) {
       officialAADT = await fetchFloridaAADT(lat, lng);
     }
 
+    // Get road name via reverse geocoding for better labeling
+    const roadName = await getRoadName(lat, lng);
+
+    // Determine the best road name to use
+    const displayRoadName = (() => {
+      // If we have official AADT with a good road name, use it
+      if (officialAADT?.roadway &&
+          officialAADT.roadway !== 'Unknown Road' &&
+          officialAADT.roadway !== 'N/A' &&
+          officialAADT.roadway.trim() !== '') {
+        return officialAADT.roadway;
+      }
+      // Otherwise use reverse geocoded road name
+      if (roadName) {
+        return roadName;
+      }
+      // Fall back to road type classification
+      return roadType;
+    })();
+
     // Use official AADT if available, otherwise use estimate
     const finalVPD = officialAADT ? officialAADT.aadt : flowData.vpd.estimatedVPD;
     const finalVPDSource = officialAADT
-      ? `${officialAADT.source} - ${officialAADT.roadway} (${officialAADT.year})`
-      : flowData.vpd.source + ' (highest nearby)';
+      ? `Florida DOT Official AADT - ${displayRoadName} (${officialAADT.year})`
+      : `Estimated from ${displayRoadName} (${roadType})`;
     const finalVPDRange = officialAADT
       ? `Official count: ${officialAADT.aadt.toLocaleString()}`
       : flowData.vpd.vpdRange;
@@ -307,7 +355,7 @@ export async function POST(request: Request) {
       currentTravelTime: flowData.currentTravelTime,
       freeFlowTravelTime: flowData.freeFlowTravelTime,
       confidence: flowData.confidence || 0,
-      roadType: officialAADT ? officialAADT.roadway : roadType,
+      roadType: displayRoadName,
       trafficLevel,
       congestionPercent: Math.max(0, congestionPercent),
       // VPD - prefer official AADT when available
