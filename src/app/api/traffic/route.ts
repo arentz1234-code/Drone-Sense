@@ -49,33 +49,19 @@ async function findAdjacentRoads(lat: number, lng: number, boundaryCoords?: Arra
   try {
     const overpassUrl = 'https://overpass-api.de/api/interpreter';
 
-    // Search for roads within 100m of the point (or along the parcel boundary if provided)
-    let query: string;
-
-    if (boundaryCoords && boundaryCoords.length > 3) {
-      // Create a polygon query using parcel boundary
-      const polyStr = boundaryCoords.map(([lat, lng]) => `${lat} ${lng}`).join(' ');
-      query = `
-        [out:json][timeout:15];
-        (
-          way["highway"~"primary|secondary|tertiary|residential|trunk|motorway"](around:50,${lat},${lng});
-        );
-        out body;
-        >;
-        out skel qt;
-      `;
-    } else {
-      // Simple radius search
-      query = `
-        [out:json][timeout:15];
-        (
-          way["highway"~"primary|secondary|tertiary|residential|trunk|motorway"](around:100,${lat},${lng});
-        );
-        out body;
-        >;
-        out skel qt;
-      `;
-    }
+    // Search for roads within 500m to capture main roads even if property is set back
+    // Prioritize major roads (primary, secondary, trunk) over residential
+    const query = `
+      [out:json][timeout:15];
+      (
+        way["highway"~"primary|secondary|trunk|motorway"](around:500,${lat},${lng});
+        way["highway"~"tertiary"](around:300,${lat},${lng});
+        way["highway"~"residential"](around:150,${lat},${lng});
+      );
+      out body;
+      >;
+      out skel qt;
+    `;
 
     const response = await fetch(overpassUrl, {
       method: 'POST',
@@ -476,59 +462,62 @@ export async function POST(request: Request) {
     const matchedRoads: RoadVPD[] = [];
     const matchedRoadwayIds = new Set<string>();
 
-    // Strategy 1: Search for the property street directly in FDOT with extended radius
-    // This finds the main road even if the property is set back from it
+    // Strategy 1: Match property street with OSM roads first
+    // If the address street matches an OSM road, use that as the property's main road
+    let propertyOSMRoad: string | null = null;
     if (propertyStreet) {
-      const propertyRoad = await fetchFDOTForRoad(lat, lng, propertyStreet, true); // Extended radius
-      if (propertyRoad && propertyRoad.roadwayId) {
-        matchedRoads.push({
-          ...propertyRoad,
-          roadName: propertyStreet,
-        });
-        matchedRoadwayIds.add(propertyRoad.roadwayId);
-        console.log(`[Traffic] Found "${propertyStreet}" with extended search: ${propertyRoad.vpd} VPD`);
-      }
-    }
-
-    // Strategy 2: Match OSM roads with FDOT data
-    for (const osmRoad of osmRoads) {
-      // Skip the property street if already matched
-      if (propertyStreet && roadNamesMatch(osmRoad, propertyStreet)) continue;
-
-      // Try to find this road in FDOT
-      const osmFdotRoad = await fetchFDOTForRoad(lat, lng, osmRoad);
-      if (osmFdotRoad && osmFdotRoad.roadwayId && !matchedRoadwayIds.has(osmFdotRoad.roadwayId)) {
-        matchedRoads.push({
-          ...osmFdotRoad,
-          roadName: osmRoad,
-        });
-        matchedRoadwayIds.add(osmFdotRoad.roadwayId);
-        continue;
-      }
-
-      // Try matching with pre-fetched FDOT roads
-      for (const fdotRoad of allFDOTRoads) {
-        if (roadNamesMatch(fdotRoad.roadName, osmRoad) &&
-            fdotRoad.roadwayId &&
-            !matchedRoadwayIds.has(fdotRoad.roadwayId)) {
-          matchedRoads.push({
-            ...fdotRoad,
-            roadName: osmRoad,
-          });
-          matchedRoadwayIds.add(fdotRoad.roadwayId);
+      for (const osmRoad of osmRoads) {
+        if (roadNamesMatch(osmRoad, propertyStreet)) {
+          propertyOSMRoad = osmRoad;
+          console.log(`[Traffic] Property street "${propertyStreet}" matches OSM road "${osmRoad}"`);
           break;
         }
       }
     }
 
-    // Strategy 3: If still no matches, use closest FDOT roads with property street label
+    // Strategy 2: For the property's main road, use highest VPD segment
+    // Since FDOT doesn't label roads by name, we use VPD as a heuristic
+    // Main roads (like Thomasville Rd) typically have high VPD
+    if (propertyStreet && allFDOTRoads.length > 0) {
+      // Use the highest VPD road as the property's main road
+      const mainRoad = allFDOTRoads[0]; // Already sorted by VPD descending
+      matchedRoads.push({
+        ...mainRoad,
+        roadName: propertyOSMRoad || propertyStreet,
+      });
+      matchedRoadwayIds.add(mainRoad.roadwayId!);
+      console.log(`[Traffic] Property road "${propertyStreet}": ${mainRoad.vpd} VPD (highest in area)`);
+    }
+
+    // Strategy 3: Match other OSM roads with remaining FDOT roads
+    for (const osmRoad of osmRoads) {
+      // Skip if this is the property street (already handled)
+      if (propertyStreet && roadNamesMatch(osmRoad, propertyStreet)) continue;
+
+      // Try matching with FDOT roads that haven't been claimed
+      for (const fdotRoad of allFDOTRoads) {
+        if (fdotRoad.roadwayId && !matchedRoadwayIds.has(fdotRoad.roadwayId)) {
+          // Match if names are similar OR if it's a minor road
+          if (roadNamesMatch(fdotRoad.roadName, osmRoad)) {
+            matchedRoads.push({
+              ...fdotRoad,
+              roadName: osmRoad,
+            });
+            matchedRoadwayIds.add(fdotRoad.roadwayId);
+            break;
+          }
+        }
+      }
+    }
+
+    // Strategy 4: If still no property road matched, use the highest VPD segment
     if (matchedRoads.length === 0 && allFDOTRoads.length > 0) {
       const topRoad = allFDOTRoads[0];
       matchedRoads.push({
         ...topRoad,
         roadName: propertyStreet || topRoad.roadName,
       });
-      console.log(`[Traffic] Using closest FDOT road: ${topRoad.roadName} -> ${propertyStreet || topRoad.roadName}`);
+      console.log(`[Traffic] Fallback: using highest VPD road: ${topRoad.vpd} VPD`);
     }
 
     console.log(`[Traffic] Final matched roads: ${matchedRoads.map(r => `${r.roadName}:${r.vpd}`).join(', ')}`);
