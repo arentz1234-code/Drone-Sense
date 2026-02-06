@@ -1254,9 +1254,17 @@ function calculateBusinessSuitability(
 
     // Skip value-oriented categories in high income areas
     // These businesses target budget-conscious consumers, not affluent markets
-    const valueCategories = ['fastFoodValue', 'casualDiningValue', 'coffeeValue', 'quickServiceValue', 'discountRetail'];
+    const valueCategories = ['fastFoodValue', 'casualDiningValue', 'coffeeValue', 'quickServiceValue', 'discountRetail', 'gasStation', 'convenience'];
     const isHighIncomeArea = incomeLevel === 'upper-middle' || incomeLevel === 'high';
     if (valueCategories.includes(key) && isHighIncomeArea) {
+      continue;
+    }
+
+    // Skip gas stations and convenience stores in college town markets
+    // Students don't drive as much and these don't fit the student consumer profile
+    const isCollegeTown = demographics?.isCollegeTown || false;
+    const collegeTownExclusions = ['gasStation', 'convenience', 'discountRetail'];
+    if (collegeTownExclusions.includes(key) && isCollegeTown) {
       continue;
     }
 
