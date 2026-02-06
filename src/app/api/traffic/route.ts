@@ -77,24 +77,38 @@ function normalizeStreetName(name: string): string {
 function roadMatchesProperty(roadName: string, propertyStreet: string): boolean {
   if (!roadName || !propertyStreet) return false;
 
+  // Skip obvious non-matches like "N/A"
+  if (roadName.toUpperCase() === 'N/A' || roadName.trim() === '') return false;
+
   const normalizedRoad = normalizeStreetName(roadName);
   const normalizedProperty = normalizeStreetName(propertyStreet);
 
   if (!normalizedRoad || !normalizedProperty) return false;
 
+  // Require minimum length for matches to avoid false positives like "na" in "thomasville"
+  if (normalizedRoad.length < 4 || normalizedProperty.length < 4) return false;
+
   // Exact match
   if (normalizedRoad === normalizedProperty) return true;
 
-  // One contains the other (handles "Thomasville" matching "THOMASVILLE RD")
-  if (normalizedRoad.includes(normalizedProperty) || normalizedProperty.includes(normalizedRoad)) {
+  // One contains the other, but only if the contained part is substantial (at least 70% of the shorter string)
+  const minLength = Math.min(normalizedRoad.length, normalizedProperty.length);
+  const threshold = Math.max(4, Math.floor(minLength * 0.7));
+
+  if (normalizedRoad.includes(normalizedProperty) && normalizedProperty.length >= threshold) {
+    return true;
+  }
+  if (normalizedProperty.includes(normalizedRoad) && normalizedRoad.length >= threshold) {
     return true;
   }
 
   // Handle compound names like "SR-61/THOMASVILLE RD" - split and check each part
   const roadParts = roadName.split('/').map(part => normalizeStreetName(part));
   for (const part of roadParts) {
-    if (part && (part.includes(normalizedProperty) || normalizedProperty.includes(part))) {
-      return true;
+    if (part && part.length >= 4) {
+      if (part === normalizedProperty) return true;
+      if (part.includes(normalizedProperty) && normalizedProperty.length >= threshold) return true;
+      if (normalizedProperty.includes(part) && part.length >= threshold) return true;
     }
   }
 
@@ -134,9 +148,10 @@ async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet
   try {
     // Use ArcGIS identify endpoint to find AADT at this location
     // Layer 7 is the AADT layer
-    // Use a larger search radius (~500m) to find the property's fronting road
-    // since geocoded coordinates may be slightly offset from the actual road
-    const mapExtent = `${lng - 0.01},${lat - 0.01},${lng + 0.01},${lat + 0.01}`;
+    // Use a larger search radius (~1.5km) to find the property's fronting road
+    // and capture all segments along that road (not just the closest intersection)
+    // This ensures we get the highest traffic count segment for major roads
+    const mapExtent = `${lng - 0.015},${lat - 0.015},${lng + 0.015},${lat + 0.015}`;
     const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
       `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
       `layers=all:7&tolerance=200&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
@@ -190,47 +205,61 @@ async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet
       }
     }
 
-    console.log(`Found ${allRoads.length} FDOT road segments:`, allRoads.map(r => `${r.roadName} (${r.aadt})`).join(', '));
+    console.log(`Found ${allRoads.length} FDOT road segments`);
 
     // If we have a property street, filter to only matching roads
     let matchingRoads = allRoads;
     if (propertyStreet) {
-      // First, try to find roads where DESC_TO directly matches the property street
-      // DESC_TO is the road segment endpoint - a direct match means this segment IS on that road
-      const directMatches = allRoads.filter(road => {
-        return roadMatchesProperty(road.rawData.DESC_TO, propertyStreet);
-      });
+      // STEP 1: Find the ROADWAY ID for the property street
+      // Look for segments where the property street name appears in DESC_TO
+      // Important: Look for patterns like "SR-61/THOMASVILLE RD" where the road name
+      // appears as the segment terminus (meaning THIS segment is ON that road)
+      const roadwayIds = new Set<string>();
 
-      if (directMatches.length > 0) {
-        console.log(`Direct DESC_TO matches for "${propertyStreet}":`, directMatches.map(r => `${r.roadName} (${r.aadt})`).join(', '));
-        matchingRoads = directMatches;
-      } else {
-        // Fallback: check if road name or DESC_FRM matches (less reliable)
-        // BUT only if DESC_TO doesn't indicate a different major road
-        const fallbackMatches = allRoads.filter(road => {
-          // Skip if DESC_TO is clearly a different road name (not the same street)
-          const descToNormalized = normalizeStreetName(road.rawData.DESC_TO);
-          const propertyNormalized = normalizeStreetName(propertyStreet);
+      // First pass: find ROADWAY IDs from segments that END at the property street
+      // These are segments ON the property street that terminate at a named point
+      for (const road of allRoads) {
+        const descTo = road.rawData.DESC_TO || '';
 
-          // If DESC_TO is a different street name entirely, skip this entry
-          // (it's data for that other road, not our property's road)
-          if (descToNormalized && descToNormalized.length > 3 &&
-              !descToNormalized.includes(propertyNormalized) &&
-              !propertyNormalized.includes(descToNormalized)) {
-            return false;
+        // Check if DESC_TO contains the street name (e.g., "SR-61/THOMASVILLE RD")
+        // This indicates the segment is ON that road
+        if (roadMatchesProperty(descTo, propertyStreet)) {
+          if (road.rawData.ROADWAY) {
+            roadwayIds.add(road.rawData.ROADWAY);
+            console.log(`Found ROADWAY ${road.rawData.ROADWAY} from DESC_TO: ${descTo}`);
           }
-
-          return roadMatchesProperty(road.roadName, propertyStreet) ||
-            roadMatchesProperty(road.rawData.DESC_FRM, propertyStreet);
-        });
-
-        if (fallbackMatches.length > 0) {
-          console.log(`Fallback matches for "${propertyStreet}":`, fallbackMatches.map(r => `${r.roadName} (${r.aadt})`).join(', '));
-          matchingRoads = fallbackMatches;
         }
       }
 
-      console.log(`Final matching roads for "${propertyStreet}":`, matchingRoads.map(r => `${r.roadName} (${r.aadt})`).join(', ') || 'none');
+      console.log(`Found ROADWAY IDs for "${propertyStreet}" (pass 1):`, Array.from(roadwayIds).join(', ') || 'none');
+
+      // STEP 2: Get ALL segments with those ROADWAY IDs
+      // This captures ALL segments on the same road, even if intersection names don't mention the road
+      if (roadwayIds.size > 0) {
+        matchingRoads = allRoads.filter(road => roadwayIds.has(road.rawData.ROADWAY));
+        console.log(`Segments on matching ROADWAYs (${matchingRoads.length} total):`);
+        for (const r of matchingRoads.slice(0, 10)) {
+          console.log(`  ${r.rawData.DESC_FRM} -> ${r.rawData.DESC_TO}: ${r.aadt} (${r.year})`);
+        }
+      } else {
+        // Fallback: try matching DESC_FRM as well
+        for (const road of allRoads) {
+          if (roadMatchesProperty(road.rawData.DESC_FRM, propertyStreet)) {
+            if (road.rawData.ROADWAY) {
+              roadwayIds.add(road.rawData.ROADWAY);
+            }
+          }
+        }
+
+        if (roadwayIds.size > 0) {
+          matchingRoads = allRoads.filter(road => roadwayIds.has(road.rawData.ROADWAY));
+          console.log(`Segments from DESC_FRM match:`, matchingRoads.length);
+        } else {
+          console.log(`No ROADWAY matches found for "${propertyStreet}"`);
+        }
+      }
+
+      console.log(`Final matching roads for "${propertyStreet}": ${matchingRoads.length} segments`);
     }
 
     // If no matching roads, fall back to all roads (but prefer ones at exact location)
@@ -239,13 +268,19 @@ async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet
       matchingRoads = allRoads;
     }
 
-    // Get the highest AADT among matching roads (or most recent if same AADT)
+    // Get the segment with the most recent data, then highest AADT
+    // Prioritize recent data since older counts may be outdated
     let bestResult: FDOTAADTResult | null = null;
     for (const road of matchingRoads) {
-      if (!bestResult || road.aadt > bestResult.aadt || (road.aadt === bestResult.aadt && road.year > bestResult.year)) {
+      // Prefer: most recent year first, then highest AADT
+      if (!bestResult ||
+          road.year > bestResult.year ||
+          (road.year === bestResult.year && road.aadt > bestResult.aadt)) {
+        // Use the property street name for the road name since we identified it by ROADWAY ID
+        const displayName = propertyStreet || road.roadName;
         bestResult = {
           aadt: road.aadt,
-          roadway: road.roadName,
+          roadway: displayName,
           year: road.year,
           source: 'Florida DOT Official AADT'
         };
