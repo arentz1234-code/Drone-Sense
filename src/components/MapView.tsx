@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { EnvironmentalRisk } from '@/app/page';
 
 interface MapViewProps {
   coordinates: { lat: number; lng: number } | null;
   address: string;
+  environmentalRisk?: EnvironmentalRisk | null;
 }
 
 interface ParcelData {
@@ -47,7 +49,7 @@ const LeafletMap = dynamic(() => import('./LeafletMap'), {
 
 type MapType = 'satellite' | 'street' | 'hybrid';
 
-export default function MapView({ coordinates, address }: MapViewProps) {
+export default function MapView({ coordinates, address, environmentalRisk }: MapViewProps) {
   const [mapType, setMapType] = useState<MapType>('satellite');
   const [parcelData, setParcelData] = useState<ParcelData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -233,6 +235,36 @@ export default function MapView({ coordinates, address }: MapViewProps) {
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: '#9b59b6'}}></span>Industrial</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: '#27ae60'}}></span>Agricultural</span>
           </div>
+
+          {/* Environmental Risk Indicator */}
+          {environmentalRisk && (
+            <div className={`p-3 rounded-lg border ${
+              environmentalRisk.floodZone.risk === 'high'
+                ? 'bg-red-500/10 border-red-500/30'
+                : environmentalRisk.floodZone.risk === 'medium'
+                ? 'bg-yellow-500/10 border-yellow-500/30'
+                : 'bg-green-500/10 border-green-500/30'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                  </svg>
+                  <span className="text-sm font-medium">Flood Zone: {environmentalRisk.floodZone.zone}</span>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded ${
+                  environmentalRisk.floodZone.risk === 'high'
+                    ? 'bg-red-500/20 text-red-400'
+                    : environmentalRisk.floodZone.risk === 'medium'
+                    ? 'bg-yellow-500/20 text-yellow-400'
+                    : 'bg-green-500/20 text-green-400'
+                }`}>
+                  {environmentalRisk.floodZone.risk.toUpperCase()} RISK
+                </span>
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{environmentalRisk.floodZone.description}</p>
+            </div>
+          )}
 
           {/* Data Source */}
           <div className="text-xs text-[var(--text-muted)] text-center pt-2 border-t border-[var(--border-color)]">
