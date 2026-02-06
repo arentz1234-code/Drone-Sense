@@ -105,12 +105,16 @@ export interface FeasibilityScore {
     demographicsScore: number;
     competitionScore: number;
     accessScore: number;
+    environmentalScore: number;
+    marketScore: number;
   };
   details: {
     traffic: string;
     demographics: string;
     competition: string;
     access: string;
+    environmental: string;
+    market: string;
   };
   rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
 }
@@ -306,6 +310,8 @@ export default function HomePage() {
           nearbyBusinesses: allBusinesses,
           trafficData,
           demographicsData,
+          environmentalRisk,
+          marketComps,
         }),
       });
 
@@ -316,7 +322,6 @@ export default function HomePage() {
 
       const result = await response.json();
       setAnalysis(result);
-      setActiveTab('report');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
     } finally {
@@ -367,6 +372,23 @@ export default function HomePage() {
 
       {/* Overview Tab */}
       <TabPanel id="overview" activeTab={activeTab}>
+        {/* Hidden data fetching components - these load data in background */}
+        <div className="hidden">
+          <DemographicsData coordinates={coordinates} onDataLoad={(data) => setDemographicsData(prev => prev ? { ...prev, ...data } : data)} />
+          <NearbyBusinesses
+            coordinates={coordinates}
+            businesses={businesses}
+            setBusinesses={setBusinesses}
+            marketContext={{
+              population: demographicsData?.population,
+              medianIncome: demographicsData?.medianHouseholdIncome,
+              isCollegeTown: demographicsData?.isCollegeTown,
+              vpd: trafficData?.estimatedVPD,
+            }}
+          />
+          <TrafficData coordinates={coordinates} onDataLoad={setTrafficData} />
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Left Column */}
           <div className="space-y-6">
@@ -400,80 +422,10 @@ export default function HomePage() {
                 />
               </div>
             </div>
-
-            {/* Demographics Section */}
-            <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
-              {!hasInput && (
-                <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
-                  <p className="text-[var(--text-muted)] text-sm text-center px-4">
-                    Enter an address or upload photos to enable
-                  </p>
-                </div>
-              )}
-              <div className="terminal-header">
-                <div className="terminal-dot red"></div>
-                <div className="terminal-dot yellow"></div>
-                <div className="terminal-dot green"></div>
-                <span className="terminal-title">demographics.module</span>
-              </div>
-              <div className="terminal-body">
-                <DemographicsData coordinates={coordinates} onDataLoad={(data) => setDemographicsData(prev => prev ? { ...prev, ...data } : data)} />
-              </div>
-            </div>
           </div>
 
           {/* Right Column */}
           <div className="space-y-6">
-            {/* Market Analysis Section */}
-            <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
-              {!hasInput && (
-                <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
-                  <p className="text-[var(--text-muted)] text-sm text-center px-4">
-                    Enter an address or upload photos to enable
-                  </p>
-                </div>
-              )}
-              <div className="terminal-header">
-                <div className="terminal-dot red"></div>
-                <div className="terminal-dot yellow"></div>
-                <div className="terminal-dot green"></div>
-                <span className="terminal-title">market_analysis.module</span>
-              </div>
-              <div className="terminal-body">
-                <NearbyBusinesses
-                  coordinates={coordinates}
-                  businesses={businesses}
-                  setBusinesses={setBusinesses}
-                  marketContext={{
-                    population: demographicsData?.population,
-                    medianIncome: demographicsData?.medianHouseholdIncome,
-                    isCollegeTown: demographicsData?.isCollegeTown,
-                    vpd: trafficData?.estimatedVPD,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Traffic Data Section */}
-            <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
-              {!hasInput && (
-                <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
-                  <p className="text-[var(--text-muted)] text-sm text-center px-4">
-                    Enter an address or upload photos to enable
-                  </p>
-                </div>
-              )}
-              <div className="terminal-header">
-                <div className="terminal-dot red"></div>
-                <div className="terminal-dot yellow"></div>
-                <div className="terminal-dot green"></div>
-                <span className="terminal-title">traffic_data.module</span>
-              </div>
-              <div className="terminal-body">
-                <TrafficData coordinates={coordinates} onDataLoad={setTrafficData} />
-              </div>
-            </div>
-
             {/* Saved Properties */}
             <div className="terminal-card">
               <div className="terminal-header">
@@ -556,6 +508,21 @@ export default function HomePage() {
             <p className="text-center text-[var(--text-muted)] text-sm mt-2">
               Analyzing site imagery and generating recommendations...
             </p>
+          </div>
+        )}
+
+        {/* Analysis Report */}
+        {analysis && (
+          <div className="terminal-card glow-cyan">
+            <div className="terminal-header">
+              <div className="terminal-dot red"></div>
+              <div className="terminal-dot yellow"></div>
+              <div className="terminal-dot green"></div>
+              <span className="terminal-title">analysis_report.output</span>
+            </div>
+            <div className="terminal-body">
+              <AnalysisReport analysis={analysis} address={address} />
+            </div>
           </div>
         )}
       </TabPanel>

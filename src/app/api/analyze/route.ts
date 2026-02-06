@@ -29,12 +29,16 @@ export interface FeasibilityScore {
     demographicsScore: number;
     competitionScore: number;
     accessScore: number;
+    environmentalScore: number;
+    marketScore: number;
   };
   details: {
     traffic: string;
     demographics: string;
     competition: string;
     access: string;
+    environmental: string;
+    market: string;
   };
   rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
 }
@@ -66,6 +70,25 @@ interface DemographicsInfo {
   };
 }
 
+interface EnvironmentalRiskInfo {
+  floodZone: { zone: string; risk: string };
+  wetlands: { present: boolean };
+  brownfields: { present: boolean; count?: number };
+  superfund: { present: boolean; count?: number };
+  overallRiskScore: number;
+  riskFactors?: string[];
+}
+
+interface MarketCompInfo {
+  address: string;
+  salePrice: number;
+  pricePerSqft: number;
+  sqft: number;
+  saleDate: string;
+  distance: string;
+  propertyType: string;
+}
+
 interface AnalyzeRequest {
   images: string[];
   address: string;
@@ -73,6 +96,8 @@ interface AnalyzeRequest {
   nearbyBusinesses: Business[];
   trafficData: TrafficInfo | null;
   demographicsData: DemographicsInfo | null;
+  environmentalRisk: EnvironmentalRiskInfo | null;
+  marketComps: MarketCompInfo[] | null;
 }
 
 // VPD thresholds, income preferences, and lot size requirements for different business types
@@ -876,17 +901,23 @@ function parseLotSize(lotSizeEstimate: string | undefined): number | null {
 function calculateFeasibilityScore(
   trafficData: TrafficInfo | null,
   demographicsData: DemographicsInfo | null,
-  nearbyBusinesses: Business[]
+  nearbyBusinesses: Business[],
+  environmentalRisk: EnvironmentalRiskInfo | null,
+  marketComps: MarketCompInfo[] | null
 ): FeasibilityScore {
   let trafficScore = 5; // Default middle score
   let demographicsScore = 5;
   let competitionScore = 5;
   let accessScore = 5;
+  let environmentalScore = 5;
+  let marketScore = 5;
 
   let trafficDetail = 'No traffic data available';
   let demographicsDetail = 'No demographics data available';
   let competitionDetail = 'No nearby business data';
   let accessDetail = 'Unable to assess access';
+  let environmentalDetail = 'No environmental data available';
+  let marketDetail = 'No market comp data available';
 
   // TRAFFIC SCORE (0-10)
   if (trafficData) {
@@ -1011,19 +1042,94 @@ function calculateFeasibilityScore(
     }
   }
 
+  // ENVIRONMENTAL SCORE (0-10) - Lower risk = higher score
+  if (environmentalRisk) {
+    const riskScore = environmentalRisk.overallRiskScore; // 0-100, higher is better (less risk)
+
+    // Convert 0-100 risk score to 0-10 feasibility score
+    environmentalScore = Math.round(riskScore / 10);
+
+    // Build detail string
+    const riskFactors: string[] = [];
+
+    if (environmentalRisk.floodZone.risk === 'high') {
+      riskFactors.push('High flood risk');
+      environmentalScore = Math.max(0, environmentalScore - 2);
+    } else if (environmentalRisk.floodZone.risk === 'moderate') {
+      riskFactors.push('Moderate flood risk');
+      environmentalScore = Math.max(0, environmentalScore - 1);
+    }
+
+    if (environmentalRisk.wetlands.present) {
+      riskFactors.push('Wetlands present');
+      environmentalScore = Math.max(0, environmentalScore - 1);
+    }
+
+    if (environmentalRisk.brownfields.present) {
+      const count = environmentalRisk.brownfields.count || 1;
+      riskFactors.push(`${count} brownfield site(s) nearby`);
+      environmentalScore = Math.max(0, environmentalScore - 1);
+    }
+
+    if (environmentalRisk.superfund.present) {
+      const count = environmentalRisk.superfund.count || 1;
+      riskFactors.push(`${count} Superfund site(s) nearby`);
+      environmentalScore = Math.max(0, environmentalScore - 2);
+    }
+
+    environmentalScore = Math.min(10, Math.max(0, environmentalScore));
+
+    if (riskFactors.length === 0) {
+      environmentalDetail = `Low environmental risk (${riskScore}/100) - Clear for development`;
+    } else {
+      environmentalDetail = `Environmental concerns: ${riskFactors.join(', ')} (Risk score: ${riskScore}/100)`;
+    }
+  }
+
+  // MARKET SCORE (0-10) - Based on comparable sales validation
+  if (marketComps && marketComps.length > 0) {
+    const avgPricePerSqft = marketComps.reduce((sum, c) => sum + c.pricePerSqft, 0) / marketComps.length;
+    const compCount = marketComps.length;
+
+    // More comps = more market validation
+    if (compCount >= 5) {
+      marketScore = 8;
+      marketDetail = `Strong market activity: ${compCount} recent sales, avg $${Math.round(avgPricePerSqft)}/sqft`;
+    } else if (compCount >= 3) {
+      marketScore = 7;
+      marketDetail = `Good market activity: ${compCount} recent sales, avg $${Math.round(avgPricePerSqft)}/sqft`;
+    } else {
+      marketScore = 5;
+      marketDetail = `Limited market data: ${compCount} recent sales, avg $${Math.round(avgPricePerSqft)}/sqft`;
+    }
+
+    // Bonus for higher price per sqft (indicates desirable area)
+    if (avgPricePerSqft >= 200) {
+      marketScore = Math.min(10, marketScore + 2);
+      marketDetail += ' - Premium market';
+    } else if (avgPricePerSqft >= 150) {
+      marketScore = Math.min(10, marketScore + 1);
+      marketDetail += ' - Strong market';
+    }
+  }
+
   // Calculate overall score (weighted average)
   const weights = {
-    traffic: 0.35,      // 35% - traffic is critical
-    demographics: 0.25, // 25% - demographics matter
-    competition: 0.20,  // 20% - market validation
-    access: 0.20        // 20% - visibility/access
+    traffic: 0.25,        // 25% - traffic is critical
+    demographics: 0.20,   // 20% - demographics matter
+    competition: 0.15,    // 15% - market validation
+    access: 0.15,         // 15% - visibility/access
+    environmental: 0.15,  // 15% - environmental risk
+    market: 0.10          // 10% - market comps validation
   };
 
   const overall = Math.round(
     trafficScore * weights.traffic +
     demographicsScore * weights.demographics +
     competitionScore * weights.competition +
-    accessScore * weights.access
+    accessScore * weights.access +
+    environmentalScore * weights.environmental +
+    marketScore * weights.market
   );
 
   // Determine rating
@@ -1039,12 +1145,16 @@ function calculateFeasibilityScore(
       trafficScore,
       demographicsScore,
       competitionScore,
-      accessScore
+      accessScore,
+      environmentalScore,
+      marketScore
     },
     details: {
       traffic: trafficDetail,
       demographics: demographicsDetail,
       competition: competitionDetail,
+      environmental: environmentalDetail,
+      market: marketDetail,
       access: accessDetail
     },
     rating
@@ -1674,7 +1784,7 @@ function generateTopRecommendations(
 export async function POST(request: Request) {
   try {
     const body: AnalyzeRequest = await request.json();
-    const { images, address, nearbyBusinesses, trafficData, demographicsData } = body;
+    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps } = body;
 
     const hasImages = images && images.length > 0;
 
@@ -1682,7 +1792,7 @@ export async function POST(request: Request) {
     if (!apiKey) {
       console.error('GOOGLE_GEMINI_API_KEY not configured');
       return NextResponse.json({
-        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, 1.35, address),
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, 1.35, address, environmentalRisk, marketComps),
         usingMockData: true,
         reason: 'API key not configured'
       });
@@ -1872,7 +1982,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
     }
 
     // Calculate comprehensive feasibility score
-    const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses);
+    const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps);
     analysis.feasibilityScore = feasibilityScore;
     // Override viabilityScore with our calculated score
     analysis.viabilityScore = feasibilityScore.overall;
@@ -1913,11 +2023,11 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
-function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = 1.35, address: string = '') {
+function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = 1.35, address: string = '', environmentalRisk: EnvironmentalRiskInfo | null = null, marketComps: MarketCompInfo[] | null = null) {
   const vpd = trafficData?.estimatedVPD || 15000;
   const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
   const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
-  const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses);
+  const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps);
 
   // Extract state code from address
   let stateCode: string | null = null;

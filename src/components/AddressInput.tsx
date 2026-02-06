@@ -22,20 +22,25 @@ export default function AddressInput({
 
     setLoading(true);
     try {
-      // Use a free geocoding service or Google Geocoding API
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`
-      );
+      const response = await fetch('/api/geocode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address }),
+      });
+
       const data = await response.json();
 
-      if (data && data.length > 0) {
-        setCoordinates({
-          lat: parseFloat(data[0].lat),
-          lng: parseFloat(data[0].lon),
-        });
+      if (!response.ok) {
+        throw new Error(data.error || 'Geocoding failed');
       }
+
+      setCoordinates({
+        lat: data.lat,
+        lng: data.lng,
+      });
     } catch (error) {
       console.error('Geocoding error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to locate address. Please try again.');
     } finally {
       setLoading(false);
     }
