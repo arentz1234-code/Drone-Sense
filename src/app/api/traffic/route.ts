@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 
 interface TrafficRequest {
   coordinates: { lat: number; lng: number };
+  stateCode?: string;
+}
+
+interface FDOTAADTResult {
+  aadt: number;
+  roadway: string;
+  year: number;
+  source: string;
 }
 
 export interface TrafficData {
@@ -27,6 +35,59 @@ interface FlowData {
   currentTravelTime: number;
   freeFlowTravelTime: number;
   confidence: number;
+}
+
+// Fetch official AADT from Florida DOT's ArcGIS service
+async function fetchFloridaAADT(lat: number, lng: number): Promise<FDOTAADTResult | null> {
+  try {
+    // Use ArcGIS identify endpoint to find AADT at this location
+    // Layer 7 is the AADT layer
+    const mapExtent = `${lng - 0.01},${lat - 0.01},${lng + 0.01},${lat + 0.01}`;
+    const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
+      `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
+      `layers=all:7&tolerance=100&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
+      `returnGeometry=false&f=json`;
+
+    console.log('Fetching Florida DOT AADT...');
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      console.log('FDOT API error:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (!data.results || data.results.length === 0) {
+      console.log('No FDOT AADT data found at this location');
+      return null;
+    }
+
+    // Get the result with the highest AADT (busiest road nearby)
+    let bestResult: FDOTAADTResult | null = null;
+    for (const result of data.results) {
+      const attrs = result.attributes;
+      if (attrs && attrs.AADT && attrs.AADT > 0) {
+        if (!bestResult || attrs.AADT > bestResult.aadt) {
+          bestResult = {
+            aadt: attrs.AADT,
+            roadway: attrs.ROADWAY || 'Unknown Road',
+            year: attrs.YEAR_ || new Date().getFullYear(),
+            source: 'Florida DOT Official AADT'
+          };
+        }
+      }
+    }
+
+    if (bestResult) {
+      console.log(`Found FDOT AADT: ${bestResult.aadt} on ${bestResult.roadway} (${bestResult.year})`);
+    }
+
+    return bestResult;
+  } catch (error) {
+    console.error('Florida DOT AADT fetch error:', error);
+    return null;
+  }
 }
 
 // FRC priority - lower number = more major road
@@ -210,20 +271,38 @@ export async function POST(request: Request) {
     };
     const roadType = frcMap[flowData.frc] || 'Road';
 
-    // Use the VPD already calculated (highest from all nearby roads)
+    // Check if location is in Florida (approximate bounds)
+    const isInFlorida = lat >= 24.5 && lat <= 31.0 && lng >= -87.5 && lng <= -80.0;
+
+    // Try to get official AADT from Florida DOT if in Florida
+    let officialAADT: FDOTAADTResult | null = null;
+    if (isInFlorida) {
+      officialAADT = await fetchFloridaAADT(lat, lng);
+    }
+
+    // Use official AADT if available, otherwise use estimate
+    const finalVPD = officialAADT ? officialAADT.aadt : flowData.vpd.estimatedVPD;
+    const finalVPDSource = officialAADT
+      ? `${officialAADT.source} - ${officialAADT.roadway} (${officialAADT.year})`
+      : flowData.vpd.source + ' (highest nearby)';
+    const finalVPDRange = officialAADT
+      ? `Official count: ${officialAADT.aadt.toLocaleString()}`
+      : flowData.vpd.vpdRange;
+
+    // Use the VPD - official if available, otherwise estimated
     const trafficData: TrafficData = {
       currentSpeed: Math.round(flowData.currentSpeed),
       freeFlowSpeed: Math.round(flowData.freeFlowSpeed),
       currentTravelTime: flowData.currentTravelTime,
       freeFlowTravelTime: flowData.freeFlowTravelTime,
       confidence: flowData.confidence || 0,
-      roadType,
+      roadType: officialAADT ? officialAADT.roadway : roadType,
       trafficLevel,
       congestionPercent: Math.max(0, congestionPercent),
-      // VPD estimate - using highest from nearby roads
-      estimatedVPD: flowData.vpd.estimatedVPD,
-      vpdRange: flowData.vpd.vpdRange,
-      vpdSource: flowData.vpd.source + ' (highest nearby)',
+      // VPD - prefer official AADT when available
+      estimatedVPD: finalVPD,
+      vpdRange: finalVPDRange,
+      vpdSource: finalVPDSource,
     };
 
     return NextResponse.json(trafficData);
