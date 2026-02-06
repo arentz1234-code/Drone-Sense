@@ -208,14 +208,16 @@ function roadNamesMatch(name1: string, name2: string): boolean {
   return false;
 }
 
-// Fetch FDOT AADT data for a specific road
-async function fetchFDOTForRoad(lat: number, lng: number, roadName: string): Promise<RoadVPD | null> {
+// Fetch FDOT AADT data for a specific road (with optional extended radius)
+async function fetchFDOTForRoad(lat: number, lng: number, roadName: string, extendedRadius: boolean = false): Promise<RoadVPD | null> {
   try {
-    // Use a moderate search area to find the road while staying close to the property
-    const mapExtent = `${lng - 0.015},${lat - 0.015},${lng + 0.015},${lat + 0.015}`;
+    // Use a larger search area when looking for the address street
+    const radius = extendedRadius ? 0.025 : 0.015; // ~2.7km vs ~1.6km
+    const tolerance = extendedRadius ? 500 : 200;
+    const mapExtent = `${lng - radius},${lat - radius},${lng + radius},${lat + radius}`;
     const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
       `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
-      `layers=all:7&tolerance=200&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
+      `layers=all:7&tolerance=${tolerance}&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
       `returnGeometry=false&f=json`;
 
     const response = await fetch(url);
@@ -471,61 +473,40 @@ export async function POST(request: Request) {
     const allFDOTRoads = await fetchAllFDOTRoads(lat, lng);
 
     // STEP 5: Match roads with FDOT data
-    // Key insight: DESC_TO/DESC_FRM contain cross-street names, not the road's own name
-    // So to find "Thomasville Rd", we look for segments where a cross-street is mentioned
-    // Those segments are actually Thomasville Rd segments at that intersection
     const matchedRoads: RoadVPD[] = [];
     const matchedRoadwayIds = new Set<string>();
 
-    // Build list of cross-streets from OSM adjacent roads
-    const crossStreets = osmRoads.filter(r =>
-      propertyStreet ? !roadNamesMatch(r, propertyStreet) : true
-    );
-    console.log(`[Traffic] Cross streets: ${crossStreets.join(', ') || 'none'}`);
-
-    // Strategy 1: Find the property's road by looking for its cross-streets
-    // If we're on Thomasville Rd, find FDOT segments where DESC_TO/DESC_FRM mentions nearby cross-streets
-    if (propertyStreet && crossStreets.length > 0) {
-      for (const crossStreet of crossStreets) {
-        const segmentOnPropertyRoad = await fetchFDOTForRoad(lat, lng, crossStreet);
-        if (segmentOnPropertyRoad && segmentOnPropertyRoad.roadwayId && !matchedRoadwayIds.has(segmentOnPropertyRoad.roadwayId)) {
-          // This segment has the cross-street in DESC_TO/DESC_FRM
-          // So this segment is likely the property's road at that intersection
-          matchedRoads.push({
-            ...segmentOnPropertyRoad,
-            roadName: propertyStreet, // Label with property street name
-          });
-          matchedRoadwayIds.add(segmentOnPropertyRoad.roadwayId);
-          console.log(`[Traffic] Found "${propertyStreet}" via cross-street "${crossStreet}": ${segmentOnPropertyRoad.vpd} VPD`);
-          break; // Found the property's road
-        }
+    // Strategy 1: Search for the property street directly in FDOT with extended radius
+    // This finds the main road even if the property is set back from it
+    if (propertyStreet) {
+      const propertyRoad = await fetchFDOTForRoad(lat, lng, propertyStreet, true); // Extended radius
+      if (propertyRoad && propertyRoad.roadwayId) {
+        matchedRoads.push({
+          ...propertyRoad,
+          roadName: propertyStreet,
+        });
+        matchedRoadwayIds.add(propertyRoad.roadwayId);
+        console.log(`[Traffic] Found "${propertyStreet}" with extended search: ${propertyRoad.vpd} VPD`);
       }
     }
 
-    // Strategy 2: Find other adjacent roads by their cross-streets
+    // Strategy 2: Match OSM roads with FDOT data
     for (const osmRoad of osmRoads) {
-      // Skip if this is the property street (already handled) or already matched
+      // Skip the property street if already matched
       if (propertyStreet && roadNamesMatch(osmRoad, propertyStreet)) continue;
 
-      // Find other cross-streets to locate this road
-      const otherCrossStreets = osmRoads.filter(r => !roadNamesMatch(r, osmRoad));
-
-      for (const crossStreet of otherCrossStreets) {
-        const segment = await fetchFDOTForRoad(lat, lng, crossStreet);
-        if (segment && segment.roadwayId && !matchedRoadwayIds.has(segment.roadwayId)) {
-          matchedRoads.push({
-            ...segment,
-            roadName: osmRoad,
-          });
-          matchedRoadwayIds.add(segment.roadwayId);
-          console.log(`[Traffic] Found "${osmRoad}" via cross-street "${crossStreet}": ${segment.vpd} VPD`);
-          break;
-        }
+      // Try to find this road in FDOT
+      const osmFdotRoad = await fetchFDOTForRoad(lat, lng, osmRoad);
+      if (osmFdotRoad && osmFdotRoad.roadwayId && !matchedRoadwayIds.has(osmFdotRoad.roadwayId)) {
+        matchedRoads.push({
+          ...osmFdotRoad,
+          roadName: osmRoad,
+        });
+        matchedRoadwayIds.add(osmFdotRoad.roadwayId);
+        continue;
       }
-    }
 
-    // Strategy 3: Direct matching with FDOT roads list (for roads found in FDOT data)
-    for (const osmRoad of osmRoads) {
+      // Try matching with pre-fetched FDOT roads
       for (const fdotRoad of allFDOTRoads) {
         if (roadNamesMatch(fdotRoad.roadName, osmRoad) &&
             fdotRoad.roadwayId &&
@@ -540,7 +521,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Strategy 4: If still no matches, use closest FDOT roads with property street label
+    // Strategy 3: If still no matches, use closest FDOT roads with property street label
     if (matchedRoads.length === 0 && allFDOTRoads.length > 0) {
       const topRoad = allFDOTRoads[0];
       matchedRoads.push({
