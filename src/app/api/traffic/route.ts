@@ -262,9 +262,12 @@ async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet
       console.log(`Final matching roads for "${propertyStreet}": ${matchingRoads.length} segments`);
     }
 
+    // Track if we found matching roads for the property street
+    const hasPropertyMatch = matchingRoads.length > 0;
+
     // If no matching roads, fall back to all roads (but prefer ones at exact location)
     if (matchingRoads.length === 0) {
-      console.log('No matching roads found, using closest road');
+      console.log('No matching roads found for property street, using closest road');
       matchingRoads = allRoads;
     }
 
@@ -276,8 +279,9 @@ async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet
       if (!bestResult ||
           road.year > bestResult.year ||
           (road.year === bestResult.year && road.aadt > bestResult.aadt)) {
-        // Use the property street name for the road name since we identified it by ROADWAY ID
-        const displayName = propertyStreet || road.roadName;
+        // Only use propertyStreet as display name if we actually matched the property's road
+        // If we fell back to nearby roads, use the actual road name from the data
+        const displayName = hasPropertyMatch ? (propertyStreet || road.roadName) : road.roadName;
         bestResult = {
           aadt: road.aadt,
           roadway: displayName,
