@@ -108,6 +108,59 @@ async function findAdjacentRoads(lat: number, lng: number, boundaryCoords?: Arra
   }
 }
 
+// Common road name aliases (local name -> FDOT name patterns)
+// This maps common/local names to their official route designations in FDOT data
+const ROAD_ALIASES: Record<string, string[]> = {
+  // Tallahassee area
+  'capital circle': ['sr-263', 'sr263', 'capital', 'state road 263', '263'],
+  'apalachee': ['sr-27', 'us-27', 'apalachee', 'state road 27', '27'],
+  'tennessee': ['us-90', 'sr-10', 'tennessee', 'state road 10', '90', '10'],
+  'mahan': ['us-90', 'sr-10', 'mahan', 'state road 10', '90', '10'],
+  'tharpe': ['cr-158', 'tharpe', 'county road 158', '158'],
+  'lake bradford': ['sr-371', 'lake bradford', 'state road 371', '371'],
+  'monroe': ['sr-63', 'us-27', 'monroe', 'state road 63', '63'],
+  'magnolia': ['magnolia', 'sr-61', 'state road 61', '61'],
+  'meridian': ['sr-155', 'cr-155', 'meridian', 'state road 155', '155'],
+  'thomasville': ['sr-61', 'thomasville', 'state road 61', '61'],
+  'pensacola': ['sr-363', 'pensacola', 'state road 363', '363'],
+  'ocala': ['sr-20', 'ocala', 'state road 20', '20'],
+  'blountstown': ['sr-20', 'blountstown', 'us-90', 'state road 20', '20'],
+  'centerville': ['cr-259', 'centerville', 'county road 259', '259'],
+  'miccosukee': ['cr-59', 'miccosukee', 'county road 59', '59'],
+  // Orlando area
+  'colonial': ['sr-50', 'colonial', 'state road 50', '50'],
+  'orange blossom': ['sr-451', 'orange blossom', 'state road 451', '451'],
+  'sand lake': ['sr-482', 'sand lake', 'state road 482', '482'],
+  'international': ['sr-535', 'international', 'state road 535', '535'],
+  // Tampa area
+  'dale mabry': ['sr-574', 'dale mabry', 'state road 574', '574'],
+  'hillsborough': ['sr-580', 'hillsborough', 'state road 580', '580'],
+  'fowler': ['sr-582', 'fowler', 'state road 582', '582'],
+  'busch': ['sr-580', 'busch', 'state road 580', '580'],
+  'kennedy': ['sr-60', 'kennedy', 'state road 60', '60'],
+  // Miami area
+  'biscayne': ['us-1', 'biscayne', 'us 1', '1'],
+  'flagler': ['sr-968', 'flagler', 'state road 968', '968'],
+  'calle ocho': ['sr-90', 'calle ocho', 'state road 90', '90'],
+  // Jacksonville area
+  'atlantic': ['sr-10', 'atlantic', 'state road 10', '10'],
+  'beach': ['sr-212', 'beach', 'state road 212', '212'],
+  'university': ['sr-109', 'university', 'state road 109', '109'],
+};
+
+// Mapping of known FDOT ROADWAY prefixes to common road names (for major roads)
+// ROADWAY IDs often start with route numbers: e.g., 263XXXXX for SR-263
+const ROADWAY_TO_NAME: Record<string, string> = {
+  '263': 'Capital Circle',
+  '61': 'Thomasville Road',
+  '27': 'Apalachee Parkway',
+  '90': 'Tennessee Street',
+  '371': 'Lake Bradford Road',
+  '155': 'Meridian Road',
+  '363': 'Pensacola Street',
+  '20': 'Blountstown Highway',
+};
+
 // Normalize street name for comparison
 function normalizeStreetName(name: string): string {
   return name
@@ -119,37 +172,48 @@ function normalizeStreetName(name: string): string {
     .trim();
 }
 
-// Check if two road names match
+// Get aliases for a road name
+function getRoadAliases(roadName: string): string[] {
+  const normalized = normalizeStreetName(roadName);
+  const aliases: string[] = [normalized];
+
+  for (const [key, values] of Object.entries(ROAD_ALIASES)) {
+    if (normalized.includes(normalizeStreetName(key)) || normalizeStreetName(key).includes(normalized)) {
+      aliases.push(...values.map(v => normalizeStreetName(v)));
+    }
+  }
+
+  return [...new Set(aliases)];
+}
+
+// Check if two road names match (including aliases)
 function roadNamesMatch(name1: string, name2: string): boolean {
   if (!name1 || !name2) return false;
   if (name1.toUpperCase() === 'N/A' || name2.toUpperCase() === 'N/A') return false;
 
-  const n1 = normalizeStreetName(name1);
-  const n2 = normalizeStreetName(name2);
+  // Get all possible aliases for both names
+  const aliases1 = getRoadAliases(name1);
+  const aliases2 = getRoadAliases(name2);
 
-  if (!n1 || !n2 || n1.length < 3 || n2.length < 3) return false;
+  // Also add the parts from compound names (e.g., "SR-61/THOMASVILLE RD")
+  name1.split('/').forEach(part => aliases1.push(...getRoadAliases(part)));
+  name2.split('/').forEach(part => aliases2.push(...getRoadAliases(part)));
 
-  // Exact match
-  if (n1 === n2) return true;
+  // Check all combinations
+  for (const a1 of aliases1) {
+    if (!a1 || a1.length < 3) continue;
+    for (const a2 of aliases2) {
+      if (!a2 || a2.length < 3) continue;
 
-  // One contains the other (for compound names)
-  const minLen = Math.min(n1.length, n2.length);
-  const threshold = Math.max(3, Math.floor(minLen * 0.6));
+      // Exact match
+      if (a1 === a2) return true;
 
-  if (n1.includes(n2) && n2.length >= threshold) return true;
-  if (n2.includes(n1) && n1.length >= threshold) return true;
+      // One contains the other
+      const minLen = Math.min(a1.length, a2.length);
+      const threshold = Math.max(3, Math.floor(minLen * 0.6));
 
-  // Check compound names (e.g., "SR-61/THOMASVILLE RD")
-  const parts1 = name1.split('/').map(normalizeStreetName);
-  const parts2 = name2.split('/').map(normalizeStreetName);
-
-  for (const p1 of parts1) {
-    for (const p2 of parts2) {
-      if (p1 && p2 && p1.length >= 3 && p2.length >= 3) {
-        if (p1 === p2) return true;
-        if (p1.includes(p2) && p2.length >= threshold) return true;
-        if (p2.includes(p1) && p1.length >= threshold) return true;
-      }
+      if (a1.includes(a2) && a2.length >= threshold) return true;
+      if (a2.includes(a1) && a1.length >= threshold) return true;
     }
   }
 
@@ -172,8 +236,14 @@ async function fetchFDOTForRoad(lat: number, lng: number, roadName: string): Pro
     const data = await response.json();
     if (!data.results || data.results.length === 0) return null;
 
-    // Parse all segments
-    const segments: FDOTSegment[] = [];
+    // Parse all segments with additional FDOT fields
+    interface ExtendedFDOTSegment extends FDOTSegment {
+      routeId?: string;
+      county?: string;
+      roadName?: string;
+    }
+
+    const segments: ExtendedFDOTSegment[] = [];
     for (const result of data.results) {
       const attrs = result.attributes;
       if (attrs && attrs.AADT && Number(attrs.AADT) > 0) {
@@ -183,16 +253,45 @@ async function fetchFDOTForRoad(lat: number, lng: number, roadName: string): Pro
           roadway: attrs.ROADWAY || '',
           descTo: attrs.DESC_TO || '',
           descFrm: attrs.DESC_FRM || '',
+          routeId: attrs.ROUTE_ID || attrs.ROUTEID || '',
+          roadName: attrs.ROAD_NAME || attrs.ROADNAME || '',
         });
       }
     }
 
-    // Find ROADWAY IDs that match this road name
+    // Get all aliases for the road name we're searching for
+    const searchAliases = getRoadAliases(roadName);
+    console.log(`[FDOT] Searching for "${roadName}" with aliases: ${searchAliases.join(', ')}`);
+
+    // Find ROADWAY IDs that match this road name using multiple strategies
     const matchingRoadwayIds = new Set<string>();
+
     for (const seg of segments) {
-      // Check if DESC_TO or DESC_FRM mentions the road
+      // Strategy 1: Check if DESC_TO or DESC_FRM mentions the road
       if (roadNamesMatch(seg.descTo, roadName) || roadNamesMatch(seg.descFrm, roadName)) {
         matchingRoadwayIds.add(seg.roadway);
+        continue;
+      }
+
+      // Strategy 2: Check if ROAD_NAME field matches
+      if (seg.roadName && roadNamesMatch(seg.roadName, roadName)) {
+        matchingRoadwayIds.add(seg.roadway);
+        continue;
+      }
+
+      // Strategy 3: Check if the ROADWAY ID itself contains a matching route number
+      // ROADWAY format is typically like "55010000" where 55 is the route number
+      const roadwayStr = seg.roadway.toString();
+      for (const alias of searchAliases) {
+        // Extract numbers from alias (e.g., "sr263" -> "263")
+        const routeNum = alias.replace(/[^0-9]/g, '');
+        if (routeNum && routeNum.length >= 2) {
+          // FDOT ROADWAY often starts with route number
+          if (roadwayStr.startsWith(routeNum) || roadwayStr.includes(routeNum)) {
+            matchingRoadwayIds.add(seg.roadway);
+            break;
+          }
+        }
       }
     }
 
@@ -205,7 +304,7 @@ async function fetchFDOTForRoad(lat: number, lng: number, roadName: string): Pro
     const matchingSegments = segments.filter(s => matchingRoadwayIds.has(s.roadway));
 
     // Find the best segment (most recent year, then highest AADT)
-    let best: FDOTSegment | null = null;
+    let best: ExtendedFDOTSegment | null = null;
     for (const seg of matchingSegments) {
       if (!best || seg.year > best.year || (seg.year === best.year && seg.aadt > best.aadt)) {
         best = seg;
@@ -214,7 +313,7 @@ async function fetchFDOTForRoad(lat: number, lng: number, roadName: string): Pro
 
     if (!best) return null;
 
-    console.log(`[FDOT] Found VPD for "${roadName}": ${best.aadt} (${best.year})`);
+    console.log(`[FDOT] Found VPD for "${roadName}": ${best.aadt} (${best.year}) ROADWAY=${best.roadway}`);
 
     return {
       roadName,
@@ -288,13 +387,24 @@ async function fetchAllFDOTRoads(lat: number, lng: number): Promise<RoadVPD[]> {
       }
 
       if (best) {
-        // Determine road name - use the most descriptive one
-        let roadName = Array.from(names).find(n => !n.includes('Bridge') && n.length > 3) ||
-                       Array.from(names)[0] ||
-                       `Road ${roadway}`;
+        // Determine road name - check multiple sources
+        let roadName: string;
 
-        // Clean up the name
-        roadName = roadName.replace(/^(CR-\d+\/|SR-\d+\/|US-\d+\/)/, '').trim();
+        // First, try to use a known ROADWAY mapping
+        const roadwayPrefix = roadway.substring(0, 3);
+        const roadwayPrefix2 = roadway.substring(0, 2);
+        if (ROADWAY_TO_NAME[roadwayPrefix]) {
+          roadName = ROADWAY_TO_NAME[roadwayPrefix];
+        } else if (ROADWAY_TO_NAME[roadwayPrefix2]) {
+          roadName = ROADWAY_TO_NAME[roadwayPrefix2];
+        } else {
+          // Fall back to DESC_TO/DESC_FRM names
+          roadName = Array.from(names).find(n => !n.includes('Bridge') && n.length > 3) ||
+                     Array.from(names)[0] ||
+                     `Road ${roadway}`;
+          // Clean up the name
+          roadName = roadName.replace(/^(CR-\d+\/|SR-\d+\/|US-\d+\/)/, '').trim();
+        }
 
         roads.push({
           roadName,
@@ -329,6 +439,21 @@ function extractStreetName(address: string): string | null {
   return streetName.length >= 3 ? streetName : null;
 }
 
+// Get road name at coordinates using reverse geocoding
+async function getRoadNameAtLocation(lat: number, lng: number): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=17`,
+      { headers: { 'User-Agent': 'DroneSense/1.0' } }
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.address?.road || data.address?.street || null;
+  } catch {
+    return null;
+  }
+}
+
 // Fetch TomTom traffic data
 async function fetchTomTomTraffic(lat: number, lng: number, apiKey: string) {
   try {
@@ -361,22 +486,35 @@ export async function POST(request: Request) {
     console.log(`[Traffic] Processing: ${address || `${lat},${lng}`}`);
 
     // STEP 1: Extract property street from address
-    const propertyStreet = address ? extractStreetName(address) : null;
-    console.log(`[Traffic] Property street: ${propertyStreet}`);
+    let propertyStreet = address ? extractStreetName(address) : null;
+    console.log(`[Traffic] Property street from address: ${propertyStreet}`);
 
-    // STEP 2: Find adjacent roads from OpenStreetMap
+    // STEP 2: Use reverse geocoding to get the official road name at this location
+    const reverseGeocodedRoad = await getRoadNameAtLocation(lat, lng);
+    console.log(`[Traffic] Reverse geocoded road: ${reverseGeocodedRoad}`);
+
+    // STEP 3: Find adjacent roads from OpenStreetMap
     const osmRoads = await findAdjacentRoads(lat, lng, parcelBoundary);
     console.log(`[Traffic] OSM adjacent roads: ${osmRoads.join(', ') || 'none'}`);
 
-    // STEP 3: Get all FDOT roads in the area
+    // Add reverse geocoded road to OSM roads if not already present
+    if (reverseGeocodedRoad) {
+      const reverseNormalized = normalizeStreetName(reverseGeocodedRoad);
+      const alreadyHas = osmRoads.some(r => normalizeStreetName(r) === reverseNormalized);
+      if (!alreadyHas) {
+        osmRoads.unshift(reverseGeocodedRoad);
+      }
+    }
+
+    // STEP 4: Get all FDOT roads in the area
     const allFDOTRoads = await fetchAllFDOTRoads(lat, lng);
 
-    // STEP 4: Match property street with FDOT data using ROADWAY ID approach
+    // STEP 5: Match roads with FDOT data using multiple strategies
     const matchedRoads: RoadVPD[] = [];
     const matchedRoadwayIds = new Set<string>();
 
-    // First, search for property street directly in FDOT raw data
-    // This uses the ROADWAY ID matching approach (more accurate)
+    // Strategy 1: Search for property street directly in FDOT raw data
+    // This uses the ROADWAY ID matching approach (most accurate)
     if (propertyStreet) {
       const propertyRoad = await fetchFDOTForRoad(lat, lng, propertyStreet);
       if (propertyRoad && propertyRoad.roadwayId) {
@@ -389,8 +527,35 @@ export async function POST(request: Request) {
       }
     }
 
-    // Then match OSM roads
+    // Strategy 2: If property street didn't match, try the reverse geocoded road
+    if (matchedRoads.length === 0 && reverseGeocodedRoad && reverseGeocodedRoad !== propertyStreet) {
+      const reverseRoad = await fetchFDOTForRoad(lat, lng, reverseGeocodedRoad);
+      if (reverseRoad && reverseRoad.roadwayId) {
+        matchedRoads.push({
+          ...reverseRoad,
+          roadName: reverseGeocodedRoad,
+        });
+        matchedRoadwayIds.add(reverseRoad.roadwayId);
+        console.log(`[Traffic] Matched reverse geocoded "${reverseGeocodedRoad}" to ROADWAY ${reverseRoad.roadwayId}: ${reverseRoad.vpd} VPD`);
+      }
+    }
+
+    // Strategy 3: Match OSM roads with FDOT data
     for (const osmRoad of osmRoads) {
+      // First try direct FDOT lookup
+      if (!matchedRoadwayIds.has(osmRoad)) {
+        const osmFdotRoad = await fetchFDOTForRoad(lat, lng, osmRoad);
+        if (osmFdotRoad && osmFdotRoad.roadwayId && !matchedRoadwayIds.has(osmFdotRoad.roadwayId)) {
+          matchedRoads.push({
+            ...osmFdotRoad,
+            roadName: osmRoad,
+          });
+          matchedRoadwayIds.add(osmFdotRoad.roadwayId);
+          continue;
+        }
+      }
+
+      // Then try matching with pre-fetched FDOT roads
       for (const fdotRoad of allFDOTRoads) {
         if (roadNamesMatch(fdotRoad.roadName, osmRoad) &&
             fdotRoad.roadwayId &&
@@ -405,12 +570,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // If no matches found, use the top FDOT roads (closest/highest VPD)
+    // Strategy 4: If still no matches, use the closest FDOT roads
     if (matchedRoads.length === 0 && allFDOTRoads.length > 0) {
-      // Take top 2 roads by VPD
+      // Take top 2 roads by VPD (they're already sorted by VPD descending)
       const topRoads = allFDOTRoads.slice(0, 2);
       matchedRoads.push(...topRoads);
-      console.log(`[Traffic] No matches, using top FDOT roads`);
+      console.log(`[Traffic] No name matches, using closest FDOT roads`);
     }
 
     console.log(`[Traffic] Final matched roads: ${matchedRoads.map(r => `${r.roadName}:${r.vpd}`).join(', ')}`);
