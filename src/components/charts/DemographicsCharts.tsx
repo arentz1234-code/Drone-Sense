@@ -1,7 +1,8 @@
 'use client';
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ExtendedDemographics } from '@/app/page';
+import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 interface DemographicsChartsProps {
   demographics: ExtendedDemographics;
@@ -70,25 +71,37 @@ export default function DemographicsCharts({ demographics }: DemographicsChartsP
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="metric-card">
-          <p className="metric-card-label">Population (3mi)</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={DATA_SOURCES.census}>Population (3mi)</DataSourceTooltip>
+          </p>
           <p className="metric-card-value">
             {demographics.multiRadius?.threeMile.population.toLocaleString() || demographics.population?.toLocaleString() || 'N/A'}
           </p>
         </div>
         <div className="metric-card">
-          <p className="metric-card-label">Households (3mi)</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={DATA_SOURCES.census}>Households (3mi)</DataSourceTooltip>
+          </p>
           <p className="metric-card-value">
             {demographics.multiRadius?.threeMile.households.toLocaleString() || 'N/A'}
           </p>
         </div>
         <div className="metric-card">
-          <p className="metric-card-label">Median Income</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={DATA_SOURCES.census}>Median Income</DataSourceTooltip>
+          </p>
           <p className="metric-card-value">
             ${(demographics.medianHouseholdIncome || 0).toLocaleString()}
           </p>
         </div>
         <div className="metric-card">
-          <p className="metric-card-label">Growth Trend</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={{
+              name: 'Population Growth Model',
+              description: 'Calculated from Census ACS 5-year estimates comparing recent vs historical data',
+              type: 'calculation'
+            }}>Growth Trend</DataSourceTooltip>
+          </p>
           <p className="metric-card-value">
             {demographics.growthTrend ? `+${demographics.growthTrend}%` : 'N/A'}
           </p>

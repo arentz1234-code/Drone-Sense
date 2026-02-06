@@ -1,6 +1,7 @@
 'use client';
 
 import { EnvironmentalRisk } from '@/app/page';
+import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 interface RiskAssessmentProps {
   coordinates: { lat: number; lng: number };
@@ -86,7 +87,7 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
               <svg className="w-5 h-5 text-[var(--accent-blue)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
               </svg>
-              Flood Zone
+              <DataSourceTooltip source={DATA_SOURCES.fema}>Flood Zone</DataSourceTooltip>
             </h4>
             <span className={getRiskIndicatorClass(environmentalRisk.floodZone.risk)}>
               {environmentalRisk.floodZone.risk.toUpperCase()}
@@ -108,7 +109,7 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
               <svg className="w-5 h-5 text-[var(--accent-green)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
               </svg>
-              Wetlands
+              <DataSourceTooltip source={DATA_SOURCES.fws}>Wetlands</DataSourceTooltip>
             </h4>
             <span className={getRiskIndicatorClass(environmentalRisk.wetlands.present ? 'medium' : 'low')}>
               {environmentalRisk.wetlands.present ? 'PRESENT' : 'NONE'}
@@ -140,7 +141,7 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
               <svg className="w-5 h-5 text-[var(--accent-orange)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
-              Brownfields
+              <DataSourceTooltip source={DATA_SOURCES.epa}>Brownfields</DataSourceTooltip>
             </h4>
             <span className={getRiskIndicatorClass(environmentalRisk.brownfields.present ? 'medium' : 'low')}>
               {environmentalRisk.brownfields.count > 0 ? `${environmentalRisk.brownfields.count} SITES` : 'NONE'}
@@ -168,7 +169,7 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
               <svg className="w-5 h-5 text-[var(--accent-red)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
-              Superfund Sites
+              <DataSourceTooltip source={DATA_SOURCES.epa}>Superfund Sites</DataSourceTooltip>
             </h4>
             <span className={getRiskIndicatorClass(environmentalRisk.superfund.present ? 'high' : 'low')}>
               {environmentalRisk.superfund.count > 0 ? `${environmentalRisk.superfund.count} SITES` : 'NONE'}

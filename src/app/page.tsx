@@ -171,8 +171,10 @@ export interface MarketComp {
   saleDate: string;
   sqft: number;
   pricePerSqft: number;
-  distance: number;
+  distance: string;
   propertyType: string;
+  yearBuilt?: number;
+  lotSize?: number;
 }
 
 export interface PropertyData {

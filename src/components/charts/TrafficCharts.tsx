@@ -1,7 +1,8 @@
 'use client';
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar } from 'recharts';
 import { TrafficInfo } from '@/app/page';
+import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 interface TrafficChartsProps {
   trafficData: TrafficInfo;
@@ -74,19 +75,31 @@ export default function TrafficCharts({ trafficData }: TrafficChartsProps) {
       {/* Traffic Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="metric-card">
-          <p className="metric-card-label">Vehicles Per Day</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={DATA_SOURCES.trafficEstimate}>Vehicles Per Day</DataSourceTooltip>
+          </p>
           <p className="metric-card-value">{trafficData.estimatedVPD.toLocaleString()}</p>
         </div>
         <div className="metric-card">
-          <p className="metric-card-label">VPD Range</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={DATA_SOURCES.trafficEstimate}>VPD Range</DataSourceTooltip>
+          </p>
           <p className="text-lg font-semibold text-[var(--text-primary)]">{trafficData.vpdRange}</p>
         </div>
         <div className="metric-card">
-          <p className="metric-card-label">Road Type</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={DATA_SOURCES.overpass}>Road Type</DataSourceTooltip>
+          </p>
           <p className="text-lg font-semibold text-[var(--text-primary)]">{trafficData.roadType}</p>
         </div>
         <div className="metric-card">
-          <p className="metric-card-label">Traffic Level</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={{
+              name: 'Traffic Classification',
+              description: 'Categorized based on VPD thresholds: Low (<8K), Moderate (8-15K), High (>15K)',
+              type: 'calculation'
+            }}>Traffic Level</DataSourceTooltip>
+          </p>
           <p className={`text-lg font-semibold ${getTrafficLevelColor(trafficData.trafficLevel)}`}>
             {trafficData.trafficLevel}
           </p>

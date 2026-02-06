@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MarketComp } from '@/app/page';
+import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 interface MarketCompsProps {
   coordinates: { lat: number; lng: number };
@@ -42,7 +43,7 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
   // Sort comps
   const sortedComps = [...comps].sort((a, b) => {
     switch (sortBy) {
-      case 'distance': return a.distance - b.distance;
+      case 'distance': return parseFloat(a.distance) - parseFloat(b.distance);
       case 'price': return b.salePrice - a.salePrice;
       case 'date': return new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime();
       default: return 0;
@@ -87,19 +88,31 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
       {/* Market Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="metric-card">
-          <p className="metric-card-label">Avg. Price/SqFt</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={DATA_SOURCES.marketEstimate}>Avg. Price/SqFt</DataSourceTooltip>
+          </p>
           <p className="metric-card-value">${avgPricePerSqft}</p>
         </div>
         <div className="metric-card">
-          <p className="metric-card-label">Median Sale Price</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={DATA_SOURCES.marketEstimate}>Median Sale Price</DataSourceTooltip>
+          </p>
           <p className="metric-card-value">{formatCurrency(medianPrice)}</p>
         </div>
         <div className="metric-card">
-          <p className="metric-card-label">Total Volume</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={{
+              name: 'Sales Volume Calculation',
+              description: 'Sum of all comparable sale prices within the search radius',
+              type: 'calculation'
+            }}>Total Volume</DataSourceTooltip>
+          </p>
           <p className="metric-card-value">{formatCurrency(totalVolume)}</p>
         </div>
         <div className="metric-card">
-          <p className="metric-card-label">Comparables Found</p>
+          <p className="metric-card-label">
+            <DataSourceTooltip source={DATA_SOURCES.marketEstimate}>Comparables Found</DataSourceTooltip>
+          </p>
           <p className="metric-card-value">{comps.length}</p>
         </div>
       </div>
@@ -196,7 +209,7 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
                   <td className="py-3 px-4 text-center">
                     <span className="px-2 py-1 bg-[var(--bg-tertiary)] rounded text-xs">{comp.propertyType}</span>
                   </td>
-                  <td className="py-3 px-4 text-right">{comp.distance.toFixed(2)} mi</td>
+                  <td className="py-3 px-4 text-right">{comp.distance}</td>
                   <td className="py-3 px-4 text-right text-[var(--text-muted)]">{comp.saleDate}</td>
                 </tr>
               ))}
@@ -211,7 +224,7 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
           <svg className="w-5 h-5 text-[var(--accent-purple)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          Estimated Rental Rates (per sq ft/year)
+          <DataSourceTooltip source={DATA_SOURCES.rentEstimate}>Estimated Rental Rates (per sq ft/year)</DataSourceTooltip>
         </h4>
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center">
