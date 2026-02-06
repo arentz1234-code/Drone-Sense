@@ -207,8 +207,11 @@ async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet
 
     console.log(`Found ${allRoads.length} FDOT road segments`);
 
+    // Track if we found matching roads for the property street
+    let hasPropertyMatch = false;
+
     // If we have a property street, filter to only matching roads
-    let matchingRoads = allRoads;
+    let matchingRoads: typeof allRoads = [];
     if (propertyStreet) {
       // STEP 1: Find the ROADWAY ID for the property street
       // Look for segments where the property street name appears in DESC_TO
@@ -237,6 +240,7 @@ async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet
       // This captures ALL segments on the same road, even if intersection names don't mention the road
       if (roadwayIds.size > 0) {
         matchingRoads = allRoads.filter(road => roadwayIds.has(road.rawData.ROADWAY));
+        hasPropertyMatch = true;
         console.log(`Segments on matching ROADWAYs (${matchingRoads.length} total):`);
         for (const r of matchingRoads.slice(0, 10)) {
           console.log(`  ${r.rawData.DESC_FRM} -> ${r.rawData.DESC_TO}: ${r.aadt} (${r.year})`);
@@ -253,6 +257,7 @@ async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet
 
         if (roadwayIds.size > 0) {
           matchingRoads = allRoads.filter(road => roadwayIds.has(road.rawData.ROADWAY));
+          hasPropertyMatch = true;
           console.log(`Segments from DESC_FRM match:`, matchingRoads.length);
         } else {
           console.log(`No ROADWAY matches found for "${propertyStreet}"`);
@@ -261,9 +266,6 @@ async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet
 
       console.log(`Final matching roads for "${propertyStreet}": ${matchingRoads.length} segments`);
     }
-
-    // Track if we found matching roads for the property street
-    const hasPropertyMatch = matchingRoads.length > 0;
 
     // If no matching roads, fall back to all roads (but prefer ones at exact location)
     if (matchingRoads.length === 0) {
