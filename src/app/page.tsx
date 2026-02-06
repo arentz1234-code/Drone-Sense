@@ -66,6 +66,9 @@ export interface TrafficInfo {
   congestionPercent: number;
   currentSpeed?: number;
   freeFlowSpeed?: number;
+  roads?: Array<{ roadName: string; vpd: number; year: number }>;
+  hasMultipleRoads?: boolean;
+  averageVPD?: number;
 }
 
 export interface BusinessSuitability {

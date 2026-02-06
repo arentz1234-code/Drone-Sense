@@ -2,65 +2,110 @@ import { NextResponse } from 'next/server';
 
 interface TrafficRequest {
   coordinates: { lat: number; lng: number };
-  address?: string;  // Property address to extract street name
-  stateCode?: string;
+  address?: string;
+  parcelBoundary?: Array<[number, number]>;
 }
 
-interface FDOTAADTResult {
-  aadt: number;
-  roadway: string;
+interface RoadVPD {
+  roadName: string;
+  vpd: number;
   year: number;
   source: string;
+  roadwayId?: string;
+}
+
+interface FDOTSegment {
+  aadt: number;
+  year: number;
+  roadway: string;
+  descTo: string;
+  descFrm: string;
 }
 
 export interface TrafficData {
-  // Real-time data from TomTom
-  currentSpeed: number;
-  freeFlowSpeed: number;
-  currentTravelTime: number;
-  freeFlowTravelTime: number;
-  confidence: number;
-  roadType: string;
-  trafficLevel: string;
-  congestionPercent: number;
-  // VPD data
+  // Individual road VPD data
+  roads: RoadVPD[];
+  // Primary/average VPD (for backwards compatibility)
   estimatedVPD: number;
   vpdRange: string;
   vpdSource: string;
-}
-
-interface FlowData {
-  frc: string;
+  // Road info
+  roadType: string;
+  // Real-time traffic
   currentSpeed: number;
   freeFlowSpeed: number;
   currentTravelTime: number;
   freeFlowTravelTime: number;
   confidence: number;
+  trafficLevel: string;
+  congestionPercent: number;
+  // Multiple roads indicator
+  hasMultipleRoads: boolean;
+  averageVPD?: number;
 }
 
-// Extract street name from a property address
-function extractStreetName(address: string): string | null {
-  if (!address) return null;
+// Find adjacent roads using OpenStreetMap Overpass API
+async function findAdjacentRoads(lat: number, lng: number, boundaryCoords?: Array<[number, number]>): Promise<string[]> {
+  try {
+    const overpassUrl = 'https://overpass-api.de/api/interpreter';
 
-  // Common patterns for street addresses
-  // "1817 Thomasville Rd, Tallahassee, FL 32303" -> "Thomasville"
-  // "123 North Main Street, City, State" -> "Main"
+    // Search for roads within 100m of the point (or along the parcel boundary if provided)
+    let query: string;
 
-  // Remove the street number at the beginning
-  const withoutNumber = address.replace(/^\d+\s*/, '');
+    if (boundaryCoords && boundaryCoords.length > 3) {
+      // Create a polygon query using parcel boundary
+      const polyStr = boundaryCoords.map(([lat, lng]) => `${lat} ${lng}`).join(' ');
+      query = `
+        [out:json][timeout:15];
+        (
+          way["highway"~"primary|secondary|tertiary|residential|trunk|motorway"](around:50,${lat},${lng});
+        );
+        out body;
+        >;
+        out skel qt;
+      `;
+    } else {
+      // Simple radius search
+      query = `
+        [out:json][timeout:15];
+        (
+          way["highway"~"primary|secondary|tertiary|residential|trunk|motorway"](around:100,${lat},${lng});
+        );
+        out body;
+        >;
+        out skel qt;
+      `;
+    }
 
-  // Take the first part (before the first comma)
-  const streetPart = withoutNumber.split(',')[0].trim();
+    const response = await fetch(overpassUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`,
+    });
 
-  // Remove common directional prefixes
-  const withoutDirection = streetPart.replace(/^(North|South|East|West|N|S|E|W|NE|NW|SE|SW)\s+/i, '');
+    if (!response.ok) {
+      console.log('[Traffic] Overpass API error:', response.status);
+      return [];
+    }
 
-  // Remove common street suffixes to get the core name
-  const withoutSuffix = withoutDirection.replace(/\s+(Road|Rd|Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Circle|Cir|Parkway|Pkwy|Highway|Hwy|Place|Pl|Trail|Trl|Terrace|Ter)\.?$/i, '');
+    const data = await response.json();
+    const roadNames: string[] = [];
 
-  // Return the core street name (at least 3 characters)
-  const streetName = withoutSuffix.trim();
-  return streetName.length >= 3 ? streetName : null;
+    for (const el of data.elements || []) {
+      if (el.type === 'way' && el.tags?.name) {
+        const name = el.tags.name;
+        if (!roadNames.includes(name)) {
+          roadNames.push(name);
+        }
+      }
+    }
+
+    console.log('[Traffic] Found adjacent roads from OSM:', roadNames);
+    return roadNames;
+  } catch (error) {
+    console.error('[Traffic] Overpass error:', error);
+    return [];
+  }
 }
 
 // Normalize street name for comparison
@@ -69,362 +114,228 @@ function normalizeStreetName(name: string): string {
     .toLowerCase()
     .replace(/\s+(road|rd|street|st|avenue|ave|boulevard|blvd|drive|dr|lane|ln|way|court|ct|circle|cir|parkway|pkwy|highway|hwy|place|pl|trail|trl|terrace|ter)\.?$/i, '')
     .replace(/^(north|south|east|west|n|s|e|w|ne|nw|se|sw)\s+/i, '')
+    .replace(/^(sr-\d+\/|cr-\d+\/|us-\d+\/)/i, '')
     .replace(/[^a-z0-9]/g, '')
     .trim();
 }
 
-// Check if a road name matches the property street
-function roadMatchesProperty(roadName: string, propertyStreet: string): boolean {
-  if (!roadName || !propertyStreet) return false;
+// Check if two road names match
+function roadNamesMatch(name1: string, name2: string): boolean {
+  if (!name1 || !name2) return false;
+  if (name1.toUpperCase() === 'N/A' || name2.toUpperCase() === 'N/A') return false;
 
-  // Skip obvious non-matches like "N/A"
-  if (roadName.toUpperCase() === 'N/A' || roadName.trim() === '') return false;
+  const n1 = normalizeStreetName(name1);
+  const n2 = normalizeStreetName(name2);
 
-  const normalizedRoad = normalizeStreetName(roadName);
-  const normalizedProperty = normalizeStreetName(propertyStreet);
-
-  if (!normalizedRoad || !normalizedProperty) return false;
-
-  // Require minimum length for matches to avoid false positives like "na" in "thomasville"
-  if (normalizedRoad.length < 4 || normalizedProperty.length < 4) return false;
+  if (!n1 || !n2 || n1.length < 3 || n2.length < 3) return false;
 
   // Exact match
-  if (normalizedRoad === normalizedProperty) return true;
+  if (n1 === n2) return true;
 
-  // One contains the other, but only if the contained part is substantial (at least 70% of the shorter string)
-  const minLength = Math.min(normalizedRoad.length, normalizedProperty.length);
-  const threshold = Math.max(4, Math.floor(minLength * 0.7));
+  // One contains the other (for compound names)
+  const minLen = Math.min(n1.length, n2.length);
+  const threshold = Math.max(3, Math.floor(minLen * 0.6));
 
-  if (normalizedRoad.includes(normalizedProperty) && normalizedProperty.length >= threshold) {
-    return true;
-  }
-  if (normalizedProperty.includes(normalizedRoad) && normalizedRoad.length >= threshold) {
-    return true;
-  }
+  if (n1.includes(n2) && n2.length >= threshold) return true;
+  if (n2.includes(n1) && n1.length >= threshold) return true;
 
-  // Handle compound names like "SR-61/THOMASVILLE RD" - split and check each part
-  const roadParts = roadName.split('/').map(part => normalizeStreetName(part));
-  for (const part of roadParts) {
-    if (part && part.length >= 4) {
-      if (part === normalizedProperty) return true;
-      if (part.includes(normalizedProperty) && normalizedProperty.length >= threshold) return true;
-      if (normalizedProperty.includes(part) && part.length >= threshold) return true;
+  // Check compound names (e.g., "SR-61/THOMASVILLE RD")
+  const parts1 = name1.split('/').map(normalizeStreetName);
+  const parts2 = name2.split('/').map(normalizeStreetName);
+
+  for (const p1 of parts1) {
+    for (const p2 of parts2) {
+      if (p1 && p2 && p1.length >= 3 && p2.length >= 3) {
+        if (p1 === p2) return true;
+        if (p1.includes(p2) && p2.length >= threshold) return true;
+        if (p2.includes(p1) && p1.length >= threshold) return true;
+      }
     }
   }
 
   return false;
 }
 
-// Get road name via reverse geocoding
-async function getRoadName(lat: number, lng: number): Promise<string | null> {
+// Fetch FDOT AADT data for a specific road
+async function fetchFDOTForRoad(lat: number, lng: number, roadName: string): Promise<RoadVPD | null> {
   try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=17`,
-      {
-        headers: {
-          'User-Agent': 'DroneSense/1.0 (https://drone-sense.vercel.app; Commercial Site Analysis)',
-        },
-      }
-    );
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-
-    // Try to get the road name from the address
-    if (data.address) {
-      return data.address.road || data.address.street || data.address.highway || null;
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Road name lookup error:', error);
-    return null;
-  }
-}
-
-// Fetch official AADT from Florida DOT's ArcGIS service, filtered by property street
-async function fetchFloridaAADTFiltered(lat: number, lng: number, propertyStreet: string | null): Promise<FDOTAADTResult | null> {
-  try {
-    // Use ArcGIS identify endpoint to find AADT at this location
-    // Layer 7 is the AADT layer
-    // Use a larger search radius (~1.5km) to find the property's fronting road
-    // and capture all segments along that road (not just the closest intersection)
-    // This ensures we get the highest traffic count segment for major roads
+    // Use a moderate search area to find the road while staying close to the property
     const mapExtent = `${lng - 0.015},${lat - 0.015},${lng + 0.015},${lat + 0.015}`;
     const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
       `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
       `layers=all:7&tolerance=200&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
       `returnGeometry=false&f=json`;
 
-    console.log('Fetching Florida DOT AADT (filtered)...');
-    console.log(`Property street to match: ${propertyStreet}`);
     const response = await fetch(url);
-
-    if (!response.ok) {
-      console.log('FDOT API error:', response.status);
-      return null;
-    }
+    if (!response.ok) return null;
 
     const data = await response.json();
+    if (!data.results || data.results.length === 0) return null;
 
-    if (!data.results || data.results.length === 0) {
-      console.log('No FDOT AADT data found at this location');
-      return null;
-    }
-
-    // Parse all results and their road names
-    const allRoads: Array<{
-      aadt: number;
-      roadName: string;
-      year: number;
-      rawData: { DESC_TO: string; DESC_FRM: string; ROADWAY: string };
-    }> = [];
-
+    // Parse all segments
+    const segments: FDOTSegment[] = [];
     for (const result of data.results) {
       const attrs = result.attributes;
       if (attrs && attrs.AADT && Number(attrs.AADT) > 0) {
-        const aadt = Number(attrs.AADT);
-        const year = Number(attrs.YEAR_) || new Date().getFullYear();
-
-        // Get all possible road name fields
-        const descTo = attrs.DESC_TO || '';
-        const descFrm = attrs.DESC_FRM || '';
-        const roadway = attrs.ROADWAY || '';
-
-        // Build road name - try DESC_TO first, then DESC_FRM
-        let roadName = descTo || descFrm || 'Unknown Road';
-        roadName = roadName.replace(/^(CR-\d+\/|SR-\d+\/|US-\d+\/)/, '').trim();
-
-        allRoads.push({
-          aadt,
-          roadName,
-          year,
-          rawData: { DESC_TO: descTo, DESC_FRM: descFrm, ROADWAY: roadway }
+        segments.push({
+          aadt: Number(attrs.AADT),
+          year: Number(attrs.YEAR_) || 2024,
+          roadway: attrs.ROADWAY || '',
+          descTo: attrs.DESC_TO || '',
+          descFrm: attrs.DESC_FRM || '',
         });
       }
     }
 
-    console.log(`Found ${allRoads.length} FDOT road segments`);
-
-    // Track if we found matching roads for the property street
-    let hasPropertyMatch = false;
-
-    // If we have a property street, filter to only matching roads
-    let matchingRoads: typeof allRoads = [];
-    if (propertyStreet) {
-      // STEP 1: Find the ROADWAY ID for the property street
-      // Look for segments where the property street name appears in DESC_TO
-      // Important: Look for patterns like "SR-61/THOMASVILLE RD" where the road name
-      // appears as the segment terminus (meaning THIS segment is ON that road)
-      const roadwayIds = new Set<string>();
-
-      // First pass: find ROADWAY IDs from segments that END at the property street
-      // These are segments ON the property street that terminate at a named point
-      for (const road of allRoads) {
-        const descTo = road.rawData.DESC_TO || '';
-
-        // Check if DESC_TO contains the street name (e.g., "SR-61/THOMASVILLE RD")
-        // This indicates the segment is ON that road
-        if (roadMatchesProperty(descTo, propertyStreet)) {
-          if (road.rawData.ROADWAY) {
-            roadwayIds.add(road.rawData.ROADWAY);
-            console.log(`Found ROADWAY ${road.rawData.ROADWAY} from DESC_TO: ${descTo}`);
-          }
-        }
-      }
-
-      console.log(`Found ROADWAY IDs for "${propertyStreet}" (pass 1):`, Array.from(roadwayIds).join(', ') || 'none');
-
-      // STEP 2: Get ALL segments with those ROADWAY IDs
-      // This captures ALL segments on the same road, even if intersection names don't mention the road
-      if (roadwayIds.size > 0) {
-        matchingRoads = allRoads.filter(road => roadwayIds.has(road.rawData.ROADWAY));
-        hasPropertyMatch = true;
-        console.log(`Segments on matching ROADWAYs (${matchingRoads.length} total):`);
-        for (const r of matchingRoads.slice(0, 10)) {
-          console.log(`  ${r.rawData.DESC_FRM} -> ${r.rawData.DESC_TO}: ${r.aadt} (${r.year})`);
-        }
-      } else {
-        // Fallback: try matching DESC_FRM as well
-        for (const road of allRoads) {
-          if (roadMatchesProperty(road.rawData.DESC_FRM, propertyStreet)) {
-            if (road.rawData.ROADWAY) {
-              roadwayIds.add(road.rawData.ROADWAY);
-            }
-          }
-        }
-
-        if (roadwayIds.size > 0) {
-          matchingRoads = allRoads.filter(road => roadwayIds.has(road.rawData.ROADWAY));
-          hasPropertyMatch = true;
-          console.log(`Segments from DESC_FRM match:`, matchingRoads.length);
-        } else {
-          console.log(`No ROADWAY matches found for "${propertyStreet}"`);
-        }
-      }
-
-      console.log(`Final matching roads for "${propertyStreet}": ${matchingRoads.length} segments`);
-    }
-
-    // If no matching roads, fall back to all roads (but prefer ones at exact location)
-    if (matchingRoads.length === 0) {
-      console.log('No matching roads found for property street, using closest road');
-      matchingRoads = allRoads;
-    }
-
-    // Get the segment with the most recent data, then highest AADT
-    // Prioritize recent data since older counts may be outdated
-    let bestResult: FDOTAADTResult | null = null;
-    for (const road of matchingRoads) {
-      // Prefer: most recent year first, then highest AADT
-      if (!bestResult ||
-          road.year > bestResult.year ||
-          (road.year === bestResult.year && road.aadt > bestResult.aadt)) {
-        // Only use propertyStreet as display name if we actually matched the property's road
-        // If we fell back to nearby roads, use the actual road name from the data
-        const displayName = hasPropertyMatch ? (propertyStreet || road.roadName) : road.roadName;
-        bestResult = {
-          aadt: road.aadt,
-          roadway: displayName,
-          year: road.year,
-          source: 'Florida DOT Official AADT'
-        };
+    // Find ROADWAY IDs that match this road name
+    const matchingRoadwayIds = new Set<string>();
+    for (const seg of segments) {
+      // Check if DESC_TO or DESC_FRM mentions the road
+      if (roadNamesMatch(seg.descTo, roadName) || roadNamesMatch(seg.descFrm, roadName)) {
+        matchingRoadwayIds.add(seg.roadway);
       }
     }
 
-    if (bestResult) {
-      console.log(`Selected FDOT AADT: ${bestResult.aadt} on ${bestResult.roadway} (${bestResult.year})`);
+    if (matchingRoadwayIds.size === 0) {
+      console.log(`[FDOT] No ROADWAY match for "${roadName}"`);
+      return null;
     }
 
-    return bestResult;
+    // Get all segments with matching ROADWAY IDs
+    const matchingSegments = segments.filter(s => matchingRoadwayIds.has(s.roadway));
+
+    // Find the best segment (most recent year, then highest AADT)
+    let best: FDOTSegment | null = null;
+    for (const seg of matchingSegments) {
+      if (!best || seg.year > best.year || (seg.year === best.year && seg.aadt > best.aadt)) {
+        best = seg;
+      }
+    }
+
+    if (!best) return null;
+
+    console.log(`[FDOT] Found VPD for "${roadName}": ${best.aadt} (${best.year})`);
+
+    return {
+      roadName,
+      vpd: best.aadt,
+      year: best.year,
+      source: 'Florida DOT AADT',
+      roadwayId: best.roadway,
+    };
   } catch (error) {
-    console.error('Florida DOT AADT fetch error:', error);
+    console.error(`[FDOT] Error fetching for "${roadName}":`, error);
     return null;
   }
 }
 
-// Fetch official AADT from Florida DOT's ArcGIS service (legacy - unfiltered)
-async function fetchFloridaAADT(lat: number, lng: number): Promise<FDOTAADTResult | null> {
+// Fetch all FDOT data near location and group by road
+async function fetchAllFDOTRoads(lat: number, lng: number): Promise<RoadVPD[]> {
   try {
-    // Use ArcGIS identify endpoint to find AADT at this location
-    // Layer 7 is the AADT layer
-    const mapExtent = `${lng - 0.01},${lat - 0.01},${lng + 0.01},${lat + 0.01}`;
+    const mapExtent = `${lng - 0.015},${lat - 0.015},${lng + 0.015},${lat + 0.015}`;
     const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
       `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
-      `layers=all:7&tolerance=100&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
+      `layers=all:7&tolerance=200&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
       `returnGeometry=false&f=json`;
 
-    console.log('Fetching Florida DOT AADT...');
     const response = await fetch(url);
-
-    if (!response.ok) {
-      console.log('FDOT API error:', response.status);
-      return null;
-    }
+    if (!response.ok) return [];
 
     const data = await response.json();
+    if (!data.results || data.results.length === 0) return [];
 
-    if (!data.results || data.results.length === 0) {
-      console.log('No FDOT AADT data found at this location');
-      return null;
-    }
+    // Group segments by ROADWAY ID
+    const roadwayMap = new Map<string, { segments: FDOTSegment[], names: Set<string> }>();
 
-    // Get the result with the highest AADT (busiest road nearby)
-    // Prefer more recent data when AADTs are similar
-    let bestResult: FDOTAADTResult | null = null;
     for (const result of data.results) {
       const attrs = result.attributes;
-      if (attrs && attrs.AADT && Number(attrs.AADT) > 0) {
-        const aadt = Number(attrs.AADT);
-        const year = Number(attrs.YEAR_) || new Date().getFullYear();
+      if (attrs && attrs.AADT && Number(attrs.AADT) > 0 && attrs.ROADWAY) {
+        const roadway = attrs.ROADWAY;
 
-        // Build road name from DESC_FRM (e.g., "THOMASVILLE RD" from "CR-158/THARPE ST")
-        // The DESC_TO often contains the main road name
-        let roadName = attrs.DESC_TO || attrs.DESC_FRM || 'Unknown Road';
-        // Clean up common prefixes
-        roadName = roadName.replace(/^(CR-\d+\/|SR-\d+\/|US-\d+\/)/, '').trim();
+        if (!roadwayMap.has(roadway)) {
+          roadwayMap.set(roadway, { segments: [], names: new Set() });
+        }
 
-        // Prefer higher AADT, or same AADT with newer year
-        if (!bestResult || aadt > bestResult.aadt || (aadt === bestResult.aadt && year > bestResult.year)) {
-          bestResult = {
-            aadt: aadt,
-            roadway: roadName,
-            year: year,
-            source: 'Florida DOT Official AADT'
-          };
+        const entry = roadwayMap.get(roadway)!;
+        entry.segments.push({
+          aadt: Number(attrs.AADT),
+          year: Number(attrs.YEAR_) || 2024,
+          roadway,
+          descTo: attrs.DESC_TO || '',
+          descFrm: attrs.DESC_FRM || '',
+        });
+
+        // Collect road names from DESC_TO and DESC_FRM
+        if (attrs.DESC_TO && attrs.DESC_TO !== 'N/A') {
+          entry.names.add(attrs.DESC_TO);
+        }
+        if (attrs.DESC_FRM && attrs.DESC_FRM !== 'N/A') {
+          entry.names.add(attrs.DESC_FRM);
         }
       }
     }
 
-    if (bestResult) {
-      console.log(`Found FDOT AADT: ${bestResult.aadt} on ${bestResult.roadway} (${bestResult.year})`);
+    // Convert to RoadVPD array - get best segment for each ROADWAY
+    const roads: RoadVPD[] = [];
+
+    for (const [roadway, { segments, names }] of roadwayMap.entries()) {
+      // Find best segment (most recent, then highest AADT)
+      let best: FDOTSegment | null = null;
+      for (const seg of segments) {
+        if (!best || seg.year > best.year || (seg.year === best.year && seg.aadt > best.aadt)) {
+          best = seg;
+        }
+      }
+
+      if (best) {
+        // Determine road name - use the most descriptive one
+        let roadName = Array.from(names).find(n => !n.includes('Bridge') && n.length > 3) ||
+                       Array.from(names)[0] ||
+                       `Road ${roadway}`;
+
+        // Clean up the name
+        roadName = roadName.replace(/^(CR-\d+\/|SR-\d+\/|US-\d+\/)/, '').trim();
+
+        roads.push({
+          roadName,
+          vpd: best.aadt,
+          year: best.year,
+          source: 'Florida DOT AADT',
+          roadwayId: roadway,
+        });
+      }
     }
 
-    return bestResult;
+    // Sort by VPD descending
+    roads.sort((a, b) => b.vpd - a.vpd);
+
+    console.log(`[FDOT] Found ${roads.length} unique roads:`, roads.map(r => `${r.roadName}: ${r.vpd}`).join(', '));
+
+    return roads;
   } catch (error) {
-    console.error('Florida DOT AADT fetch error:', error);
-    return null;
+    console.error('[FDOT] Error fetching all roads:', error);
+    return [];
   }
 }
 
-// FRC priority - lower number = more major road
-const FRC_PRIORITY: Record<string, number> = {
-  'FRC0': 0,  // Motorway/Freeway - highest priority
-  'FRC1': 1,  // Major Road
-  'FRC2': 2,  // Other Major Road
-  'FRC3': 3,  // Secondary Road
-  'FRC4': 4,  // Local Connecting Road
-  'FRC5': 5,  // Local Road High Importance
-  'FRC6': 6,  // Local Road - lowest priority
-};
-
-// Estimate VPD based on road functional class (FRC)
-// These are typical AADT ranges from FHWA Highway Statistics
-function estimateVPD(frc: string, freeFlowSpeed: number): {
-  estimatedVPD: number;
-  vpdRange: string;
-  source: string;
-} {
-  // Typical VPD ranges by road class (from FHWA data)
-  const vpdByFRC: Record<string, { min: number; max: number; typical: number }> = {
-    'FRC0': { min: 30000, max: 150000, typical: 75000 },  // Motorway/Freeway
-    'FRC1': { min: 15000, max: 50000, typical: 30000 },   // Major Road
-    'FRC2': { min: 10000, max: 35000, typical: 20000 },   // Other Major Road
-    'FRC3': { min: 5000, max: 20000, typical: 12000 },    // Secondary Road
-    'FRC4': { min: 2000, max: 10000, typical: 5000 },     // Local Connecting Road
-    'FRC5': { min: 1000, max: 5000, typical: 2500 },      // Local Road High Importance
-    'FRC6': { min: 100, max: 2000, typical: 800 },        // Local Road
-  };
-
-  const range = vpdByFRC[frc] || { min: 500, max: 5000, typical: 2000 };
-
-  // Adjust estimate based on free flow speed
-  // Higher speed limits typically correlate with higher capacity/volume
-  let speedFactor = 1;
-  if (freeFlowSpeed > 60) speedFactor = 1.2;
-  else if (freeFlowSpeed > 45) speedFactor = 1.0;
-  else if (freeFlowSpeed > 30) speedFactor = 0.8;
-  else speedFactor = 0.6;
-
-  const estimated = Math.round(range.typical * speedFactor);
-
-  return {
-    estimatedVPD: estimated,
-    vpdRange: `${range.min.toLocaleString()} - ${range.max.toLocaleString()}`,
-    source: 'Estimated (FHWA road class)'
-  };
+// Extract street name from address
+function extractStreetName(address: string): string | null {
+  if (!address) return null;
+  const withoutNumber = address.replace(/^\d+\s*/, '');
+  const streetPart = withoutNumber.split(',')[0].trim();
+  const withoutDirection = streetPart.replace(/^(North|South|East|West|N|S|E|W|NE|NW|SE|SW)\s+/i, '');
+  const withoutSuffix = withoutDirection.replace(/\s+(Road|Rd|Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Circle|Cir|Parkway|Pkwy|Highway|Hwy|Place|Pl|Trail|Trl|Terrace|Ter)\.?$/i, '');
+  const streetName = withoutSuffix.trim();
+  return streetName.length >= 3 ? streetName : null;
 }
 
-// Fetch traffic data for a single point
-async function fetchTrafficPoint(lat: number, lng: number, apiKey: string): Promise<FlowData | null> {
+// Fetch TomTom traffic data
+async function fetchTomTomTraffic(lat: number, lng: number, apiKey: string) {
   try {
     const response = await fetch(
       `https://api.tomtom.com/traffic/services/4/flowSegmentData/relative0/10/json?point=${lat},${lng}&unit=MPH&thickness=1&key=${apiKey}`
     );
-
     if (!response.ok) return null;
-
     const data = await response.json();
     return data.flowSegmentData || null;
   } catch {
@@ -435,167 +346,148 @@ async function fetchTrafficPoint(lat: number, lng: number, apiKey: string): Prom
 export async function POST(request: Request) {
   try {
     const body: TrafficRequest = await request.json();
-    const { coordinates, address } = body;
+    const { coordinates, address, parcelBoundary } = body;
 
     if (!coordinates) {
       return NextResponse.json({ error: 'No coordinates provided' }, { status: 400 });
     }
 
     const apiKey = process.env.TOMTOM_API_KEY;
-
     if (!apiKey) {
-      return NextResponse.json({
-        error: 'Traffic API not configured',
-        message: 'Add TOMTOM_API_KEY to environment variables'
-      }, { status: 500 });
+      return NextResponse.json({ error: 'Traffic API not configured' }, { status: 500 });
     }
 
     const { lat, lng } = coordinates;
+    console.log(`[Traffic] Processing: ${address || `${lat},${lng}`}`);
 
-    // STEP 1: Determine the property's fronting road
-    // First try to extract from the address, then fall back to reverse geocoding
-    let propertyStreet = address ? extractStreetName(address) : null;
-    const reverseGeocodedRoad = await getRoadName(lat, lng);
+    // STEP 1: Extract property street from address
+    const propertyStreet = address ? extractStreetName(address) : null;
+    console.log(`[Traffic] Property street: ${propertyStreet}`);
 
-    // If we couldn't extract from address, use reverse geocoded road
-    if (!propertyStreet && reverseGeocodedRoad) {
-      propertyStreet = reverseGeocodedRoad;
+    // STEP 2: Find adjacent roads from OpenStreetMap
+    const osmRoads = await findAdjacentRoads(lat, lng, parcelBoundary);
+    console.log(`[Traffic] OSM adjacent roads: ${osmRoads.join(', ') || 'none'}`);
+
+    // STEP 3: Get all FDOT roads in the area
+    const allFDOTRoads = await fetchAllFDOTRoads(lat, lng);
+
+    // STEP 4: Match property street with FDOT data using ROADWAY ID approach
+    const matchedRoads: RoadVPD[] = [];
+    const matchedRoadwayIds = new Set<string>();
+
+    // First, search for property street directly in FDOT raw data
+    // This uses the ROADWAY ID matching approach (more accurate)
+    if (propertyStreet) {
+      const propertyRoad = await fetchFDOTForRoad(lat, lng, propertyStreet);
+      if (propertyRoad && propertyRoad.roadwayId) {
+        matchedRoads.push({
+          ...propertyRoad,
+          roadName: propertyStreet,
+        });
+        matchedRoadwayIds.add(propertyRoad.roadwayId);
+        console.log(`[Traffic] Matched property street "${propertyStreet}" to ROADWAY ${propertyRoad.roadwayId}: ${propertyRoad.vpd} VPD`);
+      }
     }
 
-    console.log(`Property address: ${address}`);
-    console.log(`Extracted street name: ${propertyStreet}`);
-    console.log(`Reverse geocoded road: ${reverseGeocodedRoad}`);
-
-    // STEP 2: Get traffic data at the property location (not searching widely)
-    // Only sample very close points to stay on the same road
-    const closeOffsets = [
-      { lat: 0, lng: 0 },           // Center point (on the road)
-      // ~25m in cardinal directions (stay on same road)
-      { lat: 0.00025, lng: 0 },
-      { lat: -0.00025, lng: 0 },
-      { lat: 0, lng: 0.00025 },
-      { lat: 0, lng: -0.00025 },
-    ];
-
-    // Fetch traffic data for close points
-    const results = await Promise.all(
-      closeOffsets.map(offset =>
-        fetchTrafficPoint(lat + offset.lat, lng + offset.lng, apiKey)
-      )
-    );
-
-    // Filter out null results
-    const validResults = results.filter((r): r is FlowData => r !== null);
-
-    if (validResults.length === 0) {
-      return NextResponse.json({
-        error: 'No traffic data available',
-        message: 'No traffic information found for this location'
-      }, { status: 404 });
+    // Then match OSM roads
+    for (const osmRoad of osmRoads) {
+      for (const fdotRoad of allFDOTRoads) {
+        if (roadNamesMatch(fdotRoad.roadName, osmRoad) &&
+            fdotRoad.roadwayId &&
+            !matchedRoadwayIds.has(fdotRoad.roadwayId)) {
+          matchedRoads.push({
+            ...fdotRoad,
+            roadName: osmRoad, // Use OSM name (cleaner)
+          });
+          matchedRoadwayIds.add(fdotRoad.roadwayId);
+          break;
+        }
+      }
     }
 
-    // Use the first valid result (at property location)
-    const flowData = {
-      ...validResults[0],
-      vpd: estimateVPD(validResults[0].frc, validResults[0].freeFlowSpeed)
-    };
+    // If no matches found, use the top FDOT roads (closest/highest VPD)
+    if (matchedRoads.length === 0 && allFDOTRoads.length > 0) {
+      // Take top 2 roads by VPD
+      const topRoads = allFDOTRoads.slice(0, 2);
+      matchedRoads.push(...topRoads);
+      console.log(`[Traffic] No matches, using top FDOT roads`);
+    }
 
-    // Calculate congestion percentage
-    const congestionPercent = flowData.freeFlowSpeed > 0
-      ? Math.round((1 - flowData.currentSpeed / flowData.freeFlowSpeed) * 100)
+    console.log(`[Traffic] Final matched roads: ${matchedRoads.map(r => `${r.roadName}:${r.vpd}`).join(', ')}`);
+
+    // STEP 5: Get TomTom real-time traffic
+    const flowData = await fetchTomTomTraffic(lat, lng, apiKey);
+
+    const currentSpeed = flowData?.currentSpeed || 35;
+    const freeFlowSpeed = flowData?.freeFlowSpeed || 45;
+    const congestionPercent = freeFlowSpeed > 0
+      ? Math.max(0, Math.round((1 - currentSpeed / freeFlowSpeed) * 100))
       : 0;
 
-    // Determine traffic level
-    let trafficLevel = 'Light';
-    if (congestionPercent > 50) {
-      trafficLevel = 'Heavy';
-    } else if (congestionPercent > 25) {
-      trafficLevel = 'Moderate';
-    } else if (congestionPercent > 10) {
-      trafficLevel = 'Light';
+    let trafficLevel = 'Free Flow';
+    if (congestionPercent > 50) trafficLevel = 'Heavy';
+    else if (congestionPercent > 25) trafficLevel = 'Moderate';
+    else if (congestionPercent > 10) trafficLevel = 'Light';
+
+    // STEP 6: Calculate averages and prepare response
+    const hasMultipleRoads = matchedRoads.length > 1;
+    const totalVPD = matchedRoads.reduce((sum, r) => sum + r.vpd, 0);
+    const averageVPD = hasMultipleRoads ? Math.round(totalVPD / matchedRoads.length) : undefined;
+
+    // Primary VPD is the highest among matched roads (or average if multiple)
+    const primaryVPD = matchedRoads.length > 0
+      ? (hasMultipleRoads ? averageVPD! : matchedRoads[0].vpd)
+      : 0;
+
+    // Primary road name
+    const primaryRoad = matchedRoads.length > 0
+      ? matchedRoads[0].roadName
+      : (propertyStreet || 'Unknown');
+
+    // Build VPD source string
+    let vpdSource = '';
+    if (matchedRoads.length > 1) {
+      vpdSource = `Average of ${matchedRoads.length} roads: ${matchedRoads.map(r => r.roadName).join(', ')}`;
+    } else if (matchedRoads.length === 1) {
+      vpdSource = `Florida DOT AADT - ${matchedRoads[0].roadName} (${matchedRoads[0].year})`;
     } else {
-      trafficLevel = 'Free Flow';
+      vpdSource = 'No official data available';
     }
 
-    // Determine road type based on FRC (Functional Road Class)
-    const frcMap: Record<string, string> = {
-      'FRC0': 'Motorway/Freeway',
-      'FRC1': 'Major Road',
-      'FRC2': 'Other Major Road',
-      'FRC3': 'Secondary Road',
-      'FRC4': 'Local Connecting Road',
-      'FRC5': 'Local Road High Importance',
-      'FRC6': 'Local Road',
-    };
-    const roadTypeClassification = frcMap[flowData.frc] || 'Road';
-
-    // STEP 3: Get official AADT from Florida DOT, filtered by property street
-    const isInFlorida = lat >= 24.5 && lat <= 31.0 && lng >= -87.5 && lng <= -80.0;
-
-    let officialAADT: FDOTAADTResult | null = null;
-    if (isInFlorida) {
-      officialAADT = await fetchFloridaAADTFiltered(lat, lng, propertyStreet);
+    // Build VPD range string
+    let vpdRange = '';
+    if (matchedRoads.length > 1) {
+      const minVPD = Math.min(...matchedRoads.map(r => r.vpd));
+      const maxVPD = Math.max(...matchedRoads.map(r => r.vpd));
+      vpdRange = `${minVPD.toLocaleString()} - ${maxVPD.toLocaleString()}`;
+    } else if (matchedRoads.length === 1) {
+      vpdRange = `Official count: ${matchedRoads[0].vpd.toLocaleString()}`;
+    } else {
+      vpdRange = 'N/A';
     }
 
-    // Use the property's fronting road name
-    const displayRoadName = (() => {
-      // If we have official AADT with a good road name that matches property, use it
-      if (officialAADT?.roadway &&
-          officialAADT.roadway !== 'Unknown Road' &&
-          officialAADT.roadway !== 'N/A' &&
-          officialAADT.roadway.trim() !== '') {
-        return officialAADT.roadway;
-      }
-      // Use the property street name
-      if (propertyStreet) {
-        return propertyStreet;
-      }
-      // Fall back to road type classification
-      return roadTypeClassification;
-    })();
-
-    // Use official AADT if available, otherwise use estimate
-    const finalVPD = officialAADT ? officialAADT.aadt : flowData.vpd.estimatedVPD;
-    const finalVPDSource = officialAADT
-      ? `Florida DOT Official AADT - ${displayRoadName} (${officialAADT.year})`
-      : `Estimated from ${displayRoadName} (${roadTypeClassification})`;
-    const finalVPDRange = officialAADT
-      ? `Official count: ${officialAADT.aadt.toLocaleString()}`
-      : flowData.vpd.vpdRange;
-
-    // Validate VPD is a reasonable number (100 - 500,000)
-    let validatedVPD = finalVPD;
-    if (typeof validatedVPD !== 'number' || isNaN(validatedVPD)) {
-      console.warn(`[API] VPD is not a valid number: ${validatedVPD}, type: ${typeof validatedVPD}`);
-      validatedVPD = parseInt(String(validatedVPD), 10) || 0;
-    }
-    if (validatedVPD < 100 || validatedVPD > 500000) {
-      console.warn(`[API] VPD out of reasonable range (100-500,000): ${validatedVPD}`);
-    }
-
-    console.log(`[API] Final road: ${displayRoadName}, VPD: ${validatedVPD}`);
-
-    // Use the VPD - official if available, otherwise estimated
     const trafficData: TrafficData = {
-      currentSpeed: Math.round(flowData.currentSpeed),
-      freeFlowSpeed: Math.round(flowData.freeFlowSpeed),
-      currentTravelTime: flowData.currentTravelTime,
-      freeFlowTravelTime: flowData.freeFlowTravelTime,
-      confidence: flowData.confidence || 0,
-      roadType: displayRoadName,
+      roads: matchedRoads,
+      estimatedVPD: primaryVPD,
+      vpdRange,
+      vpdSource,
+      roadType: primaryRoad,
+      currentSpeed: Math.round(currentSpeed),
+      freeFlowSpeed: Math.round(freeFlowSpeed),
+      currentTravelTime: flowData?.currentTravelTime || 0,
+      freeFlowTravelTime: flowData?.freeFlowTravelTime || 0,
+      confidence: flowData?.confidence || 0,
       trafficLevel,
-      congestionPercent: Math.max(0, congestionPercent),
-      // VPD - prefer official AADT when available
-      estimatedVPD: validatedVPD,
-      vpdRange: finalVPDRange,
-      vpdSource: finalVPDSource,
+      congestionPercent,
+      hasMultipleRoads,
+      averageVPD,
     };
 
-    console.log(`[API] Returning trafficData:`, JSON.stringify(trafficData));
+    console.log(`[Traffic] Response: VPD=${primaryVPD}, Roads=${matchedRoads.length}, HasMultiple=${hasMultipleRoads}`);
 
     return NextResponse.json(trafficData);
   } catch (error) {
-    console.error('Traffic API error:', error);
+    console.error('[Traffic] API error:', error);
     return NextResponse.json({
       error: 'Failed to fetch traffic data',
       message: String(error)

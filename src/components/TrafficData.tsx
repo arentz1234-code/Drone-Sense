@@ -5,7 +5,8 @@ import { TrafficData as TrafficDataType } from '@/app/api/traffic/route';
 
 interface TrafficDataProps {
   coordinates: { lat: number; lng: number } | null;
-  address?: string;  // Property address to determine fronting road
+  address?: string;
+  parcelBoundary?: Array<[number, number]>;
   onDataLoad?: (data: {
     estimatedVPD: number;
     vpdRange: string;
@@ -15,10 +16,13 @@ interface TrafficDataProps {
     congestionPercent: number;
     currentSpeed?: number;
     freeFlowSpeed?: number;
+    roads?: Array<{ roadName: string; vpd: number; year: number }>;
+    hasMultipleRoads?: boolean;
+    averageVPD?: number;
   } | null) => void;
 }
 
-export default function TrafficData({ coordinates, address, onDataLoad }: TrafficDataProps) {
+export default function TrafficData({ coordinates, address, parcelBoundary, onDataLoad }: TrafficDataProps) {
   const [loading, setLoading] = useState(false);
   const [traffic, setTraffic] = useState<TrafficDataType | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,34 +37,21 @@ export default function TrafficData({ coordinates, address, onDataLoad }: Traffi
       const response = await fetch('/api/traffic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ coordinates, address }),
+        body: JSON.stringify({ coordinates, address, parcelBoundary }),
       });
 
       const data = await response.json();
 
-      // DEBUG: Log raw API response
-      console.log('[TrafficData] Raw API response:', JSON.stringify(data, null, 2));
+      console.log('[TrafficData] API Response:', JSON.stringify(data, null, 2));
 
       if (!response.ok) {
         setError(data.message || data.error || 'Failed to fetch traffic data');
         setTraffic(null);
         onDataLoad?.(null);
       } else {
-        // Validate VPD is a reasonable number (100 - 500,000)
-        let validatedVPD = data.estimatedVPD;
-        if (typeof validatedVPD !== 'number' || isNaN(validatedVPD)) {
-          console.warn('[TrafficData] VPD is not a number:', validatedVPD, 'Type:', typeof validatedVPD);
-          validatedVPD = parseInt(String(validatedVPD), 10) || 0;
-        }
-        if (validatedVPD < 100 || validatedVPD > 500000) {
-          console.warn('[TrafficData] VPD out of reasonable range (100-500,000):', validatedVPD);
-        }
-
-        // DEBUG: Log parsed values
-        console.log('[TrafficData] Parsed VPD:', validatedVPD, 'Road:', data.roadType, 'Source:', data.vpdSource);
-
-        const trafficInfo = {
-          estimatedVPD: validatedVPD,
+        setTraffic(data);
+        onDataLoad?.({
+          estimatedVPD: data.estimatedVPD,
           vpdRange: data.vpdRange,
           vpdSource: data.vpdSource,
           roadType: data.roadType,
@@ -68,13 +59,10 @@ export default function TrafficData({ coordinates, address, onDataLoad }: Traffi
           congestionPercent: data.congestionPercent,
           currentSpeed: data.currentSpeed,
           freeFlowSpeed: data.freeFlowSpeed,
-        };
-
-        // DEBUG: Log data being sent to parent
-        console.log('[TrafficData] Sending to parent (onDataLoad):', JSON.stringify(trafficInfo, null, 2));
-
-        setTraffic({ ...data, estimatedVPD: validatedVPD });
-        onDataLoad?.(trafficInfo);
+          roads: data.roads,
+          hasMultipleRoads: data.hasMultipleRoads,
+          averageVPD: data.averageVPD,
+        });
       }
     } catch (err) {
       setError('Failed to fetch traffic data');
@@ -84,7 +72,6 @@ export default function TrafficData({ coordinates, address, onDataLoad }: Traffi
     }
   };
 
-  // Auto-fetch when coordinates or address change
   useEffect(() => {
     if (coordinates) {
       fetchTrafficData();
@@ -94,31 +81,11 @@ export default function TrafficData({ coordinates, address, onDataLoad }: Traffi
 
   const getTrafficColor = (level: string) => {
     switch (level) {
-      case 'Free Flow':
-        return 'text-[var(--accent-green)]';
-      case 'Light':
-        return 'text-[var(--accent-cyan)]';
-      case 'Moderate':
-        return 'text-[var(--accent-yellow)]';
-      case 'Heavy':
-        return 'text-[var(--accent-red)]';
-      default:
-        return 'text-[var(--text-primary)]';
-    }
-  };
-
-  const getTrafficBg = (level: string) => {
-    switch (level) {
-      case 'Free Flow':
-        return 'bg-green-500/20 border-green-500/30';
-      case 'Light':
-        return 'bg-cyan-500/20 border-cyan-500/30';
-      case 'Moderate':
-        return 'bg-yellow-500/20 border-yellow-500/30';
-      case 'Heavy':
-        return 'bg-red-500/20 border-red-500/30';
-      default:
-        return 'bg-[var(--bg-tertiary)] border-[var(--border-color)]';
+      case 'Free Flow': return 'text-[var(--accent-green)]';
+      case 'Light': return 'text-[var(--accent-cyan)]';
+      case 'Moderate': return 'text-[var(--accent-yellow)]';
+      case 'Heavy': return 'text-[var(--accent-red)]';
+      default: return 'text-[var(--text-primary)]';
     }
   };
 
@@ -145,26 +112,21 @@ export default function TrafficData({ coordinates, address, onDataLoad }: Traffi
         </button>
       </div>
 
-      {/* No Location Warning */}
       {!coordinates && (
         <div className="text-center py-8 border border-dashed border-[var(--border-color)] rounded-lg">
           <svg className="w-10 h-10 mx-auto mb-2 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
           </svg>
-          <p className="text-[var(--text-muted)] text-sm">
-            Enter an address to get traffic data
-          </p>
+          <p className="text-[var(--text-muted)] text-sm">Enter an address to get traffic data</p>
         </div>
       )}
 
-      {/* Error Message */}
       {error && (
         <div className="p-4 bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/30 rounded-lg">
           <p className="text-[var(--accent-red)] text-sm">{error}</p>
         </div>
       )}
 
-      {/* Loading */}
       {loading && coordinates && (
         <div className="text-center py-6 text-[var(--text-muted)] text-sm">
           <svg className="animate-spin w-6 h-6 mx-auto mb-2" fill="none" viewBox="0 0 24 24">
@@ -175,40 +137,79 @@ export default function TrafficData({ coordinates, address, onDataLoad }: Traffi
         </div>
       )}
 
-      {/* Traffic Data */}
       {traffic && !loading && (
         <div className="space-y-4">
-          {/* VPD - Prominent Display */}
-          <div className="p-4 rounded-lg border bg-[var(--accent-cyan)]/10 border-[var(--accent-cyan)]/30">
-            <div className="text-center">
-              <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Traffic Volume</span>
-              <p className="text-3xl font-bold text-[var(--accent-cyan)]">
-                {traffic.estimatedVPD.toLocaleString()} <span className="text-lg font-normal">VPD</span>
+          {/* Multiple Roads Display */}
+          {traffic.roads && traffic.roads.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
+                Adjacent Roads ({traffic.roads.length})
               </p>
-              <p className="text-sm text-[var(--text-secondary)] mt-1">
-                Vehicles Per Day
-              </p>
+              {traffic.roads.map((road, index) => (
+                <div key={index} className="p-3 rounded-lg border bg-[var(--bg-tertiary)] border-[var(--border-color)]">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-semibold text-[var(--text-primary)]">{road.roadName}</p>
+                      <p className="text-xs text-[var(--text-muted)]">Florida DOT {road.year}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-bold text-[var(--accent-cyan)]">
+                        {road.vpd.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">VPD</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="mt-3 pt-3 border-t border-[var(--border-color)] grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <span className="text-xs text-[var(--text-muted)]">Typical Range</span>
-                <p className="font-medium">{traffic.vpdRange}</p>
-              </div>
-              <div>
-                <span className="text-xs text-[var(--text-muted)]">Source</span>
-                <p className="font-medium text-xs">{traffic.vpdSource}</p>
-              </div>
-            </div>
-          </div>
+          )}
 
-          {/* Speed, Road Type, Traffic - All on one line */}
+          {/* Average VPD (only if multiple roads) */}
+          {traffic.hasMultipleRoads && traffic.averageVPD && (
+            <div className="p-4 rounded-lg border bg-[var(--accent-green)]/10 border-[var(--accent-green)]/30">
+              <div className="text-center">
+                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Average VPD</span>
+                <p className="text-3xl font-bold text-[var(--accent-green)]">
+                  {traffic.averageVPD.toLocaleString()}
+                </p>
+                <p className="text-sm text-[var(--text-secondary)] mt-1">
+                  Combined traffic from {traffic.roads?.length} roads
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Primary VPD (single road or summary) */}
+          {!traffic.hasMultipleRoads && (
+            <div className="p-4 rounded-lg border bg-[var(--accent-cyan)]/10 border-[var(--accent-cyan)]/30">
+              <div className="text-center">
+                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Traffic Volume</span>
+                <p className="text-3xl font-bold text-[var(--accent-cyan)]">
+                  {traffic.estimatedVPD.toLocaleString()} <span className="text-lg font-normal">VPD</span>
+                </p>
+                <p className="text-sm text-[var(--text-secondary)] mt-1">Vehicles Per Day</p>
+              </div>
+              <div className="mt-3 pt-3 border-t border-[var(--border-color)] grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-xs text-[var(--text-muted)]">Range</span>
+                  <p className="font-medium">{traffic.vpdRange}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-[var(--text-muted)]">Source</span>
+                  <p className="font-medium text-xs">{traffic.vpdSource}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Speed, Road Type, Traffic */}
           <div className="grid grid-cols-3 gap-2 p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
             <div className="text-center">
               <span className="text-xs text-[var(--text-muted)]">Speed Limit</span>
               <p className="font-semibold">{traffic.freeFlowSpeed} mph</p>
             </div>
             <div className="text-center border-x border-[var(--border-color)]">
-              <span className="text-xs text-[var(--text-muted)]">Road Type</span>
+              <span className="text-xs text-[var(--text-muted)]">Primary Road</span>
               <p className="font-semibold text-sm">{traffic.roadType}</p>
             </div>
             <div className="text-center">
@@ -217,9 +218,8 @@ export default function TrafficData({ coordinates, address, onDataLoad }: Traffi
             </div>
           </div>
 
-          {/* Note */}
           <p className="text-xs text-[var(--text-muted)] text-center">
-            Real-time: TomTom | VPD: FHWA estimates
+            Real-time: TomTom | VPD: Florida DOT AADT
           </p>
         </div>
       )}

@@ -11,16 +11,37 @@ interface TrafficChartsProps {
 export default function TrafficCharts({ trafficData }: TrafficChartsProps) {
   // DEBUG: Log received traffic data
   console.log('[TrafficCharts] Received trafficData:', JSON.stringify(trafficData, null, 2));
-  console.log('[TrafficCharts] VPD value:', trafficData.estimatedVPD, 'Type:', typeof trafficData.estimatedVPD);
 
-  // VPD comparison data
+  // Build VPD comparison data - include individual roads if available
   const vpdComparison = [
     { category: 'Low Traffic', vpd: 5000, fill: '#22c55e' },
     { category: 'Moderate', vpd: 15000, fill: '#eab308' },
-    { category: 'This Location', vpd: trafficData.estimatedVPD, fill: '#06b6d4' },
+  ];
+
+  // Add individual roads or average
+  if (trafficData.roads && trafficData.roads.length > 1) {
+    // Multiple roads - show each one
+    trafficData.roads.forEach((road, index) => {
+      const colors = ['#06b6d4', '#8b5cf6', '#ec4899', '#f59e0b'];
+      vpdComparison.push({
+        category: road.roadName,
+        vpd: road.vpd,
+        fill: colors[index % colors.length],
+      });
+    });
+  } else {
+    // Single road
+    vpdComparison.push({
+      category: 'This Location',
+      vpd: trafficData.estimatedVPD,
+      fill: '#06b6d4',
+    });
+  }
+
+  vpdComparison.push(
     { category: 'High Traffic', vpd: 30000, fill: '#f97316' },
     { category: 'Very High', vpd: 50000, fill: '#ef4444' },
-  ];
+  );
 
   // Traffic level gauge
   const getTrafficScore = () => {
