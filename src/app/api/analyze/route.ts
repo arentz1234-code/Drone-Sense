@@ -609,7 +609,7 @@ const VPD_THRESHOLDS = {
 };
 
 // District types for location-appropriate recommendations
-type DistrictType = 'historic_downtown' | 'suburban_retail' | 'highway_corridor' | 'neighborhood' | 'college_campus' | 'general';
+type DistrictType = 'historic_downtown' | 'suburban_retail' | 'highway_corridor' | 'neighborhood' | 'college_campus' | 'shopping_center' | 'general';
 
 interface DistrictInfo {
   type: DistrictType;
@@ -653,6 +653,36 @@ function detectDistrictType(
   const highwayKeywords = ['highway', 'hwy', 'interstate', 'i-', 'exit', 'frontage'];
   const hasHighwayAddress = highwayKeywords.some(kw => addressLower.includes(kw));
   const isHighVPD = vpd !== null && vpd >= 25000;
+
+  // Shopping center / Strip mall detection
+  // Suite numbers (A, B, C, #123, Ste, Suite, Unit) indicate multi-tenant retail
+  const shoppingCenterKeywords = ['plaza', 'shopping center', 'strip mall', 'retail center', 'town center', 'marketplace', 'shopping'];
+  const hasSuiteNumber = /\b(suite|ste|unit|#)\s*\d*[a-z]?\b/i.test(address) || /\s[a-z]$/i.test(address.trim());
+  const hasShoppingCenterAddress = shoppingCenterKeywords.some(kw => addressLower.includes(kw));
+
+  if (hasSuiteNumber || hasShoppingCenterAddress) {
+    return {
+      type: 'shopping_center',
+      description: 'Shopping center / Strip mall - inline retail space with shared parking',
+      appropriateCategories: [
+        'fastFoodValue', 'fastFoodPremium', 'casualDiningValue', 'casualDiningPremium',
+        'coffeeValue', 'coffeePremium', 'quickServiceValue', 'quickServicePremium',
+        'retailPremium', 'discountRetail', 'bank', 'pharmacy', 'fitness', 'medical',
+        'hairSalon', 'salonPremium', 'nailSalon', 'cellPhoneStore'
+      ],
+      inappropriateCategories: [
+        // Gas stations need standalone lots with fuel tanks, dedicated access
+        'gasStation', 'convenience',
+        // Car-centric businesses need their own lots
+        'carWashExpress', 'carWashFull', 'autoService', 'autoServicePremium',
+        'oilChange', 'tireShop', 'autoBodyShop',
+        'carDealershipNew', 'carDealershipUsed',
+        // Too large for shopping center inline space
+        'bigBox', 'truckStop', 'selfStorage', 'rvBoatStorage',
+        'hotelBudget', 'hotelMidScale', 'hotelUpscale'
+      ]
+    };
+  }
 
   // College campus area
   if (isCollegeTown && (addressLower.includes('university') || addressLower.includes('college') || businessNames.includes('university'))) {
