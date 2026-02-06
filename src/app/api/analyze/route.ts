@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { RETAILER_REQUIREMENTS, RetailerRequirements, getRegionFromState } from '@/data/retailerRequirements';
+import {
+  ALL_BUSINESSES,
+  getBusinessesThatFitLot,
+  getBusinessesForShoppingCenter,
+  getNewConstructionOnlyBusinesses,
+  assessDriveThroughFeasibility,
+  BusinessRequirements,
+  CONSTRUCTION_LABELS,
+} from '@/data/BusinessIntelligence';
 
 // Re-export for use in other files
 export type { RetailerMatch } from '@/app/api/retailer-match/route';
@@ -607,6 +616,58 @@ const VPD_THRESHOLDS = {
     examples: ["Buffalo Wild Wings", "Sports Bar", "Brewpub", "Topgolf", "Dave & Buster's", "Main Event"]
   },
 };
+
+// Generate business intelligence context for AI prompt
+function generateBusinessIntelligenceContext(address: string, nearbyBusinesses: Business[]): string {
+  const addressLower = address.toLowerCase();
+  const isShoppingCenter = /\b(suite|ste|unit|#)\s*\d*[a-z]?\b/i.test(address) ||
+    ['plaza', 'center', 'mall', 'shopping', 'village', 'commons', 'square'].some(kw => addressLower.includes(kw));
+
+  // Get key business requirements examples
+  const driveThruRequired = ALL_BUSINESSES.filter(b => b.driveThrough === 'required').slice(0, 10);
+  const newConstructionOnly = getNewConstructionOnlyBusinesses().slice(0, 8);
+  const shoppingCenterOk = getBusinessesForShoppingCenter().slice(0, 10);
+
+  let context = `\n\n=== BUSINESS INTELLIGENCE RULES ===\n`;
+
+  // Shopping center specific rules
+  if (isShoppingCenter) {
+    context += `\n** SHOPPING CENTER LOCATION DETECTED **
+DO NOT RECOMMEND these businesses (require freestanding locations):
+- Gas Stations (Shell, BP, RaceTrac, QuikTrip, Wawa, Buc-ee's)
+- Car Washes (any type)
+- Auto Service/Repair
+- Hotels/Motels
+- Self Storage
+
+APPROPRIATE for shopping centers: ${shoppingCenterOk.map(b => b.name).join(', ')}\n`;
+  }
+
+  context += `
+DRIVE-THROUGH REQUIREMENTS (DO NOT recommend if lot cannot support drive-through):
+These businesses REQUIRE drive-through and need 0.5-1.5 acre lots with corner access:
+${driveThruRequired.map(b => `- ${b.name}: ${b.minSqFt}-${b.maxSqFt} sq ft, ${b.minLotAcres || 0.5}-${b.maxLotAcres || 1.5} acres${b.driveThroughNotes ? ` (${b.driveThroughNotes})` : ''}`).join('\n')}
+
+NEW CONSTRUCTION ONLY (will not convert existing buildings):
+${newConstructionOnly.map(b => `- ${b.name}: ${b.notes || 'Requires new construction'}`).join('\n')}
+
+LOT SIZE REQUIREMENTS:
+- Chick-fil-A: 1.0-1.5 acres (dual drive-through, 20+ car stacking)
+- Raising Cane's: 0.8-1.3 acres (high volume drive-through)
+- Buc-ee's: 15-25 acres (travel center)
+- Walmart Supercenter: 15-25 acres
+- Standard QSR (McDonald's, Wendy's): 0.5-1.0 acres
+- Coffee Drive-Through: 0.2-0.5 acres
+- Banks: 0.5-1.0 acres (drive-through required)
+- Pharmacies (CVS, Walgreens): 1.0-2.0 acres (corner lot, drive-through)
+
+COMPETITION = MARKET VALIDATION:
+Gas stations, pharmacies, coffee shops, and fast food often cluster together.
+If you see 2+ gas stations nearby, this is a POSITIVE indicator for more fuel/convenience.
+CVS and Walgreens often locate on opposite corners - this validates the market.`;
+
+  return context;
+}
 
 // District types for location-appropriate recommendations
 type DistrictType = 'historic_downtown' | 'suburban_retail' | 'highway_corridor' | 'neighborhood' | 'college_campus' | 'shopping_center' | 'general';
@@ -1705,9 +1766,13 @@ TOP RECOMMENDED BUSINESSES (not already in area): ${topRecommendations.join(', '
       ? 'Analyze these drone/aerial images of the property.'
       : 'No images provided - base your analysis on location data, traffic patterns, and nearby businesses only.';
 
+    // Generate business intelligence context based on preliminary lot assessment
+    const businessIntelligenceContext = generateBusinessIntelligenceContext(address, nearbyBusinesses);
+
     const prompt = `You are an expert commercial real estate analyst and site evaluator. ${imageContext} Property located at: ${address}
 ${businessContext}
 ${trafficContext}
+${businessIntelligenceContext}
 
 Please provide a comprehensive site analysis in the following JSON format:
 {
@@ -1730,6 +1795,10 @@ CRITICAL RULES:
 4. Consider what's MISSING from the area that would complement existing businesses
 5. If the area already has fast food, recommend a DIFFERENT fast food chain that's not there
 6. If area has Starbucks, recommend Dutch Bros or Dunkin instead
+7. NEVER recommend gas stations, car washes, or auto services for shopping center addresses (suite/unit numbers)
+8. Only recommend drive-through businesses if the lot can support 0.5+ acres with stacking space
+9. For Chick-fil-A or Raising Cane's, lot must be 1.0+ acres with excellent traffic flow
+10. Competition nearby is GOOD for gas stations, pharmacies, banks, and QSR - it validates the market
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
