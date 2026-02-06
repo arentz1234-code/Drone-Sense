@@ -64,15 +64,26 @@ async function fetchFloridaAADT(lat: number, lng: number): Promise<FDOTAADTResul
     }
 
     // Get the result with the highest AADT (busiest road nearby)
+    // Prefer more recent data when AADTs are similar
     let bestResult: FDOTAADTResult | null = null;
     for (const result of data.results) {
       const attrs = result.attributes;
-      if (attrs && attrs.AADT && attrs.AADT > 0) {
-        if (!bestResult || attrs.AADT > bestResult.aadt) {
+      if (attrs && attrs.AADT && Number(attrs.AADT) > 0) {
+        const aadt = Number(attrs.AADT);
+        const year = Number(attrs.YEAR_) || new Date().getFullYear();
+
+        // Build road name from DESC_FRM (e.g., "THOMASVILLE RD" from "CR-158/THARPE ST")
+        // The DESC_TO often contains the main road name
+        let roadName = attrs.DESC_TO || attrs.DESC_FRM || 'Unknown Road';
+        // Clean up common prefixes
+        roadName = roadName.replace(/^(CR-\d+\/|SR-\d+\/|US-\d+\/)/, '').trim();
+
+        // Prefer higher AADT, or same AADT with newer year
+        if (!bestResult || aadt > bestResult.aadt || (aadt === bestResult.aadt && year > bestResult.year)) {
           bestResult = {
-            aadt: attrs.AADT,
-            roadway: attrs.ROADWAY || 'Unknown Road',
-            year: attrs.YEAR_ || new Date().getFullYear(),
+            aadt: aadt,
+            roadway: roadName,
+            year: year,
             source: 'Florida DOT Official AADT'
           };
         }
