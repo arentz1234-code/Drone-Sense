@@ -1254,17 +1254,15 @@ function calculateBusinessSuitability(
 
     // Skip value-oriented categories in high income areas
     // These businesses target budget-conscious consumers, not affluent markets
-    const valueCategories = ['fastFoodValue', 'casualDiningValue', 'coffeeValue', 'quickServiceValue', 'discountRetail', 'gasStation', 'convenience'];
+    const valueCategories = ['fastFoodValue', 'casualDiningValue', 'coffeeValue', 'quickServiceValue', 'discountRetail'];
     const isHighIncomeArea = incomeLevel === 'upper-middle' || incomeLevel === 'high';
     if (valueCategories.includes(key) && isHighIncomeArea) {
       continue;
     }
 
-    // Skip gas stations and convenience stores in college town markets
-    // Students don't drive as much and these don't fit the student consumer profile
+    // Skip discount retail in college town markets (students have higher spending power than income suggests)
     const isCollegeTown = demographics?.isCollegeTown || false;
-    const collegeTownExclusions = ['gasStation', 'convenience', 'discountRetail'];
-    if (collegeTownExclusions.includes(key) && isCollegeTown) {
+    if (key === 'discountRetail' && isCollegeTown) {
       continue;
     }
 
@@ -1429,12 +1427,25 @@ function calculateBusinessSuitability(
     // Filter out existing businesses from recommendations
     const availableExamples = filterExistingBusinesses(threshold.examples, nearbyBusinesses);
 
-    // If all examples exist, lower the score and note it
-    if (availableExamples.length === 0) {
-      reasoning += '. Market saturated - all major brands present.';
-      score = Math.max(1, score - 3);
-    } else if (existingInArea.length > 0) {
-      reasoning += `. ${existingInArea.length} competitor(s) nearby.`;
+    // Categories where competition VALIDATES the market (clustering is good)
+    // Walmart follows Target, CVS takes opposite corner from Walgreens, gas stations cluster at intersections
+    const clusteringCategories = ['gasStation', 'convenience', 'fastFoodValue', 'fastFoodPremium', 'pharmacy', 'bank', 'coffeeValue', 'coffeePremium'];
+    const isClusteringCategory = clusteringCategories.includes(key);
+
+    if (existingInArea.length > 0) {
+      if (isClusteringCategory) {
+        // Competition validates the market - BONUS for proven demand
+        const validationBonus = Math.min(2, existingInArea.length);
+        score = Math.min(10, score + validationBonus);
+        reasoning += `. PROVEN MARKET: ${existingInArea.length} existing ${existingInArea.length === 1 ? 'competitor validates' : 'competitors validate'} demand`;
+      } else if (availableExamples.length === 0) {
+        // Non-clustering category with all brands present - actually saturated
+        reasoning += '. Market may be saturated - most major brands present';
+        score = Math.max(1, score - 2);
+      } else {
+        // Some competition but room for more
+        reasoning += `. ${existingInArea.length} competitor(s) nearby - market has proven demand`;
+      }
     }
 
     suitability.push({
