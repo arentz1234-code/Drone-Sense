@@ -354,16 +354,21 @@ export default function HomePage() {
   };
 
   const handleLoadProperty = useCallback((property: PropertyData) => {
-    setImages(property.images);
-    setAddress(property.address);
-    setCoordinates(property.coordinates);
-    setBusinesses(property.businesses);
-    setTrafficData(property.trafficData);
-    setDemographicsData(property.demographicsData);
-    setAnalysis(property.analysis);
-    setEnvironmentalRisk(property.environmentalRisk);
-    setMarketComps(property.marketComps);
-    setSelectedParcel(property.selectedParcel || null);
+    try {
+      setImages(property.images || []);
+      setAddress(property.address || '');
+      setCoordinates(property.coordinates || null);
+      setBusinesses(property.businesses || []);
+      setTrafficData(property.trafficData || null);
+      setDemographicsData(property.demographicsData || null);
+      setAnalysis(property.analysis || null);
+      setEnvironmentalRisk(property.environmentalRisk || null);
+      setMarketComps(property.marketComps || null);
+      setSelectedParcel(property.selectedParcel || null);
+    } catch (err) {
+      console.error('Failed to load property:', err);
+      alert('Failed to load saved property. The data may be corrupted.');
+    }
   }, []);
 
   const getCurrentPropertyData = useCallback((): PropertyData => ({

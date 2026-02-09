@@ -31,10 +31,17 @@ export default function SavedProperties({ currentProperty, onLoadProperty }: Sav
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setSavedProperties(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        // Validate each property has required fields
+        const validProperties = parsed.filter((p: SavedProperty) =>
+          p && p.id && p.data && typeof p.data === 'object'
+        );
+        setSavedProperties(validProperties);
       }
     } catch (err) {
       console.error('Failed to load saved properties:', err);
+      // Clear corrupted data
+      localStorage.removeItem(STORAGE_KEY);
     }
   }, []);
 
