@@ -1,36 +1,14 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
-import { DivIcon, LatLngExpression } from 'leaflet';
+import { DivIcon, LatLngExpression, Icon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 interface MiniMapProps {
   coordinates: { lat: number; lng: number } | null;
   onPinChange: (coords: { lat: number; lng: number }) => void;
 }
-
-// Create custom pin icon
-const createPinIcon = () => {
-  return new DivIcon({
-    className: 'custom-pin-marker',
-    html: `
-      <div style="
-        width: 32px;
-        height: 32px;
-        position: relative;
-        transform: translate(-50%, -100%);
-      ">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#ef4444"/>
-          <circle cx="12" cy="9" r="2.5" fill="white"/>
-        </svg>
-      </div>
-    `,
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-  });
-};
 
 // Component to handle map events
 function MapEventHandler({
@@ -61,7 +39,30 @@ function MapRecenter({ coordinates }: { coordinates: { lat: number; lng: number 
 }
 
 export default function MiniMap({ coordinates, onPinChange }: MiniMapProps) {
-  const pinIcon = useRef(createPinIcon());
+  const [pinIcon, setPinIcon] = useState<Icon | DivIcon | null>(null);
+
+  // Create pin icon on client side only
+  useEffect(() => {
+    const icon = new DivIcon({
+      className: 'custom-pin-marker',
+      html: `
+        <div style="
+          width: 32px;
+          height: 32px;
+          position: relative;
+          transform: translate(-50%, -100%);
+        ">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#ef4444"/>
+            <circle cx="12" cy="9" r="2.5" fill="white"/>
+          </svg>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+    });
+    setPinIcon(icon);
+  }, []);
 
   // Default center (US center) if no coordinates
   const defaultCenter: LatLngExpression = [39.8283, -98.5795];
@@ -84,10 +85,10 @@ export default function MiniMap({ coordinates, onPinChange }: MiniMapProps) {
       <MapRecenter coordinates={coordinates} />
 
       {/* Draggable Pin Marker */}
-      {coordinates && (
+      {coordinates && pinIcon && (
         <Marker
           position={[coordinates.lat, coordinates.lng]}
-          icon={pinIcon.current}
+          icon={pinIcon}
           draggable={true}
           eventHandlers={{
             dragend: (e) => {
