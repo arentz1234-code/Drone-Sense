@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Polygon, Popup, Tooltip, Marker, useMap, useMapEvents } from 'react-leaflet';
 import { LatLngExpression, Icon, DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -125,28 +125,6 @@ function MapRecenter({ coordinates }: { coordinates: { lat: number; lng: number 
   return null;
 }
 
-// Create custom pin icon
-const createPinIcon = () => {
-  return new DivIcon({
-    className: 'custom-pin-marker',
-    html: `
-      <div style="
-        width: 32px;
-        height: 32px;
-        position: relative;
-        transform: translate(-50%, -100%);
-      ">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#ef4444"/>
-          <circle cx="12" cy="9" r="2.5" fill="white"/>
-        </svg>
-      </div>
-    `,
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-  });
-};
-
 export default function LeafletMap({
   coordinates,
   mapType,
@@ -161,7 +139,30 @@ export default function LeafletMap({
   pinLocation,
   interactiveMode = false,
 }: LeafletMapProps) {
-  const pinIcon = useRef(createPinIcon());
+  const [pinIcon, setPinIcon] = useState<Icon | DivIcon | null>(null);
+
+  // Create pin icon on client side only
+  useEffect(() => {
+    const icon = new DivIcon({
+      className: 'custom-pin-marker',
+      html: `
+        <div style="
+          width: 32px;
+          height: 32px;
+          position: relative;
+          transform: translate(-50%, -100%);
+        ">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#ef4444"/>
+            <circle cx="12" cy="9" r="2.5" fill="white"/>
+          </svg>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+    });
+    setPinIcon(icon);
+  }, []);
   const getTileUrl = () => {
     switch (mapType) {
       case 'satellite':
@@ -234,10 +235,10 @@ export default function LeafletMap({
       <MapRecenter coordinates={coordinates} />
 
       {/* Draggable Pin Marker */}
-      {interactiveMode && markerPosition && (
+      {interactiveMode && markerPosition && pinIcon && (
         <Marker
           position={[markerPosition.lat, markerPosition.lng]}
-          icon={pinIcon.current}
+          icon={pinIcon}
           draggable={true}
           eventHandlers={{
             dragend: (e) => {
