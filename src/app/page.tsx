@@ -6,7 +6,7 @@ import AddressInput from '@/components/AddressInput';
 import NearbyBusinesses from '@/components/NearbyBusinesses';
 import TrafficData from '@/components/TrafficData';
 import DemographicsData from '@/components/DemographicsData';
-import MapView from '@/components/MapView';
+import MapView, { SelectedParcel } from '@/components/MapView';
 import AnalysisReport from '@/components/AnalysisReport';
 import TabNavigation, { TabPanel } from '@/components/ui/TabNavigation';
 import { SkeletonCard } from '@/components/ui/Skeleton';
@@ -46,6 +46,11 @@ const PDFReportGenerator = dynamic(() => import('@/components/PDFReportGenerator
 });
 
 const SavedProperties = dynamic(() => import('@/components/SavedProperties'), {
+  loading: () => <SkeletonCard />,
+  ssr: false
+});
+
+const LiveFeasibilityScore = dynamic(() => import('@/components/LiveFeasibilityScore'), {
   loading: () => <SkeletonCard />,
   ssr: false
 });
@@ -193,6 +198,7 @@ export interface PropertyData {
   analysis: AnalysisResult | null;
   environmentalRisk: EnvironmentalRisk | null;
   marketComps: MarketComp[] | null;
+  selectedParcel?: SelectedParcel | null;
 }
 
 const TABS = [
@@ -216,11 +222,17 @@ export default function HomePage() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [environmentalRisk, setEnvironmentalRisk] = useState<EnvironmentalRisk | null>(null);
   const [marketComps, setMarketComps] = useState<MarketComp[] | null>(null);
+  const [selectedParcel, setSelectedParcel] = useState<SelectedParcel | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const allBusinesses = businesses;
-  const hasInput = address.trim().length > 0 || images.length > 0;
+  const hasInput = address.trim().length > 0 || images.length > 0 || coordinates !== null;
+
+  // Clear selected parcel when address changes
+  useEffect(() => {
+    setSelectedParcel(null);
+  }, [address]);
 
   // Fetch extended demographics when coordinates change
   useEffect(() => {
@@ -299,8 +311,8 @@ export default function HomePage() {
   }, [coordinates?.lat, coordinates?.lng]);
 
   const handleAnalyze = async () => {
-    if (!address) {
-      setError('Please enter an address');
+    if (!address && !coordinates) {
+      setError('Please enter an address or drop a pin on the map');
       return;
     }
 
@@ -314,12 +326,16 @@ export default function HomePage() {
         body: JSON.stringify({
           images,
           address,
-          coordinates,
+          coordinates: selectedParcel?.isConfirmed ? selectedParcel.coordinates : coordinates,
           nearbyBusinesses: allBusinesses,
           trafficData,
           demographicsData,
           environmentalRisk,
           marketComps,
+          selectedParcel: selectedParcel?.isConfirmed ? {
+            boundaries: selectedParcel.boundaries,
+            parcelInfo: selectedParcel.parcelInfo,
+          } : undefined,
         }),
       });
 
@@ -347,6 +363,7 @@ export default function HomePage() {
     setAnalysis(property.analysis);
     setEnvironmentalRisk(property.environmentalRisk);
     setMarketComps(property.marketComps);
+    setSelectedParcel(property.selectedParcel || null);
   }, []);
 
   const getCurrentPropertyData = useCallback((): PropertyData => ({
@@ -359,7 +376,8 @@ export default function HomePage() {
     analysis,
     environmentalRisk,
     marketComps,
-  }), [images, address, coordinates, businesses, trafficData, demographicsData, analysis, environmentalRisk, marketComps]);
+    selectedParcel,
+  }), [images, address, coordinates, businesses, trafficData, demographicsData, analysis, environmentalRisk, marketComps, selectedParcel]);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -378,25 +396,25 @@ export default function HomePage() {
         onTabChange={setActiveTab}
       />
 
+      {/* Hidden data fetching components - ALWAYS render these outside tabs so data loads regardless of active tab */}
+      <div className="hidden">
+        <DemographicsData coordinates={coordinates} onDataLoad={(data) => setDemographicsData(prev => prev ? { ...prev, ...data } : data)} />
+        <NearbyBusinesses
+          coordinates={coordinates}
+          businesses={businesses}
+          setBusinesses={setBusinesses}
+          marketContext={{
+            population: demographicsData?.population,
+            medianIncome: demographicsData?.medianHouseholdIncome,
+            isCollegeTown: demographicsData?.isCollegeTown,
+            vpd: trafficData?.estimatedVPD,
+          }}
+        />
+        <TrafficData coordinates={coordinates} address={address} onDataLoad={setTrafficData} />
+      </div>
+
       {/* Overview Tab */}
       <TabPanel id="overview" activeTab={activeTab}>
-        {/* Hidden data fetching components - these load data in background */}
-        <div className="hidden">
-          <DemographicsData coordinates={coordinates} onDataLoad={(data) => setDemographicsData(prev => prev ? { ...prev, ...data } : data)} />
-          <NearbyBusinesses
-            coordinates={coordinates}
-            businesses={businesses}
-            setBusinesses={setBusinesses}
-            marketContext={{
-              population: demographicsData?.population,
-              medianIncome: demographicsData?.medianHouseholdIncome,
-              isCollegeTown: demographicsData?.isCollegeTown,
-              vpd: trafficData?.estimatedVPD,
-            }}
-          />
-          <TrafficData coordinates={coordinates} address={address} onDataLoad={setTrafficData} />
-        </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Left Column */}
           <div className="space-y-6">
@@ -434,6 +452,27 @@ export default function HomePage() {
 
           {/* Right Column */}
           <div className="space-y-6">
+            {/* Live Feasibility Score */}
+            {coordinates && (
+              <div className="terminal-card">
+                <div className="terminal-header">
+                  <div className="terminal-dot red"></div>
+                  <div className="terminal-dot yellow"></div>
+                  <div className="terminal-dot green"></div>
+                  <span className="terminal-title">feasibility_score.live</span>
+                </div>
+                <div className="terminal-body p-0">
+                  <LiveFeasibilityScore
+                    trafficData={trafficData}
+                    demographicsData={demographicsData}
+                    businesses={businesses}
+                    environmentalRisk={environmentalRisk}
+                    marketComps={marketComps}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Saved Properties */}
             <div className="terminal-card">
               <div className="terminal-header">
@@ -454,14 +493,7 @@ export default function HomePage() {
 
         {/* Property Map Section - Full Width */}
         <div className="mb-8">
-          <div className={`terminal-card relative ${!hasInput ? 'opacity-50' : ''}`}>
-            {!hasInput && (
-              <div className="absolute inset-0 bg-[var(--bg-primary)]/60 z-10 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
-                <p className="text-[var(--text-muted)] text-sm text-center px-4">
-                  Enter an address or upload photos to enable
-                </p>
-              </div>
-            )}
+          <div className="terminal-card relative">
             <div className="terminal-header">
               <div className="terminal-dot red"></div>
               <div className="terminal-dot yellow"></div>
@@ -473,6 +505,11 @@ export default function HomePage() {
                 coordinates={coordinates}
                 address={address}
                 environmentalRisk={environmentalRisk}
+                selectedParcel={selectedParcel}
+                onParcelSelect={setSelectedParcel}
+                onCoordinatesChange={setCoordinates}
+                onAddressChange={setAddress}
+                interactiveMode={true}
               />
             </div>
           </div>
@@ -485,7 +522,7 @@ export default function HomePage() {
           )}
           <button
             onClick={handleAnalyze}
-            disabled={loading || !address}
+            disabled={loading || (!address && !coordinates)}
             className="btn-primary flex items-center gap-2"
           >
             {loading ? (
@@ -529,7 +566,15 @@ export default function HomePage() {
               <span className="terminal-title">analysis_report.output</span>
             </div>
             <div className="terminal-body">
-              <AnalysisReport analysis={analysis} address={address} />
+              <AnalysisReport
+                  analysis={analysis}
+                  address={address}
+                  trafficData={trafficData}
+                  demographicsData={demographicsData}
+                  businesses={businesses}
+                  environmentalRisk={environmentalRisk}
+                  marketComps={marketComps}
+                />
             </div>
           </div>
         )}
@@ -667,7 +712,15 @@ export default function HomePage() {
                 <span className="terminal-title">analysis_report.output</span>
               </div>
               <div className="terminal-body">
-                <AnalysisReport analysis={analysis} address={address} />
+                <AnalysisReport
+                  analysis={analysis}
+                  address={address}
+                  trafficData={trafficData}
+                  demographicsData={demographicsData}
+                  businesses={businesses}
+                  environmentalRisk={environmentalRisk}
+                  marketComps={marketComps}
+                />
               </div>
             </div>
 

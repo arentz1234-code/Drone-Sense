@@ -1,17 +1,50 @@
 'use client';
 
-import { useState } from 'react';
-import { AnalysisResult } from '@/app/page';
+import { useState, useMemo } from 'react';
+import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore } from '@/app/page';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
+import { calculateFeasibilityScore } from '@/utils/feasibilityScore';
 
 interface AnalysisReportProps {
   analysis: AnalysisResult;
   address: string;
+  // Optional live data for real-time score updates
+  trafficData?: TrafficInfo | null;
+  demographicsData?: ExtendedDemographics | null;
+  businesses?: Business[];
+  environmentalRisk?: EnvironmentalRisk | null;
+  marketComps?: MarketComp[] | null;
 }
 
-export default function AnalysisReport({ analysis, address }: AnalysisReportProps) {
+export default function AnalysisReport({
+  analysis,
+  address,
+  trafficData,
+  demographicsData,
+  businesses = [],
+  environmentalRisk,
+  marketComps,
+}: AnalysisReportProps) {
+  // Calculate live feasibility score if data is provided
+  const liveFeasibilityScore = useMemo(() => {
+    const hasLiveData = trafficData || demographicsData || businesses.length > 0 || environmentalRisk || (marketComps && marketComps.length > 0);
+    if (!hasLiveData) return null;
+
+    return calculateFeasibilityScore(
+      trafficData || null,
+      demographicsData || null,
+      businesses,
+      environmentalRisk || null,
+      marketComps || null
+    );
+  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps]);
+
+  // Use live score if available, otherwise use analysis score
+  const feasibilityScore: FeasibilityScore | undefined = liveFeasibilityScore || analysis.feasibilityScore;
+  const viabilityScore = feasibilityScore?.overall ?? analysis.viabilityScore;
   const [showAllSuitability, setShowAllSuitability] = useState(false);
   const INITIAL_SUITABILITY_COUNT = 4;
+
   const getScoreColor = (score: number) => {
     if (score >= 8) return 'from-green-400 to-emerald-500';
     if (score >= 6) return 'from-cyan-400 to-blue-500';
@@ -61,7 +94,7 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
       Property: ${address}
       Generated: ${new Date().toLocaleString()}
 
-      VIABILITY SCORE: ${analysis.viabilityScore}/10 (${getScoreLabel(analysis.viabilityScore)})
+      VIABILITY SCORE: ${viabilityScore}/10 (${getScoreLabel(viabilityScore)})
 
       SITE ANALYSIS
       -------------
@@ -110,10 +143,10 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
           </p>
         </div>
         <div className="text-center">
-          <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${getScoreColor(analysis.viabilityScore)} flex items-center justify-center`}>
-            <span className="text-4xl font-bold text-white">{analysis.viabilityScore}</span>
+          <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${getScoreColor(viabilityScore)} flex items-center justify-center`}>
+            <span className="text-4xl font-bold text-white">{viabilityScore}</span>
           </div>
-          <p className="text-sm mt-2 font-medium">{analysis.feasibilityScore?.rating || getScoreLabel(analysis.viabilityScore)}</p>
+          <p className="text-sm mt-2 font-medium">{feasibilityScore?.rating || getScoreLabel(viabilityScore)}</p>
           <p className="text-xs text-[var(--text-muted)]">
             <DataSourceTooltip source={DATA_SOURCES.feasibilityCalc}>Feasibility Score</DataSourceTooltip>
           </p>
@@ -121,7 +154,7 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
       </div>
 
       {/* Feasibility Score Breakdown */}
-      {analysis.feasibilityScore && (
+      {feasibilityScore && (
         <div className="mb-8 p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <svg className="w-5 h-5 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -137,18 +170,18 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
                   <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
                   <circle
                     cx="32" cy="32" r="28" fill="none"
-                    stroke={analysis.feasibilityScore.breakdown.trafficScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.trafficScore >= 5 ? '#eab308' : '#ef4444'}
+                    stroke={feasibilityScore.breakdown.trafficScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.trafficScore >= 5 ? '#eab308' : '#ef4444'}
                     strokeWidth="6"
-                    strokeDasharray={`${analysis.feasibilityScore.breakdown.trafficScore * 17.6} 176`}
+                    strokeDasharray={`${feasibilityScore.breakdown.trafficScore * 17.6} 176`}
                     strokeLinecap="round"
                   />
                 </svg>
                 <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {analysis.feasibilityScore.breakdown.trafficScore}
+                  {feasibilityScore.breakdown.trafficScore}
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-cyan)]">Traffic</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.traffic.split(' - ')[0]}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.traffic.split(' - ')[0]}</p>
             </div>
 
             {/* Demographics Score */}
@@ -158,18 +191,18 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
                   <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
                   <circle
                     cx="32" cy="32" r="28" fill="none"
-                    stroke={analysis.feasibilityScore.breakdown.demographicsScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.demographicsScore >= 5 ? '#eab308' : '#ef4444'}
+                    stroke={feasibilityScore.breakdown.demographicsScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.demographicsScore >= 5 ? '#eab308' : '#ef4444'}
                     strokeWidth="6"
-                    strokeDasharray={`${analysis.feasibilityScore.breakdown.demographicsScore * 17.6} 176`}
+                    strokeDasharray={`${feasibilityScore.breakdown.demographicsScore * 17.6} 176`}
                     strokeLinecap="round"
                   />
                 </svg>
                 <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {analysis.feasibilityScore.breakdown.demographicsScore}
+                  {feasibilityScore.breakdown.demographicsScore}
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-green)]">Demographics</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.demographics.split(' - ')[0]}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.demographics.split(' - ')[0]}</p>
             </div>
 
             {/* Competition Score */}
@@ -179,18 +212,18 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
                   <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
                   <circle
                     cx="32" cy="32" r="28" fill="none"
-                    stroke={analysis.feasibilityScore.breakdown.competitionScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.competitionScore >= 5 ? '#eab308' : '#ef4444'}
+                    stroke={feasibilityScore.breakdown.competitionScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.competitionScore >= 5 ? '#eab308' : '#ef4444'}
                     strokeWidth="6"
-                    strokeDasharray={`${analysis.feasibilityScore.breakdown.competitionScore * 17.6} 176`}
+                    strokeDasharray={`${feasibilityScore.breakdown.competitionScore * 17.6} 176`}
                     strokeLinecap="round"
                   />
                 </svg>
                 <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {analysis.feasibilityScore.breakdown.competitionScore}
+                  {feasibilityScore.breakdown.competitionScore}
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-orange)]">Competition</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.competition.split(' - ')[0]}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.competition.split(' - ')[0]}</p>
             </div>
 
             {/* Access Score */}
@@ -200,18 +233,18 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
                   <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
                   <circle
                     cx="32" cy="32" r="28" fill="none"
-                    stroke={analysis.feasibilityScore.breakdown.accessScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.accessScore >= 5 ? '#eab308' : '#ef4444'}
+                    stroke={feasibilityScore.breakdown.accessScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.accessScore >= 5 ? '#eab308' : '#ef4444'}
                     strokeWidth="6"
-                    strokeDasharray={`${analysis.feasibilityScore.breakdown.accessScore * 17.6} 176`}
+                    strokeDasharray={`${feasibilityScore.breakdown.accessScore * 17.6} 176`}
                     strokeLinecap="round"
                   />
                 </svg>
                 <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {analysis.feasibilityScore.breakdown.accessScore}
+                  {feasibilityScore.breakdown.accessScore}
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-blue)]">Access</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.access.split(' - ')[0]}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.access.split(' - ')[0]}</p>
             </div>
 
             {/* Environmental Score */}
@@ -221,18 +254,18 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
                   <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
                   <circle
                     cx="32" cy="32" r="28" fill="none"
-                    stroke={analysis.feasibilityScore.breakdown.environmentalScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.environmentalScore >= 5 ? '#eab308' : '#ef4444'}
+                    stroke={feasibilityScore.breakdown.environmentalScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.environmentalScore >= 5 ? '#eab308' : '#ef4444'}
                     strokeWidth="6"
-                    strokeDasharray={`${analysis.feasibilityScore.breakdown.environmentalScore * 17.6} 176`}
+                    strokeDasharray={`${feasibilityScore.breakdown.environmentalScore * 17.6} 176`}
                     strokeLinecap="round"
                   />
                 </svg>
                 <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {analysis.feasibilityScore.breakdown.environmentalScore}
+                  {feasibilityScore.breakdown.environmentalScore}
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-purple)]">Environmental</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.environmental?.split(' - ')[0] || 'N/A'}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.environmental?.split(' - ')[0] || 'N/A'}</p>
             </div>
 
             {/* Market Score */}
@@ -242,29 +275,29 @@ export default function AnalysisReport({ analysis, address }: AnalysisReportProp
                   <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
                   <circle
                     cx="32" cy="32" r="28" fill="none"
-                    stroke={analysis.feasibilityScore.breakdown.marketScore >= 7 ? '#22c55e' : analysis.feasibilityScore.breakdown.marketScore >= 5 ? '#eab308' : '#ef4444'}
+                    stroke={feasibilityScore.breakdown.marketScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.marketScore >= 5 ? '#eab308' : '#ef4444'}
                     strokeWidth="6"
-                    strokeDasharray={`${analysis.feasibilityScore.breakdown.marketScore * 17.6} 176`}
+                    strokeDasharray={`${feasibilityScore.breakdown.marketScore * 17.6} 176`}
                     strokeLinecap="round"
                   />
                 </svg>
                 <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {analysis.feasibilityScore.breakdown.marketScore}
+                  {feasibilityScore.breakdown.marketScore}
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-red)]">Market</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{analysis.feasibilityScore.details.market?.split(' - ')[0] || 'N/A'}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.market?.split(' - ')[0] || 'N/A'}</p>
             </div>
           </div>
 
           {/* Details */}
           <div className="mt-4 pt-4 border-t border-[var(--border-color)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
-            <p><span className="text-[var(--accent-cyan)]">Traffic:</span> {analysis.feasibilityScore.details.traffic}</p>
-            <p><span className="text-[var(--accent-green)]">Demographics:</span> {analysis.feasibilityScore.details.demographics}</p>
-            <p><span className="text-[var(--accent-orange)]">Competition:</span> {analysis.feasibilityScore.details.competition}</p>
-            <p><span className="text-[var(--accent-blue)]">Access:</span> {analysis.feasibilityScore.details.access}</p>
-            <p><span className="text-[var(--accent-purple)]">Environmental:</span> {analysis.feasibilityScore.details.environmental || 'No data'}</p>
-            <p><span className="text-[var(--accent-red)]">Market:</span> {analysis.feasibilityScore.details.market || 'No data'}</p>
+            <p><span className="text-[var(--accent-cyan)]">Traffic:</span> {feasibilityScore.details.traffic}</p>
+            <p><span className="text-[var(--accent-green)]">Demographics:</span> {feasibilityScore.details.demographics}</p>
+            <p><span className="text-[var(--accent-orange)]">Competition:</span> {feasibilityScore.details.competition}</p>
+            <p><span className="text-[var(--accent-blue)]">Access:</span> {feasibilityScore.details.access}</p>
+            <p><span className="text-[var(--accent-purple)]">Environmental:</span> {feasibilityScore.details.environmental || 'No data'}</p>
+            <p><span className="text-[var(--accent-red)]">Market:</span> {feasibilityScore.details.market || 'No data'}</p>
           </div>
         </div>
       )}

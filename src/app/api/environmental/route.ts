@@ -29,7 +29,7 @@ export interface EnvironmentalRiskResponse {
 async function fetchFloodZone(lat: number, lng: number): Promise<EnvironmentalRiskResponse['floodZone']> {
   try {
     // FEMA NFHL REST API
-    const url = `https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/28/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=FLD_ZONE,ZONE_SUBTY,SFHA_TF&returnGeometry=false&f=json`;
+    const url = `https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=FLD_ZONE,ZONE_SUBTY,SFHA_TF&returnGeometry=false&f=json`;
 
     const response = await fetch(url);
     if (!response.ok) throw new Error('FEMA API error');

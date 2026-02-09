@@ -432,3 +432,85 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+/* Parcel owner name labels */
+.parcel-label {
+  background: rgba(0, 0, 0, 0.75) !important;
+  border: none !important;
+  color: white !important;
+  font-size: 10px !important;
+  font-family: inherit !important;
+  padding: 2px 6px !important;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  border-radius: 3px !important;
+  pointer-events: none;
+}
+
+.parcel-label::before {
+  display: none !important;  /* Hide tooltip arrow */
+}
+
+/* Selected parcel glow effect */
+.selected-parcel {
+  filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.7));
+}
+
+/* Parcel popup styles */
+.parcel-popup {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  min-width: 180px;
+}
+
+/* Custom pin marker */
+.custom-pin-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.custom-pin-marker:hover {
+  cursor: grab;
+}
+
+.custom-pin-marker:active {
+  cursor: grabbing;
+}
+
+/* Leaflet marker fixes for draggable pin */
+.leaflet-marker-draggable {
+  cursor: grab !important;
+}
+
+.leaflet-marker-draggable:active {
+  cursor: grabbing !important;
+}
+
+/* Interactive map cursor */
+.leaflet-container.interactive-mode {
+  cursor: crosshair;
+}
+
+.parcel-popup strong {
+  color: #1a1a2e;
+}
+
+.parcel-popup p {
+  margin: 4px 0;
+  color: #4a4a5a;
+}
+
+/* Leaflet popup customization for dark theme compatibility */
+.leaflet-popup-content-wrapper {
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
+}
+
+.leaflet-popup-tip {
+  background: white;
+}
+
+/* Hover effect for parcel polygons */
+.leaflet-interactive:hover {
+  cursor: pointer;
+}
