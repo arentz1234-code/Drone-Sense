@@ -93,10 +93,13 @@ export default function AddressInput({
           </div>
         )}
 
-        {/* Hint to use main map */}
-        <p className="text-xs text-[var(--text-muted)] text-center">
-          You can also drop a pin on the map below to set location
-        </p>
+        {!coordinates && address && (
+          <div className="text-center py-8 border border-dashed border-[var(--border-color)] rounded-lg">
+            <p className="text-[var(--text-muted)] text-sm">
+              Click &quot;Locate&quot; to find coordinates
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
