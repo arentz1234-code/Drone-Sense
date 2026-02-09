@@ -10,6 +10,7 @@ import MapView from '@/components/MapView';
 import AnalysisReport from '@/components/AnalysisReport';
 import TabNavigation, { TabPanel } from '@/components/ui/TabNavigation';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 // Import all types from shared types file
 import {
@@ -269,6 +270,7 @@ export default function HomePage() {
   }), [images, address, coordinates, businesses, trafficData, demographicsData, analysis, environmentalRisk, marketComps, selectedParcel]);
 
   return (
+    <ErrorBoundary>
     <div className="max-w-7xl mx-auto px-6 py-8">
       {/* Header */}
       <div className="mb-6">
@@ -655,5 +657,6 @@ export default function HomePage() {
         )}
       </TabPanel>
     </div>
+    </ErrorBoundary>
   );
 }
