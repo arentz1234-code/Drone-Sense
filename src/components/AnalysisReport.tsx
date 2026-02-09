@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore } from '@/app/page';
+import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 import { calculateFeasibilityScore } from '@/utils/feasibilityScore';
 

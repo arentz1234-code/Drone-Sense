@@ -1,7 +1,7 @@
 'use client';
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar } from 'recharts';
-import { TrafficInfo } from '@/app/page';
+import { TrafficInfo } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 interface TrafficChartsProps {

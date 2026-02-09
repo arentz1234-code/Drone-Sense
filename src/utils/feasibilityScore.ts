@@ -1,4 +1,4 @@
-import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore } from '@/app/page';
+import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore } from '@/types';
 
 export function calculateFeasibilityScore(
   trafficData: TrafficInfo | null,

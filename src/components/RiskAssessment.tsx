@@ -1,6 +1,6 @@
 'use client';
 
-import { EnvironmentalRisk } from '@/app/page';
+import { EnvironmentalRisk } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 interface RiskAssessmentProps {

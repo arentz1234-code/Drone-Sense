@@ -6,11 +6,41 @@ import AddressInput from '@/components/AddressInput';
 import NearbyBusinesses from '@/components/NearbyBusinesses';
 import TrafficData from '@/components/TrafficData';
 import DemographicsData from '@/components/DemographicsData';
-import MapView, { SelectedParcel } from '@/components/MapView';
+import MapView from '@/components/MapView';
 import AnalysisReport from '@/components/AnalysisReport';
 import TabNavigation, { TabPanel } from '@/components/ui/TabNavigation';
 import { SkeletonCard } from '@/components/ui/Skeleton';
-import { DemographicsData as DemographicsDataType } from '@/types/demographics';
+
+// Import all types from shared types file
+import {
+  Business,
+  TrafficInfo,
+  BusinessSuitability,
+  RetailerMatch,
+  RetailerMatchResult,
+  FeasibilityScore,
+  AnalysisResult,
+  ExtendedDemographics,
+  EnvironmentalRisk,
+  MarketComp,
+  PropertyData,
+  SelectedParcel,
+} from '@/types';
+
+// Re-export types for backward compatibility
+export type {
+  Business,
+  TrafficInfo,
+  BusinessSuitability,
+  RetailerMatch,
+  RetailerMatchResult,
+  FeasibilityScore,
+  AnalysisResult,
+  ExtendedDemographics,
+  EnvironmentalRisk,
+  MarketComp,
+  PropertyData,
+};
 
 // Lazy load new components
 import dynamic from 'next/dynamic';
@@ -54,152 +84,6 @@ const LiveFeasibilityScore = dynamic(() => import('@/components/LiveFeasibilityS
   loading: () => <SkeletonCard />,
   ssr: false
 });
-
-export interface Business {
-  name: string;
-  type: string;
-  distance: string;
-  address: string;
-}
-
-export interface TrafficInfo {
-  estimatedVPD: number;
-  vpdRange: string;
-  vpdSource?: string;
-  roadType: string;
-  trafficLevel: string;
-  congestionPercent: number;
-  currentSpeed?: number;
-  freeFlowSpeed?: number;
-  roads?: Array<{ roadName: string; vpd: number; year: number }>;
-  hasMultipleRoads?: boolean;
-  averageVPD?: number;
-}
-
-export interface BusinessSuitability {
-  category: string;
-  suitabilityScore: number;
-  reasoning: string;
-  examples: string[];
-  existingInArea?: string[];
-  lotSizeIssue?: string;
-}
-
-export interface RetailerMatch {
-  name: string;
-  category: string;
-  matchScore: number;
-  matchDetails: {
-    lotSize: { matches: boolean; note: string };
-    traffic: { matches: boolean; note: string };
-    demographics: { matches: boolean; note: string };
-    region: { matches: boolean; note: string };
-  };
-  activelyExpanding: boolean;
-  franchiseAvailable: boolean;
-  corporateOnly: boolean;
-  franchiseFee?: number;
-  totalInvestment?: string;
-  expansionRegions: string[];
-  notes?: string;
-}
-
-export interface RetailerMatchResult {
-  matches: RetailerMatch[];
-  totalMatches: number;
-}
-
-export interface FeasibilityScore {
-  overall: number;
-  breakdown: {
-    trafficScore: number;
-    demographicsScore: number;
-    competitionScore: number;
-    accessScore: number;
-    environmentalScore: number;
-    marketScore: number;
-  };
-  details: {
-    traffic: string;
-    demographics: string;
-    competition: string;
-    access: string;
-    environmental: string;
-    market: string;
-  };
-  rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
-}
-
-export interface AnalysisResult {
-  viabilityScore: number;
-  feasibilityScore?: FeasibilityScore;
-  terrain: string;
-  accessibility: string;
-  existingStructures: string;
-  vegetation: string;
-  lotSizeEstimate: string;
-  businessRecommendation: string;
-  constructionPotential: string;
-  keyFindings: string[];
-  recommendations: string[];
-  businessSuitability?: BusinessSuitability[];
-  topRecommendations?: string[];
-  retailerMatches?: RetailerMatchResult;
-  districtType?: string;
-  districtDescription?: string;
-  downtownRecommendations?: {
-    dining: string[];
-    retail: string[];
-    services: string[];
-    entertainment: string[];
-  };
-}
-
-export interface ExtendedDemographics extends DemographicsDataType {
-  multiRadius?: {
-    oneMile: { population: number; households: number };
-    threeMile: { population: number; households: number };
-    fiveMile: { population: number; households: number };
-  };
-  growthTrend?: number;
-  consumerSpending?: number;
-  ageDistribution?: { age: string; percent: number }[];
-  educationLevels?: { level: string; percent: number }[];
-}
-
-export interface EnvironmentalRisk {
-  floodZone: { zone: string; risk: 'low' | 'medium' | 'high'; description: string };
-  wetlands: { present: boolean; distance?: number; types?: string[] };
-  brownfields: { present: boolean; count: number; sites?: { name: string; distance: number; status: string }[] };
-  superfund: { present: boolean; count: number; sites?: { name: string; distance: number; status: string }[] };
-  overallRiskScore: number;
-  riskFactors?: string[];
-}
-
-export interface MarketComp {
-  address: string;
-  salePrice: number;
-  saleDate: string;
-  sqft: number;
-  pricePerSqft: number;
-  distance: string;
-  propertyType: string;
-  yearBuilt?: number;
-  lotSize?: number;
-}
-
-export interface PropertyData {
-  images: string[];
-  address: string;
-  coordinates: { lat: number; lng: number } | null;
-  businesses: Business[];
-  trafficData: TrafficInfo | null;
-  demographicsData: ExtendedDemographics | null;
-  analysis: AnalysisResult | null;
-  environmentalRisk: EnvironmentalRisk | null;
-  marketComps: MarketComp[] | null;
-  selectedParcel?: SelectedParcel | null;
-}
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },

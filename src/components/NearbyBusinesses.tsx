@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Business } from '@/app/page';
+import { Business } from '@/types';
 
 interface MarketContext {
   population?: number;

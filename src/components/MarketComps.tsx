@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { MarketComp } from '@/app/page';
+import { MarketComp } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 interface MarketCompsProps {

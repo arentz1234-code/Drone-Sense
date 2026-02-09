@@ -2,23 +2,11 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { EnvironmentalRisk } from '@/app/page';
+import { EnvironmentalRisk, SelectedParcel } from '@/types';
 import { NearbyParcel } from './LeafletMap';
 
-export interface SelectedParcel {
-  boundaries: Array<[number, number][]>;
-  parcelInfo: {
-    apn?: string;
-    owner?: string;
-    address?: string;
-    acres?: number;
-    sqft?: number;
-    zoning?: string;
-    landUse?: string;
-  } | null;
-  coordinates: { lat: number; lng: number };
-  isConfirmed: boolean;
-}
+// Re-export for backward compatibility
+export type { SelectedParcel };
 
 interface MapViewProps {
   coordinates: { lat: number; lng: number } | null;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { PropertyData } from '@/app/page';
+import { PropertyData } from '@/types';
 
 interface SavedPropertiesProps {
   currentProperty: PropertyData;

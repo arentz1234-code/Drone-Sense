@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp } from '@/app/page';
+import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp } from '@/types';
 import { calculateFeasibilityScore, getScoreColor, getRatingColor } from '@/utils/feasibilityScore';
 
 interface LiveFeasibilityScoreProps {

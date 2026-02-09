@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PropertyData } from '@/app/page';
+import { PropertyData } from '@/types';
 
 interface PDFReportGeneratorProps {
   propertyData: PropertyData;
