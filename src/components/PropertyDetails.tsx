@@ -1,7 +1,28 @@
 'use client';
 
 import { useState } from 'react';
-import { PropertyData } from '@/app/api/property/route';
+
+interface PropertyAPIData {
+  address: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  county: string;
+  lotSize: string;
+  lotSizeAcres: string;
+  zoning: string;
+  landUse: string;
+  yearBuilt: string;
+  squareFootage: string;
+  bedrooms: string;
+  bathrooms: string;
+  assessedValue: string;
+  taxAmount: string;
+  lastSaleDate: string;
+  lastSalePrice: string;
+  ownerName: string;
+  ownerType: string;
+}
 
 interface PropertyDetailsProps {
   address: string;
@@ -9,7 +30,7 @@ interface PropertyDetailsProps {
 
 export default function PropertyDetails({ address }: PropertyDetailsProps) {
   const [loading, setLoading] = useState(false);
-  const [property, setProperty] = useState<PropertyData | null>(null);
+  const [property, setProperty] = useState<PropertyAPIData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchPropertyData = async () => {

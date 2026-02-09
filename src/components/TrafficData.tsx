@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { TrafficData as TrafficDataType } from '@/app/api/traffic/route';
+import { TrafficInfo } from '@/types';
 
 interface TrafficDataProps {
   coordinates: { lat: number; lng: number } | null;
@@ -24,7 +24,7 @@ interface TrafficDataProps {
 
 export default function TrafficData({ coordinates, address, parcelBoundary, onDataLoad }: TrafficDataProps) {
   const [loading, setLoading] = useState(false);
-  const [traffic, setTraffic] = useState<TrafficDataType | null>(null);
+  const [traffic, setTraffic] = useState<TrafficInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchTrafficData = async () => {
