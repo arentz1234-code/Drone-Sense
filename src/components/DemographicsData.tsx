@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { DemographicsData as DemographicsDataType } from '@/app/api/demographics/route';
+import { DemographicsData as DemographicsDataType } from '@/types/demographics';
 
 interface DemographicsDataProps {
   coordinates: { lat: number; lng: number } | null;

@@ -10,7 +10,7 @@ import MapView, { SelectedParcel } from '@/components/MapView';
 import AnalysisReport from '@/components/AnalysisReport';
 import TabNavigation, { TabPanel } from '@/components/ui/TabNavigation';
 import { SkeletonCard } from '@/components/ui/Skeleton';
-import { DemographicsData as DemographicsDataType } from '@/app/api/demographics/route';
+import { DemographicsData as DemographicsDataType } from '@/types/demographics';
 
 // Lazy load new components
 import dynamic from 'next/dynamic';
