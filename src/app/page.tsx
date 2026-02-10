@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import PhotoUpload from '@/components/PhotoUpload';
 import AddressInput from '@/components/AddressInput';
 import NearbyBusinesses from '@/components/NearbyBusinesses';
@@ -111,8 +112,24 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const searchParams = useSearchParams();
   const allBusinesses = businesses;
   const hasInput = address.trim().length > 0 || images.length > 0 || coordinates !== null;
+
+  // Load coordinates from URL parameters (from search page)
+  useEffect(() => {
+    const lat = searchParams.get('lat');
+    const lng = searchParams.get('lng');
+    if (lat && lng) {
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+      if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+        setCoordinates({ lat: parsedLat, lng: parsedLng });
+        // Clear URL params after loading
+        window.history.replaceState({}, '', '/');
+      }
+    }
+  }, [searchParams]);
 
   // Clear selected parcel when address changes
   useEffect(() => {
@@ -273,11 +290,22 @@ export default function HomePage() {
     <ErrorBoundary>
     <div className="max-w-7xl mx-auto px-6 py-8">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-2">Site Analysis Dashboard</h2>
-        <p className="text-[var(--text-secondary)]">
-          Upload drone imagery and property details for AI-powered site analysis
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Site Analysis Dashboard</h2>
+          <p className="text-[var(--text-secondary)]">
+            Upload drone imagery and property details for AI-powered site analysis
+          </p>
+        </div>
+        <a
+          href="/search"
+          className="btn-secondary flex items-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          Property Search
+        </a>
       </div>
 
       {/* Tab Navigation */}
