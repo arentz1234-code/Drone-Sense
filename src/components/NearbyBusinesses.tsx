@@ -114,7 +114,7 @@ function analyzeMarketSaturation(businesses: Business[], population: number): {
       note = `Room for ${Math.ceil(expectedCount - count)} more`;
     } else if (ratio > 1.5) {
       saturation = 'saturated';
-      note = `High competition (${count} serving ${population.toLocaleString()} people)`;
+      note = `High competition (${count} serving ${(population ?? 0).toLocaleString()} people)`;
     } else {
       saturation = 'balanced';
       note = 'Healthy market density';

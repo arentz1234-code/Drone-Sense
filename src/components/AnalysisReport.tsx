@@ -27,16 +27,21 @@ export default function AnalysisReport({
 }: AnalysisReportProps) {
   // Calculate live feasibility score if data is provided
   const liveFeasibilityScore = useMemo(() => {
-    const hasLiveData = trafficData || demographicsData || businesses.length > 0 || environmentalRisk || (marketComps && marketComps.length > 0);
-    if (!hasLiveData) return null;
+    try {
+      const hasLiveData = trafficData || demographicsData || businesses.length > 0 || environmentalRisk || (marketComps && marketComps.length > 0);
+      if (!hasLiveData) return null;
 
-    return calculateFeasibilityScore(
-      trafficData || null,
-      demographicsData || null,
-      businesses,
-      environmentalRisk || null,
-      marketComps || null
-    );
+      return calculateFeasibilityScore(
+        trafficData || null,
+        demographicsData || null,
+        businesses,
+        environmentalRisk || null,
+        marketComps || null
+      );
+    } catch (err) {
+      console.error('Error calculating live feasibility score:', err);
+      return null;
+    }
   }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps]);
 
   // Use live score if available, otherwise use analysis score

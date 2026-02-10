@@ -22,13 +22,37 @@ export default function LiveFeasibilityScore({
   isVisible = true,
 }: LiveFeasibilityScoreProps) {
   const feasibilityScore = useMemo(() => {
-    return calculateFeasibilityScore(
-      trafficData,
-      demographicsData,
-      businesses,
-      environmentalRisk,
-      marketComps
-    );
+    try {
+      return calculateFeasibilityScore(
+        trafficData,
+        demographicsData,
+        businesses,
+        environmentalRisk,
+        marketComps
+      );
+    } catch (err) {
+      console.error('Error calculating feasibility score:', err);
+      return {
+        overall: 0,
+        breakdown: {
+          trafficScore: 0,
+          demographicsScore: 0,
+          competitionScore: 0,
+          accessScore: 0,
+          environmentalScore: 0,
+          marketScore: 0,
+        },
+        details: {
+          traffic: 'Error calculating',
+          demographics: 'Error calculating',
+          competition: 'Error calculating',
+          access: 'Error calculating',
+          environmental: 'Error calculating',
+          market: 'Error calculating',
+        },
+        rating: 'Poor' as const,
+      };
+    }
   }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps]);
 
   // Count available data sources
