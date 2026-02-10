@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import PhotoUpload from '@/components/PhotoUpload';
 import AddressInput from '@/components/AddressInput';
 import NearbyBusinesses from '@/components/NearbyBusinesses';
@@ -11,6 +11,7 @@ import AnalysisReport from '@/components/AnalysisReport';
 import TabNavigation, { TabPanel } from '@/components/ui/TabNavigation';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { useSearchHistory } from '@/hooks/useSearchHistory';
 
 // Import all types from shared types file
 import {
@@ -111,20 +112,28 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { addToHistory, updateHistoryItem } = useSearchHistory();
+  const currentHistoryIdRef = useRef<string | null>(null);
+
   const allBusinesses = businesses;
   const hasInput = address.trim().length > 0 || images.length > 0 || coordinates !== null;
 
-  // Load coordinates from URL parameters (from search page)
+  // Load coordinates and address from URL parameters (from search page or history)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const lat = params.get('lat');
       const lng = params.get('lng');
+      const urlAddress = params.get('address');
+
       if (lat && lng) {
         const parsedLat = parseFloat(lat);
         const parsedLng = parseFloat(lng);
         if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
           setCoordinates({ lat: parsedLat, lng: parsedLng });
+          if (urlAddress) {
+            setAddress(decodeURIComponent(urlAddress));
+          }
           // Clear URL params after loading
           window.history.replaceState({}, '', '/');
         }
@@ -222,6 +231,12 @@ export default function HomePage() {
     setError(null);
     setLoading(true);
 
+    // Add to search history when starting analysis
+    if (coordinates && address) {
+      const historyItem = addToHistory(address, coordinates, null, images[0]);
+      currentHistoryIdRef.current = historyItem.id;
+    }
+
     try {
       const response = await fetch('/api/analyze', {
         method: 'POST',
@@ -249,6 +264,17 @@ export default function HomePage() {
 
       const result = await response.json();
       setAnalysis(result);
+
+      // Update history with feasibility score after analysis completes
+      if (currentHistoryIdRef.current && result.feasibilityScore?.overall != null) {
+        updateHistoryItem(currentHistoryIdRef.current, {
+          feasibilityScore: result.feasibilityScore.overall,
+        });
+      } else if (currentHistoryIdRef.current && result.viabilityScore != null) {
+        updateHistoryItem(currentHistoryIdRef.current, {
+          feasibilityScore: result.viabilityScore,
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
     } finally {

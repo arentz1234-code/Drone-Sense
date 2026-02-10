@@ -15,6 +15,15 @@ export interface NearbyParcel {
   landUse?: string;
 }
 
+interface Business {
+  name: string;
+  type: string;
+  distance: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+}
+
 interface ParcelData {
   boundaries: Array<[number, number][]>;
   parcelInfo: {
@@ -47,6 +56,7 @@ interface LeafletMapProps {
   mapType: 'satellite' | 'street' | 'hybrid';
   parcelData: ParcelData | null;
   nearbyParcels?: NearbyParcel[];
+  businesses?: Business[];
   selectedParcelAPN?: string | null;
   suggestedParcelAPN?: string | null;
   onParcelClick?: (parcel: NearbyParcel) => void;
@@ -55,6 +65,100 @@ interface LeafletMapProps {
   onMarkerDrag?: (coords: { lat: number; lng: number }) => void;
   pinLocation?: { lat: number; lng: number } | null;
   interactiveMode?: boolean;
+  showHeatmap?: boolean;
+}
+
+// Heatmap layer component
+function HeatmapLayer({
+  coordinates,
+  businesses
+}: {
+  coordinates: { lat: number; lng: number } | null;
+  businesses?: Business[];
+}) {
+  const map = useMap();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const heatLayerRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Dynamically import leaflet.heat
+    import('leaflet.heat').then(() => {
+      if (!coordinates || !businesses || businesses.length === 0) {
+        if (heatLayerRef.current) {
+          map.removeLayer(heatLayerRef.current);
+          heatLayerRef.current = null;
+        }
+        return;
+      }
+
+      // Generate heat points from businesses
+      const heatPoints: [number, number, number][] = [];
+
+      businesses.forEach((business) => {
+        // If business has coordinates, use them
+        if (business.lat && business.lng) {
+          heatPoints.push([business.lat, business.lng, 0.8]);
+        } else {
+          // Otherwise, estimate position based on distance from center
+          const distanceMatch = business.distance.match(/([\d.]+)\s*(mi|km|m|ft)/i);
+          if (distanceMatch && coordinates) {
+            const distance = parseFloat(distanceMatch[1]);
+            const unit = distanceMatch[2].toLowerCase();
+
+            // Convert to kilometers
+            let distanceKm = distance;
+            if (unit === 'mi') distanceKm = distance * 1.60934;
+            if (unit === 'm') distanceKm = distance / 1000;
+            if (unit === 'ft') distanceKm = distance * 0.0003048;
+
+            // Create points in a circle around the center
+            const angle = Math.random() * 2 * Math.PI;
+            const latOffset = (distanceKm / 111) * Math.cos(angle);
+            const lngOffset = (distanceKm / (111 * Math.cos(coordinates.lat * Math.PI / 180))) * Math.sin(angle);
+
+            heatPoints.push([
+              coordinates.lat + latOffset,
+              coordinates.lng + lngOffset,
+              0.6 + Math.random() * 0.4 // Intensity varies
+            ]);
+          }
+        }
+      });
+
+      // Remove existing layer
+      if (heatLayerRef.current) {
+        map.removeLayer(heatLayerRef.current);
+      }
+
+      // Create new heat layer
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const windowL = (window as any).L;
+      if (heatPoints.length > 0 && windowL?.heatLayer) {
+        heatLayerRef.current = windowL.heatLayer(heatPoints, {
+          radius: 35,
+          blur: 25,
+          maxZoom: 17,
+          max: 1.0,
+          gradient: {
+            0.0: 'blue',
+            0.25: 'cyan',
+            0.5: 'lime',
+            0.75: 'yellow',
+            1.0: 'red'
+          }
+        }).addTo(map);
+      }
+    }).catch(console.error);
+
+    return () => {
+      if (heatLayerRef.current) {
+        map.removeLayer(heatLayerRef.current);
+        heatLayerRef.current = null;
+      }
+    };
+  }, [map, coordinates, businesses]);
+
+  return null;
 }
 
 // Component to watch for map bounds changes and handle clicks
@@ -130,6 +234,7 @@ export default function LeafletMap({
   mapType,
   parcelData,
   nearbyParcels,
+  businesses,
   selectedParcelAPN,
   suggestedParcelAPN,
   onParcelClick,
@@ -138,6 +243,7 @@ export default function LeafletMap({
   onMarkerDrag,
   pinLocation,
   interactiveMode = false,
+  showHeatmap = false,
 }: LeafletMapProps) {
   const [pinIcon, setPinIcon] = useState<Icon | DivIcon | null>(null);
 
@@ -224,6 +330,11 @@ export default function LeafletMap({
           url="https://stamen-tiles.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}.png"
           attribution="&copy; Stamen Design"
         />
+      )}
+
+      {/* Heatmap Layer */}
+      {showHeatmap && (
+        <HeatmapLayer coordinates={coordinates} businesses={businesses} />
       )}
 
       {/* Map event handler for bounds changes and clicks */}
@@ -357,5 +468,52 @@ export default function LeafletMap({
         })
       )}
     </MapContainer>
+  );
+}
+
+// Zoning Legend Component
+export function ZoningLegend() {
+  const legendItems = [
+    { color: '#ff6b6b', label: 'Commercial' },
+    { color: '#4ecdc4', label: 'Residential' },
+    { color: '#9b59b6', label: 'Industrial' },
+    { color: '#27ae60', label: 'Agricultural' },
+    { color: '#f39c12', label: 'Mixed Use' },
+  ];
+
+  return (
+    <div className="absolute bottom-4 left-4 bg-[var(--bg-secondary)] rounded-lg p-3 shadow-lg border border-[var(--border-color)] z-[1000]">
+      <h4 className="text-xs font-medium text-[var(--text-primary)] mb-2">Zoning</h4>
+      <div className="space-y-1.5">
+        {legendItems.map((item) => (
+          <div key={item.label} className="flex items-center gap-2">
+            <div
+              className="w-3 h-3 rounded-sm"
+              style={{ backgroundColor: item.color }}
+            />
+            <span className="text-xs text-[var(--text-secondary)]">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Heatmap Legend Component
+export function HeatmapLegend() {
+  return (
+    <div className="absolute bottom-4 right-4 bg-[var(--bg-secondary)] rounded-lg p-3 shadow-lg border border-[var(--border-color)] z-[1000]">
+      <h4 className="text-xs font-medium text-[var(--text-primary)] mb-2">Competition Density</h4>
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-[var(--text-muted)]">Low</span>
+        <div
+          className="w-24 h-3 rounded"
+          style={{
+            background: 'linear-gradient(to right, blue, cyan, lime, yellow, red)'
+          }}
+        />
+        <span className="text-xs text-[var(--text-muted)]">High</span>
+      </div>
+    </div>
   );
 }

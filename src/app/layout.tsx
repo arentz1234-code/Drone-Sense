@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import Header from '@/components/Header';
 
 export const metadata: Metadata = {
   title: 'Drone Sense - AI Site Analysis Terminal',
@@ -12,30 +14,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="grid-pattern">
-        <header className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)]">
-          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-white">DRONE SENSE</h1>
-                <p className="text-xs text-[var(--text-muted)]">AI Site Analysis Terminal v1.0</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="status-dot active"></div>
-                <span className="text-xs text-[var(--text-secondary)]">System Online</span>
-              </div>
-            </div>
-          </div>
-        </header>
-        <main className="min-h-screen">{children}</main>
+        <ThemeProvider>
+          <Header />
+          <main className="min-h-screen">{children}</main>
+        </ThemeProvider>
       </body>
     </html>
   );
