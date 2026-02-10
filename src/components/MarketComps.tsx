@@ -202,7 +202,10 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
             <tbody>
               {sortedComps.map((comp, index) => (
                 <tr key={index} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-tertiary)]/50">
-                  <td className="py-3 px-4 font-medium">{comp.address}</td>
+                  <td className="py-3 px-4">
+                    <div className="font-medium">{comp.address}</div>
+                    <div className="text-xs text-[var(--text-muted)]">{comp.propertyType}</div>
+                  </td>
                   <td className="py-3 px-4 text-right text-[var(--accent-green)]">{formatCurrency(comp.salePrice)}</td>
                   <td className="py-3 px-4 text-right">{comp.sqft?.toLocaleString() || 'N/A'}</td>
                   <td className="py-3 px-4 text-right text-[var(--accent-cyan)]">${comp.pricePerSqft}</td>

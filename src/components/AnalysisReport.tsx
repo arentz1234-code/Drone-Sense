@@ -94,7 +94,7 @@ export default function AnalysisReport({
       Property: ${address}
       Generated: ${new Date().toLocaleString()}
 
-      VIABILITY SCORE: ${viabilityScore}/10 (${getScoreLabel(viabilityScore)})
+      VIABILITY SCORE: ${viabilityScore.toFixed(1)}/10 (${getScoreLabel(viabilityScore)})
 
       SITE ANALYSIS
       -------------
@@ -144,7 +144,7 @@ export default function AnalysisReport({
         </div>
         <div className="text-center">
           <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${getScoreColor(viabilityScore)} flex items-center justify-center`}>
-            <span className="text-4xl font-bold text-white">{viabilityScore}</span>
+            <span className="text-4xl font-bold text-white">{viabilityScore.toFixed(1)}</span>
           </div>
           <p className="text-sm mt-2 font-medium">{feasibilityScore?.rating || getScoreLabel(viabilityScore)}</p>
           <p className="text-xs text-[var(--text-muted)]">

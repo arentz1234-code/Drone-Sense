@@ -77,14 +77,14 @@ ${propertyData.coordinates ? `Coordinates: ${propertyData.coordinates.lat.toFixe
                               EXECUTIVE SUMMARY
 ================================================================================
 
-Viability Score: ${analysis?.viabilityScore || 'N/A'}/10 (${getScoreLabel(analysis?.viabilityScore || 0)})
+Viability Score: ${analysis?.viabilityScore != null ? analysis.viabilityScore.toFixed(1) : 'N/A'}/10 (${getScoreLabel(analysis?.viabilityScore || 0)})
 
 ${analysis?.feasibilityScore ? `
 Feasibility Breakdown:
-  • Traffic Score: ${analysis.feasibilityScore.breakdown.trafficScore}/10
-  • Demographics Score: ${analysis.feasibilityScore.breakdown.demographicsScore}/10
-  • Competition Score: ${analysis.feasibilityScore.breakdown.competitionScore}/10
-  • Access Score: ${analysis.feasibilityScore.breakdown.accessScore}/10
+  • Traffic Score: ${analysis.feasibilityScore.breakdown.trafficScore.toFixed(1)}/10
+  • Demographics Score: ${analysis.feasibilityScore.breakdown.demographicsScore.toFixed(1)}/10
+  • Competition Score: ${analysis.feasibilityScore.breakdown.competitionScore.toFixed(1)}/10
+  • Access Score: ${analysis.feasibilityScore.breakdown.accessScore.toFixed(1)}/10
 ` : ''}
 
 Key Recommendation: ${analysis?.businessRecommendation || 'N/A'}

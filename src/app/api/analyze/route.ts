@@ -1124,13 +1124,13 @@ function calculateFeasibilityScore(
   };
 
   const overall = Math.round(
-    trafficScore * weights.traffic +
+    (trafficScore * weights.traffic +
     demographicsScore * weights.demographics +
     competitionScore * weights.competition +
     accessScore * weights.access +
     environmentalScore * weights.environmental +
-    marketScore * weights.market
-  );
+    marketScore * weights.market) * 10
+  ) / 10;
 
   // Determine rating
   let rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
