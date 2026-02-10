@@ -94,11 +94,11 @@ Key Recommendation: ${analysis?.businessRecommendation || 'N/A'}
 ================================================================================
 
 ${trafficData ? `
-Estimated VPD: ${trafficData.estimatedVPD.toLocaleString()} vehicles per day
-VPD Range: ${trafficData.vpdRange}
-Road Type: ${trafficData.roadType}
-Traffic Level: ${trafficData.trafficLevel}
-Congestion: ${trafficData.congestionPercent}%
+Estimated VPD: ${trafficData.estimatedVPD?.toLocaleString() || 'N/A'} vehicles per day
+VPD Range: ${trafficData.vpdRange || 'N/A'}
+Road Type: ${trafficData.roadType || 'N/A'}
+Traffic Level: ${trafficData.trafficLevel || 'N/A'}
+Congestion: ${trafficData.congestionPercent || 0}%
 ` : 'Traffic data not available'}
 
 ================================================================================
@@ -111,9 +111,9 @@ Median Household Income: $${demographicsData.medianHouseholdIncome?.toLocaleStri
 ${demographicsData.isCollegeTown ? 'College Town: Yes' : ''}
 ${demographicsData.multiRadius ? `
 Population by Radius:
-  • 1 Mile: ${demographicsData.multiRadius.oneMile.population.toLocaleString()}
-  • 3 Miles: ${demographicsData.multiRadius.threeMile.population.toLocaleString()}
-  • 5 Miles: ${demographicsData.multiRadius.fiveMile.population.toLocaleString()}
+  • 1 Mile: ${demographicsData.multiRadius.oneMile?.population?.toLocaleString() || 'N/A'}
+  • 3 Miles: ${demographicsData.multiRadius.threeMile?.population?.toLocaleString() || 'N/A'}
+  • 5 Miles: ${demographicsData.multiRadius.fiveMile?.population?.toLocaleString() || 'N/A'}
 ` : ''}
 ` : 'Demographics data not available'}
 
@@ -130,7 +130,7 @@ ${businesses.slice(0, 10).map(b => `  • ${b.name} (${b.type}) - ${b.distance}`
 
 ${marketComps && marketComps.length > 0 ? `
 Comparable Sales:
-${marketComps.slice(0, 5).map(c => `  • ${c.address}: $${c.salePrice.toLocaleString()} ($${c.pricePerSqft}/sqft)`).join('\n')}
+${marketComps.slice(0, 5).map(c => `  • ${c.address}: $${c.salePrice?.toLocaleString() || 'N/A'} ($${c.pricePerSqft || 'N/A'}/sqft)`).join('\n')}
 
 Average Price per SqFt: $${Math.round(marketComps.reduce((sum, c) => sum + c.pricePerSqft, 0) / marketComps.length)}
 ` : ''}

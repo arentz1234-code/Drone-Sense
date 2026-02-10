@@ -77,7 +77,7 @@ export default function TrafficCharts({ trafficData }: TrafficChartsProps) {
           <p className="text-[var(--text-primary)] font-medium">{label}</p>
           {payload.map((entry, index) => (
             <p key={index} style={{ color: entry.payload.fill }} className="text-sm">
-              VPD: {entry.value.toLocaleString()}
+              VPD: {entry.value?.toLocaleString() || 'N/A'}
             </p>
           ))}
         </div>
@@ -108,7 +108,7 @@ export default function TrafficCharts({ trafficData }: TrafficChartsProps) {
               type: trafficData.vpdSource?.includes('Florida DOT') ? 'api' : 'estimate'
             }}>Vehicles Per Day</DataSourceTooltip>
           </p>
-          <p className="metric-card-value">{trafficData.estimatedVPD.toLocaleString()}</p>
+          <p className="metric-card-value">{trafficData.estimatedVPD?.toLocaleString() || 'N/A'}</p>
         </div>
         <div className="metric-card">
           <p className="metric-card-label">

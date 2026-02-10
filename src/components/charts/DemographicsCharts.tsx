@@ -75,7 +75,7 @@ export default function DemographicsCharts({ demographics }: DemographicsChartsP
             <DataSourceTooltip source={DATA_SOURCES.census}>Population (3mi)</DataSourceTooltip>
           </p>
           <p className="metric-card-value">
-            {demographics.multiRadius?.threeMile.population.toLocaleString() || demographics.population?.toLocaleString() || 'N/A'}
+            {demographics.multiRadius?.threeMile?.population?.toLocaleString() || demographics.population?.toLocaleString() || 'N/A'}
           </p>
         </div>
         <div className="metric-card">
@@ -83,7 +83,7 @@ export default function DemographicsCharts({ demographics }: DemographicsChartsP
             <DataSourceTooltip source={DATA_SOURCES.census}>Households (3mi)</DataSourceTooltip>
           </p>
           <p className="metric-card-value">
-            {demographics.multiRadius?.threeMile.households.toLocaleString() || 'N/A'}
+            {demographics.multiRadius?.threeMile?.households?.toLocaleString() || 'N/A'}
           </p>
         </div>
         <div className="metric-card">

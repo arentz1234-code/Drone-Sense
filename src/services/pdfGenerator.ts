@@ -112,11 +112,11 @@ function generateExecutiveSummary(analysis: AnalysisResult): string {
 
 function generateTrafficSection(traffic: TrafficInfo): string {
   return [
-    `Estimated VPD: ${traffic.estimatedVPD.toLocaleString()} vehicles per day`,
-    `VPD Range: ${traffic.vpdRange}`,
-    `Road Type: ${traffic.roadType}`,
-    `Traffic Level: ${traffic.trafficLevel}`,
-    `Congestion: ${traffic.congestionPercent}%`,
+    `Estimated VPD: ${traffic.estimatedVPD?.toLocaleString() || 'N/A'} vehicles per day`,
+    `VPD Range: ${traffic.vpdRange || 'N/A'}`,
+    `Road Type: ${traffic.roadType || 'N/A'}`,
+    `Traffic Level: ${traffic.trafficLevel || 'N/A'}`,
+    `Congestion: ${traffic.congestionPercent || 0}%`,
   ].join('\n');
 }
 
@@ -133,9 +133,9 @@ function generateDemographicsSection(demographics: ExtendedDemographics): string
   if (demographics.multiRadius) {
     lines.push('');
     lines.push('Population by Radius:');
-    lines.push(`  1 Mile: ${demographics.multiRadius.oneMile.population.toLocaleString()}`);
-    lines.push(`  3 Miles: ${demographics.multiRadius.threeMile.population.toLocaleString()}`);
-    lines.push(`  5 Miles: ${demographics.multiRadius.fiveMile.population.toLocaleString()}`);
+    lines.push(`  1 Mile: ${demographics.multiRadius.oneMile?.population?.toLocaleString() || 'N/A'}`);
+    lines.push(`  3 Miles: ${demographics.multiRadius.threeMile?.population?.toLocaleString() || 'N/A'}`);
+    lines.push(`  5 Miles: ${demographics.multiRadius.fiveMile?.population?.toLocaleString() || 'N/A'}`);
   }
 
   if (demographics.growthTrend) {

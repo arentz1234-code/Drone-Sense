@@ -204,7 +204,7 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
                 <tr key={index} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-tertiary)]/50">
                   <td className="py-3 px-4 font-medium">{comp.address}</td>
                   <td className="py-3 px-4 text-right text-[var(--accent-green)]">{formatCurrency(comp.salePrice)}</td>
-                  <td className="py-3 px-4 text-right">{comp.sqft.toLocaleString()}</td>
+                  <td className="py-3 px-4 text-right">{comp.sqft?.toLocaleString() || 'N/A'}</td>
                   <td className="py-3 px-4 text-right text-[var(--accent-cyan)]">${comp.pricePerSqft}</td>
                   <td className="py-3 px-4 text-center">
                     <span className="px-2 py-1 bg-[var(--bg-tertiary)] rounded text-xs">{comp.propertyType}</span>

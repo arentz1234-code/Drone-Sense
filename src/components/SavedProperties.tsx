@@ -264,7 +264,7 @@ export default function SavedProperties({ currentProperty, onLoadProperty }: Sav
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-[var(--text-muted)]">Traffic VPD:</span>
-                        <span>{property.data.trafficData?.estimatedVPD.toLocaleString() || 'N/A'}</span>
+                        <span>{property.data.trafficData?.estimatedVPD?.toLocaleString() || 'N/A'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-[var(--text-muted)]">Population:</span>
