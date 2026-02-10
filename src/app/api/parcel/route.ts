@@ -344,10 +344,6 @@ const STATE_GIS_ENDPOINTS: Record<string, { url: string; name: string }[]> = {
   'AL': [
     { url: 'https://gisservices.alabama.gov/arcgis/rest/services/Parcels/Statewide_Parcels/MapServer/0/query', name: 'Alabama Statewide Parcels' },
   ],
-  // Florida
-  'FL': [
-    { url: 'https://gis.fdot.gov/arcgis/rest/services/Parcels/FeatureServer/0/query', name: 'Florida DOT Parcels' },
-  ],
   // Georgia
   'GA': [
     { url: 'https://services1.arcgis.com/2iUE8l8JKrP2tygQ/arcgis/rest/services/Georgia_Parcels/FeatureServer/0/query', name: 'Georgia Parcels' },
@@ -357,6 +353,130 @@ const STATE_GIS_ENDPOINTS: Record<string, { url: string; name: string }[]> = {
     { url: 'https://services.arcgis.com/KTcxiTD9dsQw4r7Z/arcgis/rest/services/Texas_Parcels/FeatureServer/0/query', name: 'Texas Parcels' },
   ],
 };
+
+// Florida county-specific GIS endpoints (Florida doesn't have a statewide parcel layer)
+const FLORIDA_COUNTY_GIS: { name: string; url: string; bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } }[] = [
+  // Hillsborough County (Tampa)
+  {
+    name: 'Hillsborough County',
+    url: 'https://maps.hillsboroughcounty.org/arcgis/rest/services/InfoLayers/Parcels/MapServer/0/query',
+    bounds: { minLat: 27.57, maxLat: 28.17, minLng: -82.82, maxLng: -82.05 }
+  },
+  // Orange County (Orlando)
+  {
+    name: 'Orange County',
+    url: 'https://maps.ocfl.net/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 28.34, maxLat: 28.79, minLng: -81.66, maxLng: -80.95 }
+  },
+  // Pinellas County (St. Petersburg, Clearwater)
+  {
+    name: 'Pinellas County',
+    url: 'https://egis.pinellascounty.org/arcgis/rest/services/Parcels/Parcels/MapServer/0/query',
+    bounds: { minLat: 27.60, maxLat: 28.17, minLng: -82.85, maxLng: -82.53 }
+  },
+  // Duval County (Jacksonville)
+  {
+    name: 'Duval County',
+    url: 'https://maps.coj.net/arcgis/rest/services/Parcels/Parcels/MapServer/0/query',
+    bounds: { minLat: 30.10, maxLat: 30.59, minLng: -82.05, maxLng: -81.32 }
+  },
+  // Polk County (Lakeland)
+  {
+    name: 'Polk County',
+    url: 'https://gis.polk-county.net/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 27.64, maxLat: 28.30, minLng: -82.11, maxLng: -81.15 }
+  },
+  // Lee County (Fort Myers)
+  {
+    name: 'Lee County FL',
+    url: 'https://gis.leegov.com/arcgis/rest/services/Parcels/Parcels/MapServer/0/query',
+    bounds: { minLat: 26.32, maxLat: 26.79, minLng: -82.27, maxLng: -81.56 }
+  },
+  // Brevard County (Melbourne, Cape Canaveral)
+  {
+    name: 'Brevard County',
+    url: 'https://gis.brevardcounty.us/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 27.81, maxLat: 28.80, minLng: -81.11, maxLng: -80.22 }
+  },
+  // Volusia County (Daytona Beach)
+  {
+    name: 'Volusia County',
+    url: 'https://maps.volusia.org/arcgis/rest/services/Parcels/Parcels/MapServer/0/query',
+    bounds: { minLat: 28.76, maxLat: 29.43, minLng: -81.67, maxLng: -80.82 }
+  },
+  // Seminole County (Sanford)
+  {
+    name: 'Seminole County',
+    url: 'https://gis.seminolecountyfl.gov/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 28.66, maxLat: 28.86, minLng: -81.48, maxLng: -81.00 }
+  },
+  // Sarasota County
+  {
+    name: 'Sarasota County',
+    url: 'https://gis.scgov.net/arcgis/rest/services/Parcels/Parcels/MapServer/0/query',
+    bounds: { minLat: 26.95, maxLat: 27.47, minLng: -82.80, maxLng: -82.07 }
+  },
+  // Manatee County (Bradenton)
+  {
+    name: 'Manatee County',
+    url: 'https://gis.mymanatee.org/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 27.34, maxLat: 27.71, minLng: -82.76, maxLng: -82.04 }
+  },
+  // Pasco County
+  {
+    name: 'Pasco County',
+    url: 'https://gis.pascocountyfl.net/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 28.12, maxLat: 28.54, minLng: -82.90, maxLng: -82.05 }
+  },
+  // Collier County (Naples)
+  {
+    name: 'Collier County',
+    url: 'https://gis.colliercountyfl.gov/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 25.80, maxLat: 26.52, minLng: -81.87, maxLng: -80.87 }
+  },
+  // Escambia County (Pensacola)
+  {
+    name: 'Escambia County',
+    url: 'https://gis.myescambia.com/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 30.27, maxLat: 30.98, minLng: -87.63, maxLng: -86.78 }
+  },
+  // Leon County (Tallahassee)
+  {
+    name: 'Leon County',
+    url: 'https://gis.leoncountyfl.gov/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 30.26, maxLat: 30.70, minLng: -84.65, maxLng: -83.98 }
+  },
+  // Alachua County (Gainesville)
+  {
+    name: 'Alachua County',
+    url: 'https://gis.alachuacounty.us/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 29.40, maxLat: 29.95, minLng: -82.66, maxLng: -82.05 }
+  },
+  // Marion County (Ocala)
+  {
+    name: 'Marion County',
+    url: 'https://gis.marioncountyfl.org/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 28.85, maxLat: 29.55, minLng: -82.54, maxLng: -81.60 }
+  },
+  // Lake County
+  {
+    name: 'Lake County',
+    url: 'https://gis.lakecountyfl.gov/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 28.40, maxLat: 29.10, minLng: -82.00, maxLng: -81.25 }
+  },
+  // Osceola County (Kissimmee)
+  {
+    name: 'Osceola County',
+    url: 'https://gis.osceola.org/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 27.69, maxLat: 28.45, minLng: -81.60, maxLng: -80.80 }
+  },
+  // St. Johns County (St. Augustine)
+  {
+    name: 'St. Johns County',
+    url: 'https://gis.sjcfl.us/arcgis/rest/services/Parcels/MapServer/0/query',
+    bounds: { minLat: 29.62, maxLat: 30.25, minLng: -81.68, maxLng: -81.19 }
+  },
+];
 
 // Determine state from coordinates (rough approximation)
 function getStateFromCoords(lat: number, lng: number): string | null {
@@ -369,6 +489,111 @@ function getStateFromCoords(lat: number, lng: number): string | null {
   // Texas
   if (lat >= 25.8 && lat <= 36.5 && lng >= -106.6 && lng <= -93.5) return 'TX';
   return null;
+}
+
+// Fetch from Florida county-specific GIS services
+async function fetchParcelFromFloridaCountyGIS(lat: number, lng: number): Promise<ParcelResponse | null> {
+  // Find which Florida county this coordinate is in
+  const matchingCounty = FLORIDA_COUNTY_GIS.find(county =>
+    lat >= county.bounds.minLat && lat <= county.bounds.maxLat &&
+    lng >= county.bounds.minLng && lng <= county.bounds.maxLng
+  );
+
+  if (!matchingCounty) {
+    console.log('No matching Florida county found for coordinates');
+    return null;
+  }
+
+  console.log(`Trying ${matchingCounty.name} GIS...`);
+
+  try {
+    const url = new URL(matchingCounty.url);
+    url.searchParams.set('where', '1=1');
+    url.searchParams.set('geometry', `${lng},${lat}`);
+    url.searchParams.set('geometryType', 'esriGeometryPoint');
+    url.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
+    url.searchParams.set('outFields', '*');
+    url.searchParams.set('returnGeometry', 'true');
+    url.searchParams.set('outSR', '4326');
+    url.searchParams.set('f', 'json');
+
+    const response = await fetch(url.toString(), {
+      signal: AbortSignal.timeout(10000),
+      headers: { 'User-Agent': 'DroneSense/1.0' }
+    });
+
+    if (!response.ok) {
+      console.log(`${matchingCounty.name} response not ok:`, response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log(`${matchingCounty.name} data:`, JSON.stringify(data).slice(0, 500));
+
+    if (data.error) {
+      console.log(`${matchingCounty.name} error:`, data.error);
+      return null;
+    }
+
+    if (!data.features || data.features.length === 0) {
+      console.log(`${matchingCounty.name}: No features found`);
+      return null;
+    }
+
+    const feature = data.features[0];
+    const rings = feature.geometry?.rings;
+
+    if (!rings || rings.length === 0) return null;
+
+    const boundaries: Array<[number, number][]> = rings.map((ring: number[][]) =>
+      ring.map((coord: number[]) => [coord[1], coord[0]] as [number, number])
+    );
+
+    // Florida counties use various field names for parcel attributes
+    const attrs = feature.attributes;
+    let acres = attrs?.ACRES || attrs?.ACREAGE || attrs?.GIS_ACRES || attrs?.TOTALACRES || attrs?.LOT_ACRES || attrs?.Shape__Area;
+    let sqft = attrs?.SQFT || attrs?.Shape__Area;
+
+    // If Shape__Area is in square meters, convert
+    if (attrs?.Shape__Area && !acres) {
+      sqft = attrs.Shape__Area * 10.7639;
+      acres = sqft / 43560;
+    }
+
+    // Calculate from polygon if still no acreage
+    if (!acres && boundaries.length > 0 && boundaries[0].length > 0) {
+      sqft = calculatePolygonArea(boundaries[0]);
+      acres = sqft / 43560;
+    }
+
+    // Build address from various possible field names
+    const address = attrs?.SITEADDR || attrs?.SITE_ADDR || attrs?.ADDRESS || attrs?.PROP_ADDR ||
+                   attrs?.PHYSICAL_ADDRESS || attrs?.LOC_ADDR || attrs?.LOCATION ||
+                   (attrs?.STREET_NUM && attrs?.STREET_NAME ? `${attrs.STREET_NUM} ${attrs.STREET_NAME}` : null);
+
+    return {
+      boundaries,
+      parcelInfo: {
+        apn: attrs?.PARCELID || attrs?.PARCEL_ID || attrs?.PIN || attrs?.FOLIO || attrs?.APN ||
+             attrs?.STRAP || attrs?.ACCOUNT || attrs?.PARCEL_NO || attrs?.PARCEL,
+        owner: attrs?.OWNER || attrs?.OWNERNAME || attrs?.OWNER_NAME || attrs?.OWNER1 || attrs?.OWN_NAME,
+        address: address,
+        acres: acres ? Number(acres) : undefined,
+        sqft: sqft ? Math.round(Number(sqft)) : undefined,
+        zoning: attrs?.ZONING || attrs?.ZONE_CODE || attrs?.ZONING_CODE || attrs?.ZONE,
+        landUse: attrs?.LANDUSE || attrs?.LAND_USE || attrs?.USE_CODE || attrs?.DOR_CODE || attrs?.USEDESC,
+        yearBuilt: attrs?.YEAR_BUILT || attrs?.YEARBUILT || attrs?.YR_BUILT || attrs?.EFFYEAR,
+      },
+      zoning: attrs?.ZONING ? {
+        code: attrs.ZONING,
+        description: attrs?.ZONE_DESC || attrs?.ZONING_DESC,
+      } : null,
+      source: `${matchingCounty.name} GIS`,
+    };
+  } catch (error) {
+    console.error(`${matchingCounty.name} fetch error:`, error);
+    return null;
+  }
 }
 
 // Fetch from state-level GIS services
@@ -702,10 +927,11 @@ export async function POST(request: Request) {
     console.log(`Fetching parcel data for: ${lat}, ${lng}`);
 
     // Try multiple sources in parallel for speed
-    // Priority: Local GIS (Auburn, Lee County) > State GIS > ArcGIS > Regrid > National sources
-    const [auburnResult, leeCountyResult, stateResult, arcgisResult, regridResult, countyResult] = await Promise.allSettled([
+    // Priority: Local GIS (Auburn, Lee County) > Florida County > State GIS > ArcGIS > Regrid > National sources
+    const [auburnResult, leeCountyResult, floridaCountyResult, stateResult, arcgisResult, regridResult, countyResult] = await Promise.allSettled([
       fetchParcelFromAuburnGIS(lat, lng),
       fetchParcelFromLeeCountyAL(lat, lng),
+      fetchParcelFromFloridaCountyGIS(lat, lng),
       fetchParcelFromStateGIS(lat, lng),
       fetchParcelFromArcGIS(lat, lng),
       fetchParcelFromRegrid(lat, lng),
@@ -744,6 +970,12 @@ export async function POST(request: Request) {
     if (isValidResult(leeCountyResult)) {
       console.log('Using Lee County AL GIS data');
       return NextResponse.json(ensureAcreage(leeCountyResult.value));
+    }
+
+    // Check Florida County GIS result
+    if (isValidResult(floridaCountyResult)) {
+      console.log('Using Florida County GIS data');
+      return NextResponse.json(ensureAcreage(floridaCountyResult.value));
     }
 
     // Check State GIS result
