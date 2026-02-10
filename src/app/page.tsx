@@ -118,7 +118,11 @@ export default function HomePage() {
   const allBusinesses = businesses;
   const hasInput = address.trim().length > 0 || images.length > 0 || coordinates !== null;
 
+  // Storage key for persisting current search
+  const CURRENT_SEARCH_KEY = 'drone-sense-current-search';
+
   // Load coordinates and address from URL parameters (from search page or history)
+  // or from localStorage for persistence across navigation
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -127,6 +131,7 @@ export default function HomePage() {
       const urlAddress = params.get('address');
 
       if (lat && lng) {
+        // Load from URL params (e.g., from history page click)
         const parsedLat = parseFloat(lat);
         const parsedLng = parseFloat(lng);
         if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
@@ -137,9 +142,37 @@ export default function HomePage() {
           // Clear URL params after loading
           window.history.replaceState({}, '', '/');
         }
+      } else {
+        // No URL params - try to restore from localStorage
+        try {
+          const stored = localStorage.getItem(CURRENT_SEARCH_KEY);
+          if (stored) {
+            const { address: storedAddress, coordinates: storedCoords } = JSON.parse(stored);
+            if (storedAddress) setAddress(storedAddress);
+            if (storedCoords) setCoordinates(storedCoords);
+          }
+        } catch (err) {
+          console.error('Failed to restore search state:', err);
+        }
       }
     }
   }, []);
+
+  // Persist current search state to localStorage whenever address or coordinates change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        if (address || coordinates) {
+          localStorage.setItem(CURRENT_SEARCH_KEY, JSON.stringify({
+            address,
+            coordinates,
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to persist search state:', err);
+      }
+    }
+  }, [address, coordinates]);
 
   // Clear selected parcel when address changes
   useEffect(() => {
