@@ -63,70 +63,117 @@ const REGIONAL_PRICING: Record<string, { retail: number; office: number; industr
   'DEFAULT': { retail: 185, office: 165, industrial: 95, mixed: 175 },
 };
 
-async function fetchRealtyMoleComps(lat: number, lng: number): Promise<MarketCompResponse['comps']> {
+async function fetchRealSoldProperties(lat: number, lng: number): Promise<MarketCompResponse['comps']> {
   try {
-    const apiKey = process.env.REALTYMOLE_API_KEY;
+    const apiKey = process.env.RAPIDAPI_KEY;
     if (!apiKey) {
-      console.log('RealtyMole API key not configured, using estimated data');
+      console.log('RapidAPI key not configured, using estimated data');
       return await generateEstimatedComps(lat, lng);
     }
 
-    // RealtyMole API for sale comps
-    const url = `https://realty-mole-property-api.p.rapidapi.com/salePrice?latitude=${lat}&longitude=${lng}&radius=1&propertyType=commercial&limit=10`;
+    // First, get the postal code from coordinates
+    const geoResponse = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+      { headers: { 'User-Agent': 'DroneSense/1.0 (https://drone-sense.vercel.app)' } }
+    );
 
-    const response = await fetch(url, {
+    let postalCode = '';
+    if (geoResponse.ok) {
+      const geoData = await geoResponse.json();
+      postalCode = geoData.address?.postcode || '';
+    }
+
+    if (!postalCode) {
+      console.log('Could not determine postal code, using estimated data');
+      return await generateEstimatedComps(lat, lng);
+    }
+
+    // Realty-in-US API for sold properties
+    const response = await fetch('https://realty-in-us.p.rapidapi.com/properties/v3/list', {
+      method: 'POST',
       headers: {
         'X-RapidAPI-Key': apiKey,
-        'X-RapidAPI-Host': 'realty-mole-property-api.p.rapidapi.com',
+        'X-RapidAPI-Host': 'realty-in-us.p.rapidapi.com',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        limit: 10,
+        offset: 0,
+        status: ['sold'],
+        sort: { direction: 'desc', field: 'sold_date' },
+        postal_code: postalCode,
+      }),
     });
 
     if (!response.ok) {
-      console.log('RealtyMole API returned error, using estimated data');
+      console.log('Realty API returned error, using estimated data');
       return await generateEstimatedComps(lat, lng);
     }
 
     const data = await response.json();
+    const results = data?.data?.home_search?.results || [];
 
-    if (!Array.isArray(data) || data.length === 0) {
+    if (results.length === 0) {
       return await generateEstimatedComps(lat, lng);
     }
 
-    return data.map((comp: {
-      formattedAddress?: string;
-      lastSalePrice?: number;
-      lastSaleDate?: string;
-      squareFootage?: number;
-      propertyType?: string;
-      yearBuilt?: number;
-      lotSize?: number;
-      latitude?: number;
-      longitude?: number;
-    }, index: number) => {
-      const sqft = comp.squareFootage || 2500;
-      const price = comp.lastSalePrice || 500000;
+    return results.map((property: {
+      location?: {
+        address?: {
+          line?: string;
+          city?: string;
+          state_code?: string;
+          postal_code?: string;
+          coordinate?: { lat?: number; lon?: number };
+        };
+      };
+      last_sold_price?: number;
+      last_sold_date?: string;
+      description?: {
+        sqft?: number;
+        lot_sqft?: number;
+        type?: string;
+        sub_type?: string;
+        beds?: number;
+        baths?: number;
+      };
+    }) => {
+      const addr = property.location?.address;
+      const desc = property.description;
+      const sqft = desc?.sqft || 1500;
+      const price = property.last_sold_price || 500000;
 
-      // Calculate actual distance if coordinates available
-      let distance = `${(0.1 + index * 0.15).toFixed(2)} mi`;
-      if (comp.latitude && comp.longitude) {
-        const d = calculateDistance(lat, lng, comp.latitude, comp.longitude);
+      // Build descriptive property type
+      const subType = desc?.sub_type || desc?.type || 'Property';
+      const beds = desc?.beds ? `${desc.beds}BR` : '';
+      const baths = desc?.baths ? `${desc.baths}BA` : '';
+      const propertyDesc = [subType.charAt(0).toUpperCase() + subType.slice(1), beds, baths].filter(Boolean).join(' ');
+
+      // Calculate distance from target coordinates
+      let distance = '0.50 mi';
+      if (addr?.coordinate?.lat && addr?.coordinate?.lon) {
+        const d = calculateDistance(lat, lng, addr.coordinate.lat, addr.coordinate.lon);
         distance = `${d.toFixed(2)} mi`;
       }
 
+      // Format address
+      const fullAddress = addr?.line
+        ? `${addr.line}, ${addr.city || ''}`
+        : 'Unknown Address';
+
       return {
-        address: comp.formattedAddress || 'Unknown Address',
+        address: fullAddress,
         salePrice: price,
-        saleDate: comp.lastSaleDate || new Date().toISOString().split('T')[0],
+        saleDate: property.last_sold_date || new Date().toISOString().split('T')[0],
         sqft,
         pricePerSqft: Math.round(price / sqft),
         distance,
-        propertyType: comp.propertyType || 'Commercial',
-        yearBuilt: comp.yearBuilt,
-        lotSize: comp.lotSize,
+        propertyType: propertyDesc,
+        lotSize: desc?.lot_sqft,
       };
     });
   } catch (error) {
-    console.error('RealtyMole API error:', error);
+    console.error('Realty API error:', error);
     return await generateEstimatedComps(lat, lng);
   }
 }
@@ -406,7 +453,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Coordinates required' }, { status: 400 });
     }
 
-    const comps = await fetchRealtyMoleComps(lat, lng);
+    const comps = await fetchRealSoldProperties(lat, lng);
     const marketStats = calculateMarketStats(comps);
     const rentEstimates = estimateRents(marketStats.avgPricePerSqft);
 

@@ -107,31 +107,45 @@ async function fetchWetlands(lat: number, lng: number): Promise<EnvironmentalRis
 
 async function fetchBrownfields(lat: number, lng: number): Promise<EnvironmentalRiskResponse['brownfields']> {
   try {
-    // EPA Brownfields API - search within 1 mile
-    const radiusMiles = 1;
-    const url = `https://enviro.epa.gov/enviro/efservice/ACRES_SITES/LATITUDE/${lat}/LONGITUDE/${lng}/rows/0:10/JSON`;
+    // EPA FRS (Facility Registry Service) - filter for brownfield-related sites
+    const radiusMeters = 1609; // 1 mile
+    const url = `https://gispub.epa.gov/arcgis/rest/services/OEI/FRS_INTERESTS/MapServer/7/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&distance=${radiusMeters}&units=esriSRUnit_Meter&where=INTEREST_TYPE+LIKE+'%25BROWNFIELD%25'+OR+INTEREST_TYPE+LIKE+'%25RCRA%25'+OR+INTEREST_TYPE+LIKE+'%25CERCLA%25'&outFields=PRIMARY_NAME,INTEREST_TYPE,ACTIVE_STATUS,LATITUDE83,LONGITUDE83&returnGeometry=false&f=json`;
 
     const response = await fetch(url);
     if (!response.ok) {
-      // Try alternative approach
       return { present: false, count: 0 };
     }
 
     const data = await response.json();
+    const features = data.features || [];
 
-    if (!data || data.length === 0) {
+    if (features.length === 0) {
       return { present: false, count: 0 };
     }
 
-    const sites = data.slice(0, 5).map((site: { SITE_NAME: string; ASSESSMENT_STATUS: string }) => ({
-      name: site.SITE_NAME || 'Unknown Site',
-      distance: Math.random() * radiusMiles, // Approximate
-      status: site.ASSESSMENT_STATUS || 'Unknown',
-    }));
+    const sites = features.slice(0, 5).map((feature: { attributes: { PRIMARY_NAME: string; INTEREST_TYPE: string; ACTIVE_STATUS: string; LATITUDE83: number; LONGITUDE83: number } }) => {
+      const attrs = feature.attributes;
+      // Calculate actual distance
+      let distance = 0.5;
+      if (attrs.LATITUDE83 && attrs.LONGITUDE83) {
+        const R = 3959;
+        const dLat = (attrs.LATITUDE83 - lat) * Math.PI / 180;
+        const dLon = (attrs.LONGITUDE83 - lng) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat * Math.PI / 180) * Math.cos(attrs.LATITUDE83 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      }
+      return {
+        name: attrs.PRIMARY_NAME || 'Unknown Site',
+        distance: Math.round(distance * 100) / 100,
+        status: attrs.ACTIVE_STATUS || attrs.INTEREST_TYPE || 'Unknown',
+      };
+    });
 
     return {
       present: true,
-      count: data.length,
+      count: features.length,
       sites,
     };
   } catch (error) {
@@ -142,8 +156,9 @@ async function fetchBrownfields(lat: number, lng: number): Promise<Environmental
 
 async function fetchSuperfund(lat: number, lng: number): Promise<EnvironmentalRiskResponse['superfund']> {
   try {
-    // EPA Superfund/NPL sites API
-    const url = `https://enviro.epa.gov/enviro/efservice/SEMS_ACTIVE_SITES/LATITUDE/${lat}/LONGITUDE/${lng}/rows/0:10/JSON`;
+    // ArcGIS Online Superfund NPL Sites layer
+    const radiusMeters = 3219; // 2 miles for superfund (larger search area due to significance)
+    const url = `https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/Superfund_National_Priorities_List_(NPL)_Sites_with_Status_Information/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&distance=${radiusMeters}&units=esriSRUnit_Meter&outFields=*&returnGeometry=true&f=json`;
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -151,20 +166,35 @@ async function fetchSuperfund(lat: number, lng: number): Promise<EnvironmentalRi
     }
 
     const data = await response.json();
+    const features = data.features || [];
 
-    if (!data || data.length === 0) {
+    if (features.length === 0) {
       return { present: false, count: 0 };
     }
 
-    const sites = data.slice(0, 3).map((site: { SITE_NAME: string; NPL_STATUS: string }) => ({
-      name: site.SITE_NAME || 'Unknown Site',
-      distance: Math.random() * 2, // Approximate miles
-      status: site.NPL_STATUS || 'Active',
-    }));
+    const sites = features.slice(0, 3).map((feature: { attributes: { site_name?: string; npl_status?: string; Site_Name?: string; NPL_Status?: string }; geometry?: { x: number; y: number } }) => {
+      const attrs = feature.attributes;
+      // Calculate actual distance from geometry if available
+      let distance = 1.0;
+      if (feature.geometry?.x && feature.geometry?.y) {
+        const R = 3959;
+        const dLat = (feature.geometry.y - lat) * Math.PI / 180;
+        const dLon = (feature.geometry.x - lng) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat * Math.PI / 180) * Math.cos(feature.geometry.y * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      }
+      return {
+        name: attrs.site_name || attrs.Site_Name || 'Unknown Site',
+        distance: Math.round(distance * 100) / 100,
+        status: attrs.npl_status || attrs.NPL_Status || 'Active',
+      };
+    });
 
     return {
       present: true,
-      count: data.length,
+      count: features.length,
       sites,
     };
   } catch (error) {
