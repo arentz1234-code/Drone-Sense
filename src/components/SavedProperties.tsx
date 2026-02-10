@@ -18,6 +18,8 @@ interface SavedProperty {
 }
 
 const STORAGE_KEY = 'drone-sense-saved-properties';
+const STORAGE_VERSION_KEY = 'drone-sense-data-version';
+const CURRENT_VERSION = 2; // Increment this when data structure changes
 
 export default function SavedProperties({ currentProperty, onLoadProperty }: SavedPropertiesProps) {
   const [savedProperties, setSavedProperties] = useState<SavedProperty[]>([]);
@@ -29,6 +31,15 @@ export default function SavedProperties({ currentProperty, onLoadProperty }: Sav
   // Load saved properties from localStorage
   useEffect(() => {
     try {
+      // Check version and clear if outdated
+      const storedVersion = localStorage.getItem(STORAGE_VERSION_KEY);
+      if (!storedVersion || parseInt(storedVersion) < CURRENT_VERSION) {
+        console.log('Clearing outdated saved properties data');
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.setItem(STORAGE_VERSION_KEY, String(CURRENT_VERSION));
+        return;
+      }
+
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -42,6 +53,7 @@ export default function SavedProperties({ currentProperty, onLoadProperty }: Sav
       console.error('Failed to load saved properties:', err);
       // Clear corrupted data
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(STORAGE_VERSION_KEY, String(CURRENT_VERSION));
     }
   }, []);
 
