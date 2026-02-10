@@ -31,7 +31,7 @@ export function calculateFeasibilityScore(
   };
 
   // TRAFFIC SCORE (0-10)
-  if (trafficData) {
+  if (trafficData && trafficData.estimatedVPD != null) {
     const vpd = trafficData.estimatedVPD;
     if (vpd >= 30000) {
       trafficScore = 10;
@@ -54,23 +54,24 @@ export function calculateFeasibilityScore(
     }
 
     // Road type affects access score
-    if (trafficData.roadType.includes('Major') || trafficData.roadType.includes('Motorway')) {
+    const roadType = trafficData.roadType || 'Unknown';
+    if (roadType.includes('Major') || roadType.includes('Motorway')) {
       accessScore = Math.min(10, 7 + 2);
-      accessDetail = `${trafficData.roadType} with high visibility`;
-    } else if (trafficData.roadType.includes('Secondary')) {
+      accessDetail = `${roadType} with high visibility`;
+    } else if (roadType.includes('Secondary')) {
       accessScore = 6;
-      accessDetail = `${trafficData.roadType} - good local access`;
+      accessDetail = `${roadType} - good local access`;
     } else {
       accessScore = 4;
-      accessDetail = `${trafficData.roadType} - limited visibility`;
+      accessDetail = `${roadType} - limited visibility`;
     }
   }
 
   // DEMOGRAPHICS SCORE (0-10)
   if (demographicsData) {
-    const income = demographicsData.medianHouseholdIncome;
+    const income = demographicsData.medianHouseholdIncome ?? 0;
     const employment = demographicsData.employmentRate || 0;
-    const population = demographicsData.population;
+    const population = demographicsData.population ?? 0;
     const isCollegeTown = demographicsData.isCollegeTown || false;
     const collegePercent = demographicsData.collegeEnrollmentPercent || 0;
 
