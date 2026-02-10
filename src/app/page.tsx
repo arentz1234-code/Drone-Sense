@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
 import PhotoUpload from '@/components/PhotoUpload';
 import AddressInput from '@/components/AddressInput';
 import NearbyBusinesses from '@/components/NearbyBusinesses';
@@ -112,24 +111,26 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const searchParams = useSearchParams();
   const allBusinesses = businesses;
   const hasInput = address.trim().length > 0 || images.length > 0 || coordinates !== null;
 
   // Load coordinates from URL parameters (from search page)
   useEffect(() => {
-    const lat = searchParams.get('lat');
-    const lng = searchParams.get('lng');
-    if (lat && lng) {
-      const parsedLat = parseFloat(lat);
-      const parsedLng = parseFloat(lng);
-      if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
-        setCoordinates({ lat: parsedLat, lng: parsedLng });
-        // Clear URL params after loading
-        window.history.replaceState({}, '', '/');
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const lat = params.get('lat');
+      const lng = params.get('lng');
+      if (lat && lng) {
+        const parsedLat = parseFloat(lat);
+        const parsedLng = parseFloat(lng);
+        if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+          setCoordinates({ lat: parsedLat, lng: parsedLng });
+          // Clear URL params after loading
+          window.history.replaceState({}, '', '/');
+        }
       }
     }
-  }, [searchParams]);
+  }, []);
 
   // Clear selected parcel when address changes
   useEffect(() => {
