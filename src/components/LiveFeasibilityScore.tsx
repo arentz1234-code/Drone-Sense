@@ -79,7 +79,7 @@ export default function LiveFeasibilityScore({
                 className="text-xl font-bold"
                 style={{ color: getScoreColor(feasibilityScore.overall) }}
               >
-                {feasibilityScore.overall.toFixed(1)}
+                {(feasibilityScore.overall ?? 0).toFixed(1)}
               </span>
             </div>
           </div>
@@ -125,7 +125,7 @@ export default function LiveFeasibilityScore({
               className="w-8 text-right text-xs font-medium"
               style={{ color: item.available ? getScoreColor(item.score) : 'var(--text-muted)' }}
             >
-              {item.score.toFixed(1)}
+              {(item.score ?? 0).toFixed(1)}
             </div>
             {!item.available && (
               <svg className="w-3 h-3 text-[var(--text-muted)] animate-pulse" fill="none" viewBox="0 0 24 24">

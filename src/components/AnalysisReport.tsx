@@ -41,7 +41,7 @@ export default function AnalysisReport({
 
   // Use live score if available, otherwise use analysis score
   const feasibilityScore: FeasibilityScore | undefined = liveFeasibilityScore || analysis.feasibilityScore;
-  const viabilityScore = feasibilityScore?.overall ?? analysis.viabilityScore;
+  const viabilityScore = feasibilityScore?.overall ?? analysis.viabilityScore ?? 0;
   const [showAllSuitability, setShowAllSuitability] = useState(false);
   const INITIAL_SUITABILITY_COUNT = 4;
 
@@ -747,7 +747,7 @@ export default function AnalysisReport({
                 {/* Investment Info */}
                 <div className="text-xs text-[var(--text-muted)] space-y-1">
                   {retailer.franchiseFee && (
-                    <p>Franchise Fee: ${retailer.franchiseFee.toLocaleString()}</p>
+                    <p>Franchise Fee: ${retailer.franchiseFee?.toLocaleString() ?? 'N/A'}</p>
                   )}
                   {retailer.totalInvestment && (
                     <p>Total Investment: {retailer.totalInvestment}</p>

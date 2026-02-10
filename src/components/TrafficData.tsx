@@ -154,7 +154,7 @@ export default function TrafficData({ coordinates, address, parcelBoundary, onDa
                     </div>
                     <div className="text-right">
                       <p className="text-xl font-bold text-[var(--accent-cyan)]">
-                        {road.vpd.toLocaleString()}
+                        {road.vpd?.toLocaleString() ?? 'N/A'}
                       </p>
                       <p className="text-xs text-[var(--text-muted)]">VPD</p>
                     </div>
@@ -170,7 +170,7 @@ export default function TrafficData({ coordinates, address, parcelBoundary, onDa
               <div className="text-center">
                 <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Average VPD</span>
                 <p className="text-3xl font-bold text-[var(--accent-green)]">
-                  {traffic.averageVPD.toLocaleString()}
+                  {traffic.averageVPD?.toLocaleString() ?? 'N/A'}
                 </p>
                 <p className="text-sm text-[var(--text-secondary)] mt-1">
                   Combined traffic from {traffic.roads?.length} roads
@@ -185,7 +185,7 @@ export default function TrafficData({ coordinates, address, parcelBoundary, onDa
               <div className="text-center">
                 <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Traffic Volume</span>
                 <p className="text-3xl font-bold text-[var(--accent-cyan)]">
-                  {traffic.estimatedVPD.toLocaleString()} <span className="text-lg font-normal">VPD</span>
+                  {traffic.estimatedVPD?.toLocaleString() ?? 'N/A'} <span className="text-lg font-normal">VPD</span>
                 </p>
                 <p className="text-sm text-[var(--text-secondary)] mt-1">Vehicles Per Day</p>
               </div>

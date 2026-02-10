@@ -163,9 +163,9 @@ export default function DemographicsData({ coordinates, onDataLoad }: Demographi
                   <p className="font-semibold text-purple-300">College Town Market</p>
                   <p className="text-xs text-purple-300/80">
                     {demographics.nearbyUniversities && demographics.nearbyUniversities.length > 0 ? (
-                      <>Near {demographics.nearbyUniversities[0].name} ({demographics.collegeEnrollment.toLocaleString()} students)</>
+                      <>Near {demographics.nearbyUniversities[0].name} ({demographics.collegeEnrollment?.toLocaleString() ?? 'N/A'} students)</>
                     ) : (
-                      <>{demographics.collegeEnrollmentPercent}% students ({demographics.collegeEnrollment.toLocaleString()} enrolled)</>
+                      <>{demographics.collegeEnrollmentPercent}% students ({demographics.collegeEnrollment?.toLocaleString() ?? 'N/A'} enrolled)</>
                     )}
                   </p>
                 </div>
@@ -208,7 +208,7 @@ export default function DemographicsData({ coordinates, onDataLoad }: Demographi
           <div className="grid grid-cols-2 gap-2">
             <div className="p-2 bg-[var(--bg-tertiary)] rounded border border-[var(--border-color)]">
               <span className="text-xs text-[var(--text-muted)]">Population</span>
-              <p className="font-semibold">{demographics.population.toLocaleString()}</p>
+              <p className="font-semibold">{demographics.population?.toLocaleString() ?? 'N/A'}</p>
             </div>
             <div className="p-2 bg-[var(--bg-tertiary)] rounded border border-[var(--border-color)]">
               <span className="text-xs text-[var(--text-muted)]">Median Age</span>

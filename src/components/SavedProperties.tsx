@@ -282,7 +282,7 @@ export default function SavedProperties({ currentProperty, onLoadProperty }: Sav
                         <div className="flex justify-between">
                           <span className="text-[var(--text-muted)]">Viability Score:</span>
                           <span className="font-bold text-[var(--accent-cyan)]">
-                            {property.data.analysis.viabilityScore.toFixed(1)}/10
+                            {property.data.analysis.viabilityScore?.toFixed(1) ?? 'N/A'}/10
                           </span>
                         </div>
                       )}
