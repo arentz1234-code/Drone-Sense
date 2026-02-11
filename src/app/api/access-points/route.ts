@@ -67,13 +67,13 @@ function serviceRoadTouchesParcel(
     }
   }
 
-  // Check if road comes very close to parcel boundary (within 5 meters)
+  // Check if road comes very close to parcel boundary (within 2 meters)
   // This catches driveways that are mapped slightly off
   for (const geom of serviceRoad.geometry) {
     const point = turf.point([geom.lon, geom.lat]);
     // Cast to any to handle both LineString and MultiLineString
     const distance = turf.pointToLineDistance(point, parcelLine as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
-    if (distance < 5) {
+    if (distance < 2) {
       return { touches: true, intersectionPoint: [geom.lat, geom.lon] };
     }
   }
@@ -88,7 +88,7 @@ async function findDrivewayAccessPoints(
   lat: number,
   lng: number,
   parcelBoundary: Array<[number, number]>,
-  radiusMeters: number = 150
+  radiusMeters: number = 100
 ): Promise<{ accessPoints: AccessPoint[]; publicRoads: OSMWay[] }> {
   try {
     const overpassUrl = 'https://overpass-api.de/api/interpreter';
@@ -242,7 +242,7 @@ async function findDrivewayAccessPoints(
             const roadLine = turf.lineString(roadCoords);
             const distanceToRoad = turf.pointToLineDistance(endPoint, roadLine, { units: 'meters' });
 
-            if (distanceToRoad < 15) {
+            if (distanceToRoad < 5) {
               const coordKey = `${geom.lat.toFixed(5)},${geom.lon.toFixed(5)}`;
               if (seenCoords.has(coordKey)) continue;
               seenCoords.add(coordKey);
@@ -263,6 +263,79 @@ async function findDrivewayAccessPoints(
             }
           }
         }
+      }
+    }
+
+    // Fallback: If still no access points, find nearest points on public roads to parcel boundary
+    // This ensures we always show likely access locations
+    if (accessPoints.length === 0 && publicRoads.length > 0) {
+      console.log('[AccessPoints] No driveway connections found, finding nearest road points to parcel...');
+
+      const roadDistances: Array<{
+        lat: number;
+        lng: number;
+        distance: number;
+        roadName: string;
+        roadType?: string;
+      }> = [];
+
+      for (const publicRoad of publicRoads) {
+        const roadCoords = publicRoad.geometry.map(g => [g.lon, g.lat] as [number, number]);
+        if (roadCoords.length < 2) continue;
+
+        const roadLine = turf.lineString(roadCoords);
+        const roadName = publicRoad.tags?.name || publicRoad.tags?.ref || 'Unnamed Road';
+
+        // Find the closest point on this road to the parcel boundary
+        let minDistance = Infinity;
+        let closestPoint: [number, number] | null = null;
+
+        // Sample points along the parcel boundary
+        for (const [pLat, pLng] of parcelBoundary) {
+          const parcelPoint = turf.point([pLng, pLat]);
+          const nearestOnRoad = turf.nearestPointOnLine(roadLine, parcelPoint);
+          const dist = turf.distance(parcelPoint, nearestOnRoad, { units: 'meters' });
+
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestPoint = nearestOnRoad.geometry.coordinates as [number, number];
+          }
+        }
+
+        // Only include if road is within 50 meters of parcel
+        if (closestPoint && minDistance < 50) {
+          roadDistances.push({
+            lat: closestPoint[1],
+            lng: closestPoint[0],
+            distance: minDistance,
+            roadName,
+            roadType: publicRoad.tags?.highway,
+          });
+        }
+      }
+
+      // Sort by distance and take up to 3 closest unique roads
+      roadDistances.sort((a, b) => a.distance - b.distance);
+      const addedRoads = new Set<string>();
+
+      for (const rd of roadDistances) {
+        if (addedRoads.has(rd.roadName)) continue;
+        addedRoads.add(rd.roadName);
+
+        const coordKey = `${rd.lat.toFixed(5)},${rd.lng.toFixed(5)}`;
+        if (seenCoords.has(coordKey)) continue;
+        seenCoords.add(coordKey);
+
+        accessPoints.push({
+          coordinates: [rd.lat, rd.lng],
+          roadName: rd.roadName,
+          type: 'access',
+          roadType: rd.roadType,
+        });
+
+        console.log(`[AccessPoints] Added fallback access point on ${rd.roadName} (${Math.round(rd.distance)}m from parcel)`);
+
+        if (accessPoints.length >= 3) break;
       }
     }
 
@@ -315,7 +388,7 @@ export async function POST(request: Request) {
       coordinates.lat,
       coordinates.lng,
       effectiveBoundary,
-      200
+      100 // Tighter radius for more accurate results
     );
 
     // Get unique roads
