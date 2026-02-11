@@ -108,6 +108,7 @@ export default function HomePage() {
   const [selectedParcel, setSelectedParcel] = useState<SelectedParcel | null>(null);
   const [accessPoints, setAccessPoints] = useState<AccessPoint[]>([]);
   const [parcelData, setParcelData] = useState<ParcelData | null>(null);
+  const [retailerMatches, setRetailerMatches] = useState<RetailerMatchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -253,6 +254,90 @@ export default function HomePage() {
 
     fetchMarketComps();
   }, [coordinates?.lat, coordinates?.lng]);
+
+  // Fetch retailer matches when we have sufficient data
+  useEffect(() => {
+    const fetchRetailerMatches = async () => {
+      // Need at least some data to match
+      const lotSize = selectedParcel?.parcelInfo?.acres || parcelData?.parcelInfo?.acres || null;
+      const primaryVpd = accessPoints.length > 0
+        ? Math.max(...accessPoints.map(ap => ap.vpd || ap.estimatedVpd || 0))
+        : trafficData?.estimatedVPD || null;
+      const medianIncome = demographicsData?.medianHouseholdIncome || null;
+      const population = demographicsData?.population || null;
+
+      // Need at least 2 data points to make meaningful matches
+      const dataPoints = [lotSize, primaryVpd, medianIncome, population].filter(v => v !== null).length;
+      if (dataPoints < 2) {
+        return;
+      }
+
+      // Derive income level from median income
+      let incomeLevel: 'low' | 'moderate' | 'middle' | 'upper-middle' | 'high' | null = null;
+      if (medianIncome) {
+        if (medianIncome < 35000) incomeLevel = 'low';
+        else if (medianIncome < 50000) incomeLevel = 'moderate';
+        else if (medianIncome < 75000) incomeLevel = 'middle';
+        else if (medianIncome < 100000) incomeLevel = 'upper-middle';
+        else incomeLevel = 'high';
+      }
+
+      // Extract state code from address
+      let stateCode: string | null = null;
+      if (address) {
+        const stateMatch = address.match(/,\s*([A-Z]{2})\s*\d{5}/);
+        if (stateMatch) {
+          stateCode = stateMatch[1];
+        } else {
+          // Try alternate patterns
+          const stateNames: Record<string, string> = {
+            'florida': 'FL', 'georgia': 'GA', 'alabama': 'AL', 'texas': 'TX',
+            'california': 'CA', 'new york': 'NY', 'tennessee': 'TN', 'north carolina': 'NC',
+            'south carolina': 'SC', 'virginia': 'VA', 'ohio': 'OH', 'michigan': 'MI',
+          };
+          const lowerAddress = address.toLowerCase();
+          for (const [name, code] of Object.entries(stateNames)) {
+            if (lowerAddress.includes(name)) {
+              stateCode = code;
+              break;
+            }
+          }
+        }
+      }
+
+      try {
+        const response = await fetch('/api/retailer-match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lotSizeAcres: lotSize,
+            vpd: primaryVpd,
+            medianIncome,
+            incomeLevel,
+            population,
+            stateCode,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setRetailerMatches(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch retailer matches:', err);
+      }
+    };
+
+    fetchRetailerMatches();
+  }, [
+    selectedParcel?.parcelInfo?.acres,
+    parcelData?.parcelInfo?.acres,
+    accessPoints,
+    trafficData?.estimatedVPD,
+    demographicsData?.medianHouseholdIncome,
+    demographicsData?.population,
+    address,
+  ]);
 
   const handleAnalyze = async () => {
     if (!address && !coordinates) {
@@ -473,6 +558,86 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+
+        {/* Live Retailer Matches - Shows before running full analysis */}
+        {retailerMatches && retailerMatches.matches.length > 0 && !analysis && (
+          <div className="mb-8">
+            <div className="terminal-card">
+              <div className="terminal-header">
+                <div className="terminal-dot red"></div>
+                <div className="terminal-dot yellow"></div>
+                <div className="terminal-dot green"></div>
+                <span className="terminal-title">retailer_matches.preview</span>
+              </div>
+              <div className="terminal-body">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <svg className="w-5 h-5 text-[var(--accent-purple)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    Matching Retailers
+                  </h3>
+                  <span className="text-sm text-[var(--text-muted)]">
+                    {retailerMatches.totalMatches} matches from {retailerMatches.totalRetailersInDatabase || 80}+ retailers
+                  </span>
+                </div>
+                <p className="text-sm text-[var(--text-muted)] mb-4">
+                  Based on site data: lot size, traffic, demographics, and location
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {retailerMatches.matches.slice(0, 6).map((retailer, index) => (
+                    <div
+                      key={index}
+                      className={`p-3 rounded-lg border ${
+                        retailer.matchScore >= 70 ? 'bg-green-500/10 border-green-500/30' :
+                        retailer.matchScore >= 50 ? 'bg-cyan-500/10 border-cyan-500/30' :
+                        'bg-yellow-500/10 border-yellow-500/30'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h4 className="font-semibold text-sm">{retailer.name}</h4>
+                          <p className="text-xs text-[var(--text-muted)]">{retailer.category}</p>
+                        </div>
+                        <div className={`text-lg font-bold ${
+                          retailer.matchScore >= 70 ? 'text-green-400' :
+                          retailer.matchScore >= 50 ? 'text-cyan-400' : 'text-yellow-400'
+                        }`}>
+                          {retailer.matchScore}%
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {retailer.matchDetails.lotSize.matches && (
+                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 text-xs rounded">Lot ✓</span>
+                        )}
+                        {retailer.matchDetails.traffic.matches && (
+                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 text-xs rounded">Traffic ✓</span>
+                        )}
+                        {retailer.matchDetails.demographics.matches && (
+                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 text-xs rounded">Demo ✓</span>
+                        )}
+                        {retailer.matchDetails.region.matches && (
+                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 text-xs rounded">Region ✓</span>
+                        )}
+                        {retailer.activelyExpanding && (
+                          <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 text-xs rounded">Expanding</span>
+                        )}
+                        {retailer.franchiseAvailable && (
+                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded">Franchise</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {retailerMatches.matches.length > 6 && (
+                  <p className="text-sm text-[var(--text-muted)] mt-3 text-center">
+                    +{retailerMatches.matches.length - 6} more matches • Run full analysis for detailed breakdown
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Analyze Button */}
         <div className="flex items-center justify-center gap-4 mb-8">

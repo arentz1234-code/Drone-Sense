@@ -70,6 +70,7 @@ export interface RetailerMatch {
 export interface RetailerMatchResult {
   matches: RetailerMatch[];
   totalMatches: number;
+  totalRetailersInDatabase?: number;
 }
 
 // Feasibility score types
