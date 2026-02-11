@@ -202,9 +202,15 @@ async function fetchParcelFromAuburnGIS(lat: number, lng: number): Promise<Parce
     // City of Auburn ArcGIS MapServer - Parcels layer
     // Layer 6 is Parcels_1K based on the service documentation
     const url = new URL('https://gis.auburnalabama.org/public/rest/services/Main/COABasemap/MapServer/6/query');
+
+    // Use a small envelope around the point (Auburn GIS doesn't work well with point queries)
+    const buffer = 0.0001; // ~10 meters
+    const envelope = `${lng - buffer},${lat - buffer},${lng + buffer},${lat + buffer}`;
+
     url.searchParams.set('where', '1=1');
-    url.searchParams.set('geometry', `${lng},${lat}`);
-    url.searchParams.set('geometryType', 'esriGeometryPoint');
+    url.searchParams.set('geometry', envelope);
+    url.searchParams.set('geometryType', 'esriGeometryEnvelope');
+    url.searchParams.set('inSR', '4326');
     url.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
     url.searchParams.set('outFields', '*');
     url.searchParams.set('returnGeometry', 'true');
