@@ -197,9 +197,9 @@ function roadNamesMatch(name1: string, name2: string): boolean {
 // Fetch FDOT AADT data for a specific road (with optional extended radius)
 async function fetchFDOTForRoad(lat: number, lng: number, roadName: string, extendedRadius: boolean = false): Promise<RoadVPD | null> {
   try {
-    // Use a larger search area when looking for the address street
-    const radius = extendedRadius ? 0.025 : 0.015; // ~2.7km vs ~1.6km
-    const tolerance = extendedRadius ? 500 : 200;
+    // Use a moderate search area - not too large to avoid picking up distant segments
+    const radius = extendedRadius ? 0.008 : 0.005; // ~880m vs ~550m
+    const tolerance = extendedRadius ? 100 : 75;
     const mapExtent = `${lng - radius},${lat - radius},${lng + radius},${lat + radius}`;
     const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
       `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
@@ -292,10 +292,12 @@ async function fetchFDOTForRoad(lat: number, lng: number, roadName: string, exte
 // Fetch all FDOT data near location and group by road
 async function fetchAllFDOTRoads(lat: number, lng: number): Promise<RoadVPD[]> {
   try {
-    const mapExtent = `${lng - 0.015},${lat - 0.015},${lng + 0.015},${lat + 0.015}`;
+    // Use a smaller search area to get only segments adjacent to the property
+    // ~0.003 degrees ≈ 330 meters, tolerance 50 ≈ immediate vicinity
+    const mapExtent = `${lng - 0.003},${lat - 0.003},${lng + 0.003},${lat + 0.003}`;
     const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
       `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
-      `layers=all:7&tolerance=200&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
+      `layers=all:7&tolerance=50&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
       `returnGeometry=false&f=json`;
 
     const response = await fetch(url);
@@ -349,11 +351,27 @@ async function fetchAllFDOTRoads(lat: number, lng: number): Promise<RoadVPD[]> {
 
       if (best) {
         // Determine road name from DESC_TO/DESC_FRM
-        let roadName = Array.from(names).find(n => !n.includes('Bridge') && n.length > 3) ||
-                       Array.from(names)[0] ||
-                       `Road ${roadway}`;
-        // Clean up the name - remove route prefixes to get the street name
-        roadName = roadName.replace(/^(CR-\d+\/|SR-\d+\/|US-\d+\/)/, '').trim();
+        // First look for actual road names (containing RD, ST, AVE, BLVD, etc.)
+        const roadNamePattern = /(?:^|\/)([\w\s]+(?:RD|ST|AVE|BLVD|DR|LN|WAY|PKWY|HWY|TRL|CT|CIR))(?:$|\/)/i;
+
+        let roadName = '';
+        for (const name of names) {
+          // Try to extract actual road names from compound strings like "SR-61/THOMASVILLE RD"
+          const match = name.match(roadNamePattern);
+          if (match && match[1]) {
+            roadName = match[1].trim();
+            break;
+          }
+        }
+
+        // Fallback to the original logic
+        if (!roadName) {
+          roadName = Array.from(names).find(n => !n.includes('Bridge') && n.length > 3) ||
+                     Array.from(names)[0] ||
+                     `Road ${roadway}`;
+          // Clean up the name - remove route prefixes to get the street name
+          roadName = roadName.replace(/^(CR-\d+\/|SR-\d+\/|US-\d+\/)/, '').trim();
+        }
 
         roads.push({
           roadName,
@@ -475,18 +493,47 @@ export async function POST(request: Request) {
       }
     }
 
-    // Strategy 2: For the property's main road, use highest VPD segment
-    // Since FDOT doesn't label roads by name, we use VPD as a heuristic
-    // Main roads (like Thomasville Rd) typically have high VPD
+    // Strategy 2: Match property street with FDOT data by name
+    // Look for the property street name in FDOT DESC_TO/DESC_FRM fields
     if (propertyStreet && allFDOTRoads.length > 0) {
-      // Use the highest VPD road as the property's main road
-      const mainRoad = allFDOTRoads[0]; // Already sorted by VPD descending
-      matchedRoads.push({
-        ...mainRoad,
-        roadName: propertyOSMRoad || propertyStreet,
-      });
-      matchedRoadwayIds.add(mainRoad.roadwayId!);
-      console.log(`[Traffic] Property road "${propertyStreet}": ${mainRoad.vpd} VPD (highest in area)`);
+      // First, try to find an FDOT segment that actually matches the property street name
+      let matchedPropertyRoad: RoadVPD | null = null;
+
+      for (const fdotRoad of allFDOTRoads) {
+        // Check if this FDOT road matches the property street
+        if (roadNamesMatch(fdotRoad.roadName, propertyStreet)) {
+          matchedPropertyRoad = fdotRoad;
+          console.log(`[Traffic] Found FDOT match for "${propertyStreet}": ${fdotRoad.roadName} = ${fdotRoad.vpd} VPD`);
+          break;
+        }
+      }
+
+      // If no direct match, try fetching specifically for the property street with extended radius
+      if (!matchedPropertyRoad) {
+        const specificFetch = await fetchFDOTForRoad(lat, lng, propertyStreet, true);
+        if (specificFetch) {
+          matchedPropertyRoad = specificFetch;
+          console.log(`[Traffic] Found FDOT via specific fetch for "${propertyStreet}": ${specificFetch.vpd} VPD`);
+        }
+      }
+
+      // Only use highest VPD as fallback if no name match found
+      if (matchedPropertyRoad) {
+        matchedRoads.push({
+          ...matchedPropertyRoad,
+          roadName: propertyOSMRoad || propertyStreet,
+        });
+        matchedRoadwayIds.add(matchedPropertyRoad.roadwayId!);
+      } else {
+        // Fallback: use highest VPD road but mark it as unverified
+        const mainRoad = allFDOTRoads[0];
+        matchedRoads.push({
+          ...mainRoad,
+          roadName: propertyOSMRoad || propertyStreet,
+        });
+        matchedRoadwayIds.add(mainRoad.roadwayId!);
+        console.log(`[Traffic] WARNING: No name match for "${propertyStreet}", using highest VPD: ${mainRoad.vpd}`);
+      }
     }
 
     // Strategy 3: Match other OSM roads with remaining FDOT roads

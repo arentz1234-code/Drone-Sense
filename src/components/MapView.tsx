@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { EnvironmentalRisk, SelectedParcel } from '@/types';
-import { NearbyParcel } from './LeafletMap';
+import { NearbyParcel, AccessPoint } from './LeafletMap';
 
 // Re-export for backward compatibility
 export type { SelectedParcel };
@@ -87,8 +87,10 @@ export default function MapView({
   const [mapType, setMapType] = useState<MapType>('satellite');
   const [parcelData, setParcelData] = useState<ParcelData | null>(null);
   const [nearbyParcels, setNearbyParcels] = useState<NearbyParcel[]>([]);
+  const [accessPoints, setAccessPoints] = useState<AccessPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingParcels, setLoadingParcels] = useState(false);
+  const [loadingAccessPoints, setLoadingAccessPoints] = useState(false);
   const [reverseGeocoding, setReverseGeocoding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestedParcelAPN, setSuggestedParcelAPN] = useState<string | null>(null);
@@ -203,6 +205,47 @@ export default function MapView({
       setLoading(false);
     }
   };
+
+  // Fetch access points when parcel data is available
+  useEffect(() => {
+    const fetchAccessPoints = async () => {
+      // Use selected parcel boundaries if available, otherwise use parcel data
+      const boundaries = selectedParcel?.boundaries?.[0] || parcelData?.boundaries?.[0];
+
+      if (!coordinates || !boundaries || boundaries.length < 3) {
+        setAccessPoints([]);
+        return;
+      }
+
+      setLoadingAccessPoints(true);
+      try {
+        const response = await fetch('/api/access-points', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parcelBoundary: boundaries,
+            coordinates,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setAccessPoints(data.accessPoints || []);
+          console.log(`[MapView] Found ${data.accessPoints?.length || 0} access points`);
+        } else {
+          console.error('[MapView] Failed to fetch access points');
+          setAccessPoints([]);
+        }
+      } catch (err) {
+        console.error('[MapView] Error fetching access points:', err);
+        setAccessPoints([]);
+      } finally {
+        setLoadingAccessPoints(false);
+      }
+    };
+
+    fetchAccessPoints();
+  }, [coordinates?.lat, coordinates?.lng, parcelData?.boundaries, selectedParcel?.boundaries]);
 
   // Fetch nearby parcels when bounds change
   const fetchNearbyParcels = useCallback(async (bounds: MapBounds) => {
@@ -362,6 +405,15 @@ export default function MapView({
               Loading parcels...
             </span>
           )}
+          {loadingAccessPoints && !loadingParcels && !reverseGeocoding && (
+            <span className="text-xs text-[var(--accent-green)] flex items-center gap-1">
+              <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              Finding access points...
+            </span>
+          )}
           <div className="flex gap-1">
             <button
               onClick={() => setMapType('satellite')}
@@ -392,6 +444,7 @@ export default function MapView({
           mapType={mapType}
           parcelData={parcelData}
           nearbyParcels={nearbyParcels}
+          accessPoints={accessPoints}
           selectedParcelAPN={selectedParcel?.parcelInfo?.apn || null}
           suggestedParcelAPN={suggestedParcelAPN}
           onParcelClick={handleParcelClick}
@@ -633,6 +686,36 @@ export default function MapView({
                 <span className="w-3 h-3 rounded border border-white/50"></span>
                 Other Parcels
               </span>
+            </div>
+          )}
+
+          {/* Access Points Info */}
+          {accessPoints.length > 0 && (
+            <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-green)]/30">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4 text-[var(--accent-green)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-sm font-medium text-[var(--text-primary)]">
+                  Access Points ({accessPoints.length})
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[...new Set(accessPoints.map(ap => ap.roadName))].slice(0, 5).map((roadName, i) => (
+                  <span key={i} className="tag tag-green text-xs">
+                    {roadName}
+                  </span>
+                ))}
+                {[...new Set(accessPoints.map(ap => ap.roadName))].length > 5 && (
+                  <span className="text-xs text-[var(--text-muted)]">
+                    +{[...new Set(accessPoints.map(ap => ap.roadName))].length - 5} more
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-2">
+                Entry points where roads meet the property boundary
+              </p>
             </div>
           )}
 

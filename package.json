@@ -10,6 +10,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@react-pdf/renderer": "^4.3.2",
+    "@turf/turf": "^7.3.4",
     "@types/leaflet.heat": "^0.2.5",
     "canvg": "^4.0.3",
     "html2canvas": "^1.4.1",
@@ -22,7 +23,8 @@
     "react-dom": "^19.2.4",
     "react-dropzone": "^14.4.0",
     "react-leaflet": "^5.0.0",
-    "recharts": "^3.7.0"
+    "recharts": "^3.7.0",
+    "vercel": "^50.14.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",

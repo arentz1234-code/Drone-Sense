@@ -24,6 +24,13 @@ interface Business {
   lng?: number;
 }
 
+export interface AccessPoint {
+  coordinates: [number, number]; // [lat, lng]
+  roadName: string;
+  type: 'entrance' | 'exit' | 'access';
+  roadType?: string;
+}
+
 interface ParcelData {
   boundaries: Array<[number, number][]>;
   parcelInfo: {
@@ -57,6 +64,7 @@ interface LeafletMapProps {
   parcelData: ParcelData | null;
   nearbyParcels?: NearbyParcel[];
   businesses?: Business[];
+  accessPoints?: AccessPoint[];
   selectedParcelAPN?: string | null;
   suggestedParcelAPN?: string | null;
   onParcelClick?: (parcel: NearbyParcel) => void;
@@ -235,6 +243,7 @@ export default function LeafletMap({
   parcelData,
   nearbyParcels,
   businesses,
+  accessPoints,
   selectedParcelAPN,
   suggestedParcelAPN,
   onParcelClick,
@@ -246,6 +255,7 @@ export default function LeafletMap({
   showHeatmap = false,
 }: LeafletMapProps) {
   const [pinIcon, setPinIcon] = useState<Icon | DivIcon | null>(null);
+  const [accessPointIcon, setAccessPointIcon] = useState<DivIcon | null>(null);
 
   // Create pin icon on client side only
   useEffect(() => {
@@ -268,6 +278,31 @@ export default function LeafletMap({
       iconAnchor: [16, 32],
     });
     setPinIcon(icon);
+  }, []);
+
+  // Create access point icon (door/entry icon)
+  useEffect(() => {
+    const icon = new DivIcon({
+      className: 'access-point-marker',
+      html: `
+        <div style="
+          width: 28px;
+          height: 28px;
+          position: relative;
+          transform: translate(-50%, -50%);
+        ">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
+            <circle cx="12" cy="12" r="11" fill="#10b981" stroke="white" stroke-width="2"/>
+            <path d="M8 6h8v12H8V6z" fill="white" stroke="#10b981" stroke-width="1"/>
+            <circle cx="14" cy="12" r="1" fill="#10b981"/>
+            <path d="M12 8l3 4-3 4" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+        </div>
+      `,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+    setAccessPointIcon(icon);
   }, []);
   const getTileUrl = () => {
     switch (mapType) {
@@ -467,6 +502,32 @@ export default function LeafletMap({
           );
         })
       )}
+
+      {/* Access Point Markers */}
+      {accessPoints && accessPoints.length > 0 && accessPointIcon && accessPoints.map((point, index) => (
+        <Marker
+          key={`access-point-${index}`}
+          position={[point.coordinates[0], point.coordinates[1]]}
+          icon={accessPointIcon}
+        >
+          <Tooltip direction="top" offset={[0, -10]}>
+            <div className="text-sm">
+              <strong>{point.roadName}</strong>
+              {point.roadType && <span className="text-xs block text-gray-500">{point.roadType}</span>}
+            </div>
+          </Tooltip>
+          <Popup>
+            <div className="text-sm">
+              <strong>Access Point</strong>
+              <p className="mt-1">Road: {point.roadName}</p>
+              {point.roadType && <p>Type: {point.roadType}</p>}
+              <p className="text-xs text-gray-500 mt-1">
+                {point.coordinates[0].toFixed(6)}, {point.coordinates[1].toFixed(6)}
+              </p>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
     </MapContainer>
   );
 }

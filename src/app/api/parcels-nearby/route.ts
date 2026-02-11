@@ -323,6 +323,106 @@ function isInLeeCountyArea(centerLat?: number, centerLng?: number): boolean {
   return centerLat >= 32.35 && centerLat <= 32.90 && centerLng >= -85.65 && centerLng <= -85.05;
 }
 
+// Determine if coordinates are in Leon County, FL area (Tallahassee)
+function isInLeonCountyArea(centerLat?: number, centerLng?: number): boolean {
+  if (!centerLat || !centerLng) return false;
+  return centerLat >= 30.26 && centerLat <= 30.70 && centerLng >= -84.65 && centerLng <= -83.98;
+}
+
+// Florida county configurations
+interface FloridaCountyConfig {
+  name: string;
+  url: string;
+  bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number };
+}
+
+const FLORIDA_COUNTIES: FloridaCountyConfig[] = [
+  { name: 'Leon County', url: 'https://intervector.leoncountyfl.gov/intervector/rest/services/MapServices/TLC_OverlayParnal_D_WM/MapServer/0/query', bounds: { minLat: 30.26, maxLat: 30.70, minLng: -84.65, maxLng: -83.98 } },
+  { name: 'Hillsborough County', url: 'https://maps.hillsboroughcounty.org/arcgis/rest/services/InfoLayers/Parcels/MapServer/0/query', bounds: { minLat: 27.57, maxLat: 28.17, minLng: -82.82, maxLng: -82.05 } },
+  { name: 'Orange County', url: 'https://maps.ocfl.net/arcgis/rest/services/Parcels/MapServer/0/query', bounds: { minLat: 28.34, maxLat: 28.79, minLng: -81.66, maxLng: -80.95 } },
+  { name: 'Duval County', url: 'https://maps.coj.net/arcgis/rest/services/Parcels/Parcels/MapServer/0/query', bounds: { minLat: 30.10, maxLat: 30.59, minLng: -82.05, maxLng: -81.32 } },
+];
+
+// Find which Florida county the coordinates are in
+function getFloridaCounty(centerLat?: number, centerLng?: number): FloridaCountyConfig | null {
+  if (!centerLat || !centerLng) return null;
+  return FLORIDA_COUNTIES.find(county =>
+    centerLat >= county.bounds.minLat && centerLat <= county.bounds.maxLat &&
+    centerLng >= county.bounds.minLng && centerLng <= county.bounds.maxLng
+  ) || null;
+}
+
+// Fetch parcels from Florida county GIS
+async function fetchParcelsFromFloridaCounty(bounds: ParcelBounds, county: FloridaCountyConfig): Promise<NearbyParcel[]> {
+  try {
+    const url = new URL(county.url);
+
+    const envelope = JSON.stringify({
+      xmin: bounds.west,
+      ymin: bounds.south,
+      xmax: bounds.east,
+      ymax: bounds.north,
+      spatialReference: { wkid: 4326 }
+    });
+
+    url.searchParams.set('where', '1=1');
+    url.searchParams.set('geometry', envelope);
+    url.searchParams.set('geometryType', 'esriGeometryEnvelope');
+    url.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
+    url.searchParams.set('outFields', '*');
+    url.searchParams.set('returnGeometry', 'true');
+    url.searchParams.set('outSR', '4326');
+    url.searchParams.set('resultRecordCount', '100');
+    url.searchParams.set('f', 'json');
+
+    const response = await fetch(url.toString(), {
+      signal: AbortSignal.timeout(10000),
+      headers: { 'User-Agent': 'DroneSense/1.0' }
+    });
+
+    if (!response.ok) return [];
+
+    const data = await response.json();
+
+    if (data.error || !data.features || data.features.length === 0) return [];
+
+    return data.features.map((feature: {
+      geometry?: { rings?: number[][][] };
+      attributes?: Record<string, string | number | undefined>;
+    }) => {
+      const rings = feature.geometry?.rings;
+      if (!rings || rings.length === 0) return null;
+
+      const boundaries: Array<[number, number][]> = rings.map((ring: number[][]) =>
+        ring.map((coord: number[]) => [coord[1], coord[0]] as [number, number])
+      );
+
+      const attrs = feature.attributes || {};
+      let acres = attrs.ACRES || attrs.ACREAGE || attrs.GIS_ACRES || attrs.TOTALACRES || attrs.CALC_ACREA;
+      if (!acres && boundaries.length > 0 && boundaries[0].length > 0) {
+        acres = calculatePolygonArea(boundaries[0]);
+      }
+
+      const address = attrs.SITEADDR || attrs.SITE_ADDR || attrs.ADDRESS || attrs.PROP_ADDR ||
+                     attrs.PHYSICAL_ADDRESS || attrs.LOC_ADDR || attrs.LOCATION ||
+                     (attrs.STREET_NUM && attrs.STREET_NAME ? `${attrs.STREET_NUM} ${attrs.STREET_NAME}` : undefined);
+
+      return {
+        boundaries,
+        owner: attrs.OWNER || attrs.OWNERNAME || attrs.OWNER_NAME || attrs.OWNER1 || attrs.OWN_NAME,
+        apn: attrs.PARCELID || attrs.PARCEL_ID || attrs.PIN || attrs.FOLIO || attrs.APN || attrs.STRAP || attrs.TAXID,
+        acres: acres ? Number(acres) : undefined,
+        address: address,
+        zoning: attrs.ZONING || attrs.ZONE_CODE || attrs.ZONING_CODE || attrs.ZONE,
+        landUse: attrs.LANDUSE || attrs.LAND_USE || attrs.USE_CODE || attrs.DOR_CODE || attrs.USEDESC,
+      } as NearbyParcel;
+    }).filter((p: NearbyParcel | null): p is NearbyParcel => p !== null && p.boundaries.length > 0);
+  } catch (error) {
+    console.error(`${county.name} parcels-nearby fetch error:`, error);
+    return [];
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body: ParcelRequest = await request.json();
@@ -356,6 +456,17 @@ export async function POST(request: Request) {
       if (parcels.length > 0) {
         console.log(`Found ${parcels.length} parcels from Lee County GIS`);
         return NextResponse.json({ parcels, source: 'Lee County AL GIS' });
+      }
+    }
+
+    // Try Florida county GIS
+    const floridaCounty = getFloridaCounty(centerLat, centerLng);
+    if (floridaCounty) {
+      console.log(`Trying ${floridaCounty.name} GIS for nearby parcels...`);
+      parcels = await fetchParcelsFromFloridaCounty(bounds, floridaCounty);
+      if (parcels.length > 0) {
+        console.log(`Found ${parcels.length} parcels from ${floridaCounty.name} GIS`);
+        return NextResponse.json({ parcels, source: `${floridaCounty.name} GIS` });
       }
     }
 

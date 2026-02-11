@@ -443,7 +443,7 @@ const FLORIDA_COUNTY_GIS: { name: string; url: string; bounds: { minLat: number;
   // Leon County (Tallahassee)
   {
     name: 'Leon County',
-    url: 'https://gis.leoncountyfl.gov/arcgis/rest/services/Parcels/MapServer/0/query',
+    url: 'https://intervector.leoncountyfl.gov/intervector/rest/services/MapServices/TLC_OverlayParnal_D_WM/MapServer/0/query',
     bounds: { minLat: 30.26, maxLat: 30.70, minLng: -84.65, maxLng: -83.98 }
   },
   // Alachua County (Gainesville)
@@ -551,8 +551,8 @@ async function fetchParcelFromFloridaCountyGIS(lat: number, lng: number): Promis
 
     // Florida counties use various field names for parcel attributes
     const attrs = feature.attributes;
-    let acres = attrs?.ACRES || attrs?.ACREAGE || attrs?.GIS_ACRES || attrs?.TOTALACRES || attrs?.LOT_ACRES || attrs?.Shape__Area;
-    let sqft = attrs?.SQFT || attrs?.Shape__Area;
+    let acres = attrs?.ACRES || attrs?.ACREAGE || attrs?.GIS_ACRES || attrs?.TOTALACRES || attrs?.LOT_ACRES || attrs?.CALC_ACREA || attrs?.Shape__Area;
+    let sqft = attrs?.SQFT || attrs?.BASE_SQ_FT || attrs?.Shape__Area;
 
     // If Shape__Area is in square meters, convert
     if (attrs?.Shape__Area && !acres) {
@@ -575,7 +575,7 @@ async function fetchParcelFromFloridaCountyGIS(lat: number, lng: number): Promis
       boundaries,
       parcelInfo: {
         apn: attrs?.PARCELID || attrs?.PARCEL_ID || attrs?.PIN || attrs?.FOLIO || attrs?.APN ||
-             attrs?.STRAP || attrs?.ACCOUNT || attrs?.PARCEL_NO || attrs?.PARCEL,
+             attrs?.STRAP || attrs?.ACCOUNT || attrs?.PARCEL_NO || attrs?.PARCEL || attrs?.TAXID,
         owner: attrs?.OWNER || attrs?.OWNERNAME || attrs?.OWNER_NAME || attrs?.OWNER1 || attrs?.OWN_NAME,
         address: address,
         acres: acres ? Number(acres) : undefined,
