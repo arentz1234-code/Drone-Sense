@@ -56,9 +56,10 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
     pricePerSqft: c.pricePerSqft,
   }));
 
-  // Property type distribution
-  const typeDistribution = comps.reduce((acc, c) => {
-    acc[c.propertyType] = (acc[c.propertyType] || 0) + 1;
+  // Asset class distribution (group by asset class for cleaner display)
+  const assetClassDistribution = comps.reduce((acc, c) => {
+    const assetClass = c.assetClass || 'Commercial';
+    acc[assetClass] = (acc[assetClass] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
@@ -145,14 +146,32 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
         </div>
       </div>
 
-      {/* Property Type Distribution */}
-      <div className="flex flex-wrap gap-3">
-        {Object.entries(typeDistribution).map(([type, count]) => (
-          <div key={type} className="px-4 py-2 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
-            <span className="text-[var(--text-secondary)]">{type}:</span>{' '}
-            <span className="font-semibold text-[var(--accent-cyan)]">{count}</span>
-          </div>
-        ))}
+      {/* Asset Class Distribution */}
+      <div>
+        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+          <svg className="w-5 h-5 text-[var(--accent-purple)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+          Commercial Asset Classes
+        </h3>
+        <div className="flex flex-wrap gap-3">
+          {Object.entries(assetClassDistribution).map(([assetClass, count]) => (
+            <div key={assetClass} className={`px-4 py-2 rounded-lg border ${
+              assetClass === 'Retail' ? 'bg-cyan-500/10 border-cyan-500/30' :
+              assetClass === 'Office' ? 'bg-blue-500/10 border-blue-500/30' :
+              assetClass === 'Industrial' ? 'bg-orange-500/10 border-orange-500/30' :
+              'bg-purple-500/10 border-purple-500/30'
+            }`}>
+              <span className={`font-semibold ${
+                assetClass === 'Retail' ? 'text-cyan-400' :
+                assetClass === 'Office' ? 'text-blue-400' :
+                assetClass === 'Industrial' ? 'text-orange-400' :
+                'text-purple-400'
+              }`}>{assetClass}</span>
+              <span className="text-[var(--text-muted)] ml-2">({count} sales)</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Comparable Sales Table */}
@@ -191,10 +210,10 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
             <thead>
               <tr className="border-b border-[var(--border-color)] bg-[var(--bg-tertiary)]">
                 <th className="text-left py-3 px-4 text-[var(--text-muted)]">Address</th>
+                <th className="text-center py-3 px-4 text-[var(--text-muted)]">Asset Class</th>
                 <th className="text-right py-3 px-4 text-[var(--text-muted)]">Sale Price</th>
                 <th className="text-right py-3 px-4 text-[var(--text-muted)]">Sq Ft</th>
                 <th className="text-right py-3 px-4 text-[var(--text-muted)]">$/SqFt</th>
-                <th className="text-center py-3 px-4 text-[var(--text-muted)]">Type</th>
                 <th className="text-right py-3 px-4 text-[var(--text-muted)]">Distance</th>
                 <th className="text-right py-3 px-4 text-[var(--text-muted)]">Sale Date</th>
               </tr>
@@ -206,12 +225,17 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
                     <div className="font-medium">{comp.address}</div>
                     <div className="text-xs text-[var(--text-muted)]">{comp.propertyType}</div>
                   </td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      comp.assetClass === 'Retail' ? 'bg-cyan-500/20 text-cyan-300' :
+                      comp.assetClass === 'Office' ? 'bg-blue-500/20 text-blue-300' :
+                      comp.assetClass === 'Industrial' ? 'bg-orange-500/20 text-orange-300' :
+                      'bg-purple-500/20 text-purple-300'
+                    }`}>{comp.assetClass || 'Commercial'}</span>
+                  </td>
                   <td className="py-3 px-4 text-right text-[var(--accent-green)]">{formatCurrency(comp.salePrice)}</td>
                   <td className="py-3 px-4 text-right">{comp.sqft?.toLocaleString() || 'N/A'}</td>
                   <td className="py-3 px-4 text-right text-[var(--accent-cyan)]">${comp.pricePerSqft}</td>
-                  <td className="py-3 px-4 text-center">
-                    <span className="px-2 py-1 bg-[var(--bg-tertiary)] rounded text-xs">{comp.propertyType}</span>
-                  </td>
                   <td className="py-3 px-4 text-right">{comp.distance}</td>
                   <td className="py-3 px-4 text-right text-[var(--text-muted)]">{comp.saleDate}</td>
                 </tr>
@@ -246,8 +270,9 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
       </div>
 
       <div className="text-center text-sm text-[var(--text-muted)]">
-        <p>Sales data within 1 mile radius of subject property</p>
-        <p className="mt-1">Comparable sales are estimates and should be verified with local records</p>
+        <p className="font-medium text-[var(--text-secondary)]">Commercial Real Estate Comparables Only</p>
+        <p className="mt-1">Sales data within 1 mile radius • No residential properties included</p>
+        <p className="mt-1">Comparable sales are estimates based on regional commercial market data</p>
       </div>
     </div>
   );

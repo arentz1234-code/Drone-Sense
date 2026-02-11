@@ -155,6 +155,7 @@ export interface MarketComp {
   pricePerSqft: number;
   distance: string;
   propertyType: string;
+  assetClass?: string; // e.g., Retail, Office, Industrial, Mixed-Use
   yearBuilt?: number;
   lotSize?: number;
 }
