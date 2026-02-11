@@ -11,12 +11,97 @@ interface AccessPoint {
   roadName: string;
   type: 'entrance' | 'exit' | 'access';
   roadType?: string;
+  distance?: number; // Distance from parcel boundary in meters
+  vpd?: number; // Official VPD from FDOT if available
+  vpdYear?: number; // Year of VPD count
+  vpdSource?: 'fdot' | 'estimated'; // Source of VPD data
+  estimatedVpd?: number; // Estimated VPD based on road classification
 }
 
 interface AccessPointsResponse {
   accessPoints: AccessPoint[];
   roadCount: number;
-  roads: Array<{ name: string; type: string }>;
+  roads: Array<{ name: string; type: string; vpd?: number; vpdSource?: string }>;
+  totalVpd: number;
+  primaryRoadVpd: number;
+  primaryRoadName: string;
+}
+
+// VPD estimates based on OSM highway classification (fallback when no FDOT data)
+const ROAD_TYPE_VPD: Record<string, { min: number; max: number; avg: number }> = {
+  motorway: { min: 40000, max: 150000, avg: 75000 },
+  motorway_link: { min: 20000, max: 80000, avg: 40000 },
+  trunk: { min: 20000, max: 60000, avg: 35000 },
+  trunk_link: { min: 10000, max: 40000, avg: 20000 },
+  primary: { min: 10000, max: 35000, avg: 20000 },
+  primary_link: { min: 8000, max: 25000, avg: 15000 },
+  secondary: { min: 5000, max: 20000, avg: 12000 },
+  secondary_link: { min: 4000, max: 15000, avg: 8000 },
+  tertiary: { min: 2000, max: 10000, avg: 5000 },
+  tertiary_link: { min: 1500, max: 8000, avg: 4000 },
+  residential: { min: 500, max: 3000, avg: 1500 },
+  unclassified: { min: 200, max: 2000, avg: 800 },
+  living_street: { min: 100, max: 500, avg: 250 },
+  service: { min: 50, max: 500, avg: 200 },
+};
+
+/**
+ * Fetch FDOT AADT data at specific coordinates
+ */
+async function fetchFDOTAtPoint(lat: number, lng: number, roadName?: string): Promise<{ vpd: number; year: number } | null> {
+  try {
+    // Query FDOT GIS at the exact access point location
+    const radius = 0.0015; // ~165m search radius
+    const mapExtent = `${lng - radius},${lat - radius},${lng + radius},${lat + radius}`;
+    const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
+      `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
+      `layers=all:7&tolerance=30&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
+      `returnGeometry=false&f=json`;
+
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (!data.results || data.results.length === 0) return null;
+
+    // Find the best matching segment
+    let bestMatch: { vpd: number; year: number } | null = null;
+    let bestScore = -1;
+
+    for (const result of data.results) {
+      const attrs = result.attributes;
+      if (!attrs || !attrs.AADT || Number(attrs.AADT) <= 0) continue;
+
+      const vpd = Number(attrs.AADT);
+      const year = Number(attrs.YEAR_) || 2024;
+
+      // Score based on road name match and recency
+      let score = year; // Base score is year (more recent = better)
+
+      // If road name provided, check for match in DESC_TO, DESC_FRM, or ROADWAY
+      if (roadName) {
+        const normalizedSearch = roadName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const descTo = (attrs.DESC_TO || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const descFrm = (attrs.DESC_FRM || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const roadway = (attrs.ROADWAY || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        if (descTo.includes(normalizedSearch) || descFrm.includes(normalizedSearch) ||
+            normalizedSearch.includes(descTo) || normalizedSearch.includes(descFrm)) {
+          score += 1000; // Strong preference for name match
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = { vpd, year };
+      }
+    }
+
+    return bestMatch;
+  } catch (error) {
+    console.log(`[AccessPoints] FDOT fetch error at ${lat},${lng}:`, error);
+    return null;
+  }
 }
 
 interface OSMWay {
@@ -37,59 +122,14 @@ interface OSMData {
 }
 
 /**
- * Check if a service road touches or crosses the parcel boundary
+ * Find all access points by checking road intersections and proximity to parcel boundary
  */
-function serviceRoadTouchesParcel(
-  serviceRoad: OSMWay,
-  parcelPolygon: GeoJSON.Feature<GeoJSON.Polygon>,
-  parcelLine: GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString>
-): { touches: boolean; intersectionPoint?: [number, number] } {
-  if (!serviceRoad.geometry || serviceRoad.geometry.length < 2) {
-    return { touches: false };
-  }
-
-  // Convert service road to line
-  const roadCoords = serviceRoad.geometry.map(g => [g.lon, g.lat] as [number, number]);
-  const roadLine = turf.lineString(roadCoords);
-
-  // Check if road intersects parcel boundary
-  const intersections = turf.lineIntersect(roadLine, parcelLine);
-  if (intersections.features.length > 0) {
-    const [lng, lat] = intersections.features[0].geometry.coordinates;
-    return { touches: true, intersectionPoint: [lat, lng] };
-  }
-
-  // Check if any point of the road is inside the parcel
-  for (const coord of roadCoords) {
-    const point = turf.point(coord);
-    if (turf.booleanPointInPolygon(point, parcelPolygon)) {
-      return { touches: true };
-    }
-  }
-
-  // Check if road comes very close to parcel boundary (within 2 meters)
-  // This catches driveways that are mapped slightly off
-  for (const geom of serviceRoad.geometry) {
-    const point = turf.point([geom.lon, geom.lat]);
-    // Cast to any to handle both LineString and MultiLineString
-    const distance = turf.pointToLineDistance(point, parcelLine as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
-    if (distance < 2) {
-      return { touches: true, intersectionPoint: [geom.lat, geom.lon] };
-    }
-  }
-
-  return { touches: false };
-}
-
-/**
- * Find access points where driveways that touch the parcel connect to public roads
- */
-async function findDrivewayAccessPoints(
+async function findAccessPoints(
   lat: number,
   lng: number,
   parcelBoundary: Array<[number, number]>,
-  radiusMeters: number = 100
-): Promise<{ accessPoints: AccessPoint[]; publicRoads: OSMWay[] }> {
+  radiusMeters: number = 150
+): Promise<{ accessPoints: AccessPoint[]; allRoads: OSMWay[] }> {
   try {
     // Multiple Overpass API endpoints for redundancy
     const overpassServers = [
@@ -98,14 +138,12 @@ async function findDrivewayAccessPoints(
       'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
     ];
 
-    // Query for both public roads AND service roads/driveways
+    // Query for all road types that could provide access
     const query = `
       [out:json][timeout:15];
       (
-        // Public roads
-        way["highway"~"primary|secondary|tertiary|trunk|residential|unclassified"](around:${radiusMeters},${lat},${lng});
-        // Service roads, driveways, parking aisles
-        way["highway"="service"](around:${radiusMeters},${lat},${lng});
+        // All road types
+        way["highway"~"motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|residential|unclassified|living_street|service"](around:${radiusMeters},${lat},${lng});
       );
       out body geom;
     `;
@@ -137,27 +175,20 @@ async function findDrivewayAccessPoints(
 
     if (!data) {
       console.error('[AccessPoints] All Overpass servers failed');
-      return { accessPoints: [], publicRoads: [] };
+      return { accessPoints: [], allRoads: [] };
     }
 
-    // Separate public roads from service roads
-    const publicRoads: OSMWay[] = [];
-    const serviceRoads: OSMWay[] = [];
-
+    // Collect all roads with valid geometry
+    const allRoads: OSMWay[] = [];
     for (const element of data.elements || []) {
-      if (element.type === 'way' && element.geometry && element.nodes) {
-        const highway = element.tags?.highway;
-        if (highway === 'service') {
-          serviceRoads.push(element);
-        } else if (highway) {
-          publicRoads.push(element);
-        }
+      if (element.type === 'way' && element.geometry && element.geometry.length >= 2) {
+        allRoads.push(element);
       }
     }
 
-    console.log(`[AccessPoints] Found ${publicRoads.length} public roads, ${serviceRoads.length} service roads`);
+    console.log(`[AccessPoints] Found ${allRoads.length} roads`);
 
-    // Convert parcel boundary to Turf polygon
+    // Convert parcel boundary to Turf polygon and line
     const parcelCoords = parcelBoundary.map(([lat, lng]) => [lng, lat] as [number, number]);
     if (parcelCoords[0][0] !== parcelCoords[parcelCoords.length - 1][0] ||
         parcelCoords[0][1] !== parcelCoords[parcelCoords.length - 1][1]) {
@@ -169,201 +200,189 @@ async function findDrivewayAccessPoints(
       ? parcelLineResult.features[0]
       : parcelLineResult;
 
-    // Create a map of node IDs to their coordinates
-    const nodeCoords: Map<number, [number, number]> = new Map();
-    for (const way of [...publicRoads, ...serviceRoads]) {
-      for (let i = 0; i < way.nodes.length; i++) {
-        if (way.geometry[i]) {
-          nodeCoords.set(way.nodes[i], [way.geometry[i].lat, way.geometry[i].lon]);
-        }
-      }
-    }
-
-    // Create set of node IDs for public roads
-    const publicRoadNodes: Set<number> = new Set();
-    for (const road of publicRoads) {
-      for (const nodeId of road.nodes) {
-        publicRoadNodes.add(nodeId);
-      }
-    }
-
-    // Step 1: Find service roads that touch THIS parcel
-    const parcelServiceRoads: OSMWay[] = [];
-    for (const serviceRoad of serviceRoads) {
-      const result = serviceRoadTouchesParcel(serviceRoad, parcelPolygon, parcelLine);
-      if (result.touches) {
-        parcelServiceRoads.push(serviceRoad);
-      }
-    }
-
-    console.log(`[AccessPoints] ${parcelServiceRoads.length} service roads touch the parcel`);
-
-    // Step 2: For each service road that touches the parcel, find where it connects to public roads
     const accessPoints: AccessPoint[] = [];
     const seenCoords = new Set<string>();
+    const seenRoads = new Map<string, number>(); // Track best distance per road
 
-    for (const serviceRoad of parcelServiceRoads) {
-      for (let i = 0; i < serviceRoad.nodes.length; i++) {
-        const nodeId = serviceRoad.nodes[i];
+    // Process each road
+    for (const road of allRoads) {
+      const roadCoords = road.geometry.map(g => [g.lon, g.lat] as [number, number]);
+      const roadLine = turf.lineString(roadCoords);
+      const roadName = road.tags?.name || road.tags?.ref || 'Unnamed Road';
+      const roadType = road.tags?.highway || 'road';
 
-        // If this node is shared with a public road, it's an access point
-        if (publicRoadNodes.has(nodeId)) {
-          const coords = nodeCoords.get(nodeId);
-          if (!coords) continue;
+      // Skip internal parking/service roads unless they're the only option
+      const isServiceRoad = roadType === 'service';
 
-          const [nodeLat, nodeLng] = coords;
-          const coordKey = `${nodeLat.toFixed(5)},${nodeLng.toFixed(5)}`;
+      // Method 1: Check for direct intersection with parcel boundary
+      try {
+        const intersections = turf.lineIntersect(roadLine, parcelLine as GeoJSON.Feature<GeoJSON.LineString>);
+
+        for (const intersection of intersections.features) {
+          const [lng, lat] = intersection.geometry.coordinates;
+          const coordKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+
           if (seenCoords.has(coordKey)) continue;
+
+          // Check if this road already has a better (closer) access point
+          const existingDist = seenRoads.get(roadName);
+          if (existingDist !== undefined && existingDist <= 0) continue;
+
           seenCoords.add(coordKey);
-
-          // Find which public road this connects to
-          let connectedRoad: OSMWay | null = null;
-          for (const publicRoad of publicRoads) {
-            if (publicRoad.nodes.includes(nodeId)) {
-              connectedRoad = publicRoad;
-              break;
-            }
-          }
-
-          const roadName = connectedRoad?.tags?.name ||
-                         connectedRoad?.tags?.ref ||
-                         'Unnamed Road';
+          seenRoads.set(roadName, 0); // Distance 0 = direct intersection
 
           accessPoints.push({
-            coordinates: [nodeLat, nodeLng],
+            coordinates: [lat, lng],
             roadName,
             type: 'access',
-            roadType: connectedRoad?.tags?.highway,
+            roadType,
+            distance: 0,
           });
 
-          console.log(`[AccessPoints] Found access point at ${nodeLat.toFixed(5)},${nodeLng.toFixed(5)} -> ${roadName}`);
+          console.log(`[AccessPoints] Direct intersection: ${roadName} (${roadType})`);
         }
+      } catch (err) {
+        // Intersection check failed, continue with proximity check
       }
-    }
 
-    // Fallback: If no shared nodes found, check for close proximity connections
-    if (accessPoints.length === 0 && parcelServiceRoads.length > 0) {
-      console.log('[AccessPoints] No shared nodes, checking proximity connections...');
+      // Method 2: Check for road segments inside or very close to parcel
+      for (let i = 0; i < road.geometry.length; i++) {
+        const geom = road.geometry[i];
+        const point = turf.point([geom.lon, geom.lat]);
 
-      for (const serviceRoad of parcelServiceRoads) {
-        // Check endpoints of service roads
-        const endpoints = [0, serviceRoad.geometry.length - 1];
+        // Check if point is inside parcel
+        const isInside = turf.booleanPointInPolygon(point, parcelPolygon);
 
-        for (const idx of endpoints) {
-          const geom = serviceRoad.geometry[idx];
-          if (!geom) continue;
+        // Check distance to parcel boundary
+        let distance: number;
+        try {
+          distance = turf.pointToLineDistance(point, parcelLine as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
+        } catch {
+          continue;
+        }
 
-          const endPoint = turf.point([geom.lon, geom.lat]);
+        // For points inside, use negative distance to prioritize them
+        const effectiveDistance = isInside ? -distance : distance;
 
-          // Check distance to each public road
-          for (const publicRoad of publicRoads) {
-            const roadCoords = publicRoad.geometry.map(g => [g.lon, g.lat] as [number, number]);
-            if (roadCoords.length < 2) continue;
+        // Include if inside parcel or within 20 meters of boundary
+        if (isInside || distance <= 20) {
+          const coordKey = `${geom.lat.toFixed(5)},${geom.lon.toFixed(5)}`;
+          if (seenCoords.has(coordKey)) continue;
 
-            const roadLine = turf.lineString(roadCoords);
-            const distanceToRoad = turf.pointToLineDistance(endPoint, roadLine, { units: 'meters' });
+          // Check if this road already has a better access point
+          const existingDist = seenRoads.get(roadName);
+          if (existingDist !== undefined && existingDist <= effectiveDistance) continue;
 
-            if (distanceToRoad < 5) {
-              const coordKey = `${geom.lat.toFixed(5)},${geom.lon.toFixed(5)}`;
-              if (seenCoords.has(coordKey)) continue;
-              seenCoords.add(coordKey);
-
-              const roadName = publicRoad.tags?.name ||
-                             publicRoad.tags?.ref ||
-                             'Unnamed Road';
-
-              accessPoints.push({
-                coordinates: [geom.lat, geom.lon],
-                roadName,
-                type: 'access',
-                roadType: publicRoad.tags?.highway,
-              });
-
-              console.log(`[AccessPoints] Found proximity access point -> ${roadName}`);
-              break;
-            }
+          // Skip service roads if we already have a non-service road access
+          if (isServiceRoad && seenRoads.size > 0) {
+            const hasPublicRoad = Array.from(seenRoads.keys()).some(name => {
+              const ap = accessPoints.find(a => a.roadName === name);
+              return ap && ap.roadType !== 'service';
+            });
+            if (hasPublicRoad) continue;
           }
+
+          seenCoords.add(coordKey);
+          seenRoads.set(roadName, effectiveDistance);
+
+          accessPoints.push({
+            coordinates: [geom.lat, geom.lon],
+            roadName,
+            type: 'access',
+            roadType,
+            distance: Math.max(0, distance),
+          });
+
+          console.log(`[AccessPoints] ${isInside ? 'Inside parcel' : 'Proximity'}: ${roadName} (${roadType}) - ${Math.round(distance)}m`);
         }
       }
-    }
 
-    // Fallback: If still no access points, find nearest points on public roads to parcel boundary
-    // This ensures we always show likely access locations
-    if (accessPoints.length === 0 && publicRoads.length > 0) {
-      console.log('[AccessPoints] No driveway connections found, finding nearest road points to parcel...');
-
-      const roadDistances: Array<{
-        lat: number;
-        lng: number;
-        distance: number;
-        roadName: string;
-        roadType?: string;
-      }> = [];
-
-      for (const publicRoad of publicRoads) {
-        const roadCoords = publicRoad.geometry.map(g => [g.lon, g.lat] as [number, number]);
-        if (roadCoords.length < 2) continue;
-
-        const roadLine = turf.lineString(roadCoords);
-        const roadName = publicRoad.tags?.name || publicRoad.tags?.ref || 'Unnamed Road';
-
-        // Find the closest point on this road to the parcel boundary
+      // Method 3: Find nearest point on road to parcel (for roads that don't touch)
+      if (!seenRoads.has(roadName)) {
         let minDistance = Infinity;
-        let closestPoint: [number, number] | null = null;
+        let nearestPoint: [number, number] | null = null;
 
         // Sample points along the parcel boundary
         for (const [pLat, pLng] of parcelBoundary) {
           const parcelPoint = turf.point([pLng, pLat]);
-          const nearestOnRoad = turf.nearestPointOnLine(roadLine, parcelPoint);
-          const dist = turf.distance(parcelPoint, nearestOnRoad, { units: 'meters' });
+          try {
+            const nearestOnRoad = turf.nearestPointOnLine(roadLine, parcelPoint);
+            const dist = turf.distance(parcelPoint, nearestOnRoad, { units: 'meters' });
 
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestPoint = nearestOnRoad.geometry.coordinates as [number, number];
+            if (dist < minDistance) {
+              minDistance = dist;
+              nearestPoint = nearestOnRoad.geometry.coordinates as [number, number];
+            }
+          } catch {
+            continue;
           }
         }
 
-        // Only include if road is within 50 meters of parcel
-        if (closestPoint && minDistance < 50) {
-          roadDistances.push({
-            lat: closestPoint[1],
-            lng: closestPoint[0],
-            distance: minDistance,
-            roadName,
-            roadType: publicRoad.tags?.highway,
-          });
+        // Include if within 30 meters (potential access from adjacent lot)
+        if (nearestPoint && minDistance <= 30) {
+          const coordKey = `${nearestPoint[1].toFixed(5)},${nearestPoint[0].toFixed(5)}`;
+
+          if (!seenCoords.has(coordKey)) {
+            // Skip service roads for distant access
+            if (!isServiceRoad || allRoads.filter(r => r.tags?.highway !== 'service').length === 0) {
+              seenCoords.add(coordKey);
+              seenRoads.set(roadName, minDistance);
+
+              accessPoints.push({
+                coordinates: [nearestPoint[1], nearestPoint[0]],
+                roadName,
+                type: 'access',
+                roadType,
+                distance: minDistance,
+              });
+
+              console.log(`[AccessPoints] Nearest point: ${roadName} (${roadType}) - ${Math.round(minDistance)}m`);
+            }
+          }
         }
-      }
-
-      // Sort by distance and take up to 3 closest unique roads
-      roadDistances.sort((a, b) => a.distance - b.distance);
-      const addedRoads = new Set<string>();
-
-      for (const rd of roadDistances) {
-        if (addedRoads.has(rd.roadName)) continue;
-        addedRoads.add(rd.roadName);
-
-        const coordKey = `${rd.lat.toFixed(5)},${rd.lng.toFixed(5)}`;
-        if (seenCoords.has(coordKey)) continue;
-        seenCoords.add(coordKey);
-
-        accessPoints.push({
-          coordinates: [rd.lat, rd.lng],
-          roadName: rd.roadName,
-          type: 'access',
-          roadType: rd.roadType,
-        });
-
-        console.log(`[AccessPoints] Added fallback access point on ${rd.roadName} (${Math.round(rd.distance)}m from parcel)`);
-
-        if (accessPoints.length >= 3) break;
       }
     }
 
-    return { accessPoints, publicRoads };
+    // Sort access points: direct intersections first, then by distance
+    accessPoints.sort((a, b) => {
+      // Prioritize non-service roads
+      const aIsService = a.roadType === 'service';
+      const bIsService = b.roadType === 'service';
+      if (aIsService !== bIsService) return aIsService ? 1 : -1;
+
+      // Then by distance
+      return (a.distance || 0) - (b.distance || 0);
+    });
+
+    // Deduplicate: keep multiple access points per road if they're far apart (>15 meters)
+    // This handles corner lots and large parcels with multiple entrances
+    const deduped: AccessPoint[] = [];
+
+    for (const ap of accessPoints) {
+      // Check if there's already a nearby access point (same road or very close)
+      const hasTooClose = deduped.some(existing => {
+        // Calculate distance between points
+        const point1 = turf.point([ap.coordinates[1], ap.coordinates[0]]);
+        const point2 = turf.point([existing.coordinates[1], existing.coordinates[0]]);
+        const dist = turf.distance(point1, point2, { units: 'meters' });
+
+        // If same road, require more separation (15m)
+        // If different roads, allow closer points (5m)
+        const minDistance = existing.roadName === ap.roadName ? 15 : 5;
+        return dist < minDistance;
+      });
+
+      if (!hasTooClose) {
+        deduped.push(ap);
+      }
+    }
+
+    console.log(`[AccessPoints] Final: ${deduped.length} access points (from ${accessPoints.length} candidates)`);
+
+    return { accessPoints: deduped, allRoads };
   } catch (error) {
-    console.error('[AccessPoints] Error finding driveway access points:', error);
-    return { accessPoints: [], publicRoads: [] };
+    console.error('[AccessPoints] Error finding access points:', error);
+    return { accessPoints: [], allRoads: [] };
   }
 }
 
@@ -380,7 +399,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Coordinates required' }, { status: 400 });
     }
 
-    // Calculate parcel area to detect if it's just a building footprint
+    // Calculate parcel area and perimeter to determine search radius
     const parcelCoords = parcelBoundary.map(([lat, lng]) => [lng, lat] as [number, number]);
     if (parcelCoords[0][0] !== parcelCoords[parcelCoords.length - 1][0] ||
         parcelCoords[0][1] !== parcelCoords[parcelCoords.length - 1][1]) {
@@ -389,12 +408,12 @@ export async function POST(request: Request) {
     const parcelPolygon = turf.polygon([parcelCoords]);
     const parcelAreaSqMeters = turf.area(parcelPolygon);
 
-    // If parcel is very small (< 1000 sq meters), it's likely just a building footprint
+    // If parcel is very small (< 500 sq meters), it's likely just a building footprint
     // Buffer it to approximate the lot
     let effectiveBoundary = parcelBoundary;
-    if (parcelAreaSqMeters < 1000) {
+    if (parcelAreaSqMeters < 500) {
       console.log(`[AccessPoints] Very small parcel (${Math.round(parcelAreaSqMeters)} sq m), buffering to approximate lot`);
-      const bufferedParcel = turf.buffer(parcelPolygon, 0.03, { units: 'kilometers' }); // 30m buffer
+      const bufferedParcel = turf.buffer(parcelPolygon, 0.02, { units: 'kilometers' }); // 20m buffer
       if (bufferedParcel) {
         effectiveBoundary = bufferedParcel.geometry.coordinates[0].map(
           ([lng, lat]) => [lat, lng] as [number, number]
@@ -402,28 +421,93 @@ export async function POST(request: Request) {
       }
     }
 
-    console.log(`[AccessPoints] Processing parcel with ${parcelBoundary.length} vertices (${Math.round(parcelAreaSqMeters)} sq m) at ${coordinates.lat},${coordinates.lng}`);
+    // Calculate search radius based on parcel size (larger parcels need larger radius)
+    const parcelDiagonal = Math.sqrt(parcelAreaSqMeters);
+    const searchRadius = Math.max(100, Math.min(300, parcelDiagonal * 1.5));
 
-    // Find access points for driveways that touch this parcel
-    const { accessPoints, publicRoads } = await findDrivewayAccessPoints(
+    console.log(`[AccessPoints] Processing parcel with ${parcelBoundary.length} vertices (${Math.round(parcelAreaSqMeters)} sq m) at ${coordinates.lat},${coordinates.lng}, radius: ${Math.round(searchRadius)}m`);
+
+    // Find all access points
+    const { accessPoints, allRoads } = await findAccessPoints(
       coordinates.lat,
       coordinates.lng,
       effectiveBoundary,
-      100 // Tighter radius for more accurate results
+      searchRadius
     );
 
-    // Get unique roads
-    const accessRoads = [...new Set(accessPoints.map(ap => ap.roadName))];
+    // Get unique roads with their best access point (for VPD lookup)
+    const roadAccessPoints = new Map<string, AccessPoint>();
+    for (const ap of accessPoints) {
+      const existing = roadAccessPoints.get(ap.roadName);
+      // Keep the access point with smallest distance (closest to boundary)
+      if (!existing || (ap.distance || 0) < (existing.distance || Infinity)) {
+        roadAccessPoints.set(ap.roadName, ap);
+      }
+    }
 
-    console.log(`[AccessPoints] Found ${accessPoints.length} access points from ${accessRoads.length} roads`);
+    console.log(`[AccessPoints] Found ${accessPoints.length} access points from ${roadAccessPoints.size} unique roads`);
+
+    // Fetch FDOT VPD data for each unique road at its access point location
+    const roadVPDMap = new Map<string, { vpd: number; year: number; source: 'fdot' | 'estimated' }>();
+
+    // Fetch FDOT data in parallel (limit concurrency)
+    const fdotPromises = Array.from(roadAccessPoints.entries()).map(async ([roadName, ap]) => {
+      const [lat, lng] = ap.coordinates;
+      const fdotData = await fetchFDOTAtPoint(lat, lng, roadName);
+
+      if (fdotData) {
+        console.log(`[AccessPoints] FDOT VPD for "${roadName}" at ${lat.toFixed(5)},${lng.toFixed(5)}: ${fdotData.vpd} (${fdotData.year})`);
+        roadVPDMap.set(roadName, { vpd: fdotData.vpd, year: fdotData.year, source: 'fdot' });
+      } else {
+        // Fallback to estimated VPD based on road type
+        const roadType = ap.roadType || 'unclassified';
+        const estimated = ROAD_TYPE_VPD[roadType]?.avg || ROAD_TYPE_VPD['unclassified'].avg;
+        console.log(`[AccessPoints] No FDOT data for "${roadName}", using estimate: ${estimated} (${roadType})`);
+        roadVPDMap.set(roadName, { vpd: estimated, year: 0, source: 'estimated' });
+      }
+    });
+
+    await Promise.all(fdotPromises);
+
+    // Enrich access points with VPD data
+    const enrichedAccessPoints: AccessPoint[] = accessPoints.map(ap => {
+      const vpdData = roadVPDMap.get(ap.roadName);
+      const roadType = ap.roadType || 'unclassified';
+      const estimatedVpd = ROAD_TYPE_VPD[roadType]?.avg || ROAD_TYPE_VPD['unclassified'].avg;
+
+      return {
+        ...ap,
+        vpd: vpdData?.vpd,
+        vpdYear: vpdData?.year,
+        vpdSource: vpdData?.source,
+        estimatedVpd,
+      };
+    });
+
+    // Build roads summary with VPD
+    const roadsSummary = Array.from(roadAccessPoints.entries()).map(([name, ap]) => {
+      const vpdData = roadVPDMap.get(name);
+      return {
+        name,
+        type: ap.roadType || 'road',
+        vpd: vpdData?.vpd,
+        vpdSource: vpdData?.source === 'fdot' ? 'Florida DOT AADT' : 'Estimated',
+      };
+    }).sort((a, b) => (b.vpd || 0) - (a.vpd || 0));
+
+    // Calculate totals
+    const totalVpd = roadsSummary.reduce((sum, r) => sum + (r.vpd || 0), 0);
+    const primaryRoad = roadsSummary[0];
+
+    console.log(`[AccessPoints] VPD Summary: Primary="${primaryRoad?.name}" (${primaryRoad?.vpd}), Total=${totalVpd}`);
 
     const response: AccessPointsResponse = {
-      accessPoints,
-      roadCount: accessRoads.length,
-      roads: publicRoads.map(r => ({
-        name: r.tags?.name || r.tags?.ref || 'Unnamed Road',
-        type: r.tags?.highway || 'road'
-      })),
+      accessPoints: enrichedAccessPoints,
+      roadCount: roadAccessPoints.size,
+      roads: roadsSummary,
+      totalVpd,
+      primaryRoadVpd: primaryRoad?.vpd || 0,
+      primaryRoadName: primaryRoad?.name || 'Unknown',
     };
 
     return NextResponse.json(response);

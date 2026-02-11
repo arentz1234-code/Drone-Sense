@@ -27,6 +27,7 @@ import {
   MarketComp,
   PropertyData,
   SelectedParcel,
+  AccessPoint,
 } from '@/types';
 
 // Re-export types for backward compatibility
@@ -82,10 +83,6 @@ const SavedProperties = dynamic(() => import('@/components/SavedProperties'), {
   ssr: false
 });
 
-const LiveFeasibilityScore = dynamic(() => import('@/components/LiveFeasibilityScore'), {
-  loading: () => <SkeletonCard />,
-  ssr: false
-});
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },
@@ -109,6 +106,7 @@ export default function HomePage() {
   const [environmentalRisk, setEnvironmentalRisk] = useState<EnvironmentalRisk | null>(null);
   const [marketComps, setMarketComps] = useState<MarketComp[] | null>(null);
   const [selectedParcel, setSelectedParcel] = useState<SelectedParcel | null>(null);
+  const [accessPoints, setAccessPoints] = useState<AccessPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -431,27 +429,6 @@ export default function HomePage() {
 
           {/* Right Column */}
           <div className="space-y-6">
-            {/* Live Feasibility Score */}
-            {coordinates && (
-              <div className="terminal-card">
-                <div className="terminal-header">
-                  <div className="terminal-dot red"></div>
-                  <div className="terminal-dot yellow"></div>
-                  <div className="terminal-dot green"></div>
-                  <span className="terminal-title">feasibility_score.live</span>
-                </div>
-                <div className="terminal-body p-0">
-                  <LiveFeasibilityScore
-                    trafficData={trafficData}
-                    demographicsData={demographicsData}
-                    businesses={businesses}
-                    environmentalRisk={environmentalRisk}
-                    marketComps={marketComps}
-                  />
-                </div>
-              </div>
-            )}
-
             {/* Saved Properties */}
             <div className="terminal-card">
               <div className="terminal-header">
@@ -488,6 +465,7 @@ export default function HomePage() {
                 onParcelSelect={setSelectedParcel}
                 onCoordinatesChange={setCoordinates}
                 onAddressChange={setAddress}
+                onAccessPointsChange={setAccessPoints}
                 interactiveMode={true}
               />
             </div>
@@ -594,7 +572,12 @@ export default function HomePage() {
           </div>
           <div className="terminal-body">
             {coordinates && trafficData ? (
-              <TrafficCharts trafficData={trafficData} />
+              <TrafficCharts
+                trafficData={trafficData}
+                accessPoints={accessPoints}
+                coordinates={coordinates}
+                parcelBoundary={selectedParcel?.boundaries?.[0]}
+              />
             ) : (
               <div className="text-center py-12 text-[var(--text-muted)]">
                 <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">

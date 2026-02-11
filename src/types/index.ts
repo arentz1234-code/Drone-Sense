@@ -24,6 +24,19 @@ export interface TrafficInfo {
   averageVPD?: number;
 }
 
+// Access point types (for parcel boundary road intersections)
+export interface AccessPoint {
+  coordinates: [number, number]; // [lat, lng]
+  roadName: string;
+  type: 'entrance' | 'exit' | 'access';
+  roadType?: string; // OSM highway type (primary, secondary, residential, etc.)
+  distance?: number; // Distance from parcel boundary in meters
+  vpd?: number; // Official VPD from FDOT if available
+  vpdYear?: number; // Year of VPD count
+  vpdSource?: 'fdot' | 'estimated'; // Source of VPD data
+  estimatedVpd?: number; // Estimated VPD based on road classification
+}
+
 // Business suitability types
 export interface BusinessSuitability {
   category: string;

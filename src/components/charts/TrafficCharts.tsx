@@ -1,16 +1,206 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar } from 'recharts';
-import { TrafficInfo } from '@/types';
+import { TrafficInfo, AccessPoint } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 interface TrafficChartsProps {
   trafficData: TrafficInfo;
+  accessPoints?: AccessPoint[];
+  coordinates?: { lat: number; lng: number } | null;
+  parcelBoundary?: Array<[number, number]>;
 }
 
-export default function TrafficCharts({ trafficData }: TrafficChartsProps) {
+// VPD estimates based on OSM highway classification
+const ROAD_TYPE_VPD: Record<string, { min: number; max: number; avg: number; label: string }> = {
+  motorway: { min: 40000, max: 150000, avg: 75000, label: 'Highway/Interstate' },
+  motorway_link: { min: 20000, max: 80000, avg: 40000, label: 'Highway Ramp' },
+  trunk: { min: 20000, max: 60000, avg: 35000, label: 'Major Highway' },
+  trunk_link: { min: 10000, max: 40000, avg: 20000, label: 'Major Highway Ramp' },
+  primary: { min: 10000, max: 35000, avg: 20000, label: 'Primary Road' },
+  primary_link: { min: 8000, max: 25000, avg: 15000, label: 'Primary Road Ramp' },
+  secondary: { min: 5000, max: 20000, avg: 12000, label: 'Secondary Road' },
+  secondary_link: { min: 4000, max: 15000, avg: 8000, label: 'Secondary Road Ramp' },
+  tertiary: { min: 2000, max: 10000, avg: 5000, label: 'Tertiary Road' },
+  tertiary_link: { min: 1500, max: 8000, avg: 4000, label: 'Tertiary Road Ramp' },
+  residential: { min: 500, max: 3000, avg: 1500, label: 'Residential Street' },
+  unclassified: { min: 200, max: 2000, avg: 800, label: 'Local Road' },
+  living_street: { min: 100, max: 500, avg: 250, label: 'Living Street' },
+  service: { min: 50, max: 500, avg: 200, label: 'Service Road' },
+};
+
+// Calculate VPD from access points (now uses actual FDOT data when available)
+function calculateAccessPointVPD(accessPoints: AccessPoint[]): {
+  totalVPD: number;
+  primaryRoadVPD: number;
+  primaryRoadType: string;
+  primaryRoadName: string;
+  primaryVpdSource: 'fdot' | 'estimated' | undefined;
+  roadBreakdown: Array<{ name: string; type: string; vpd: number; label: string; source: 'fdot' | 'estimated'; year?: number }>;
+} {
+  if (!accessPoints || accessPoints.length === 0) {
+    return {
+      totalVPD: 0,
+      primaryRoadVPD: 0,
+      primaryRoadType: 'unknown',
+      primaryRoadName: 'No roads found',
+      primaryVpdSource: undefined,
+      roadBreakdown: [],
+    };
+  }
+
+  // Group access points by road name, keeping best VPD data for each
+  const roadMap = new Map<string, {
+    type: string;
+    vpd: number;
+    source: 'fdot' | 'estimated';
+    year?: number;
+  }>();
+
+  for (const ap of accessPoints) {
+    const existing = roadMap.get(ap.roadName);
+    // Use actual FDOT VPD if available, otherwise use estimated
+    const vpd = ap.vpd || ap.estimatedVpd || ROAD_TYPE_VPD[ap.roadType || 'unclassified']?.avg || 800;
+    const source = ap.vpdSource || 'estimated';
+    const year = ap.vpdYear;
+
+    if (!existing) {
+      roadMap.set(ap.roadName, { type: ap.roadType || 'unclassified', vpd, source, year });
+    } else {
+      // Prefer FDOT data over estimated, or higher VPD if both same source
+      if ((source === 'fdot' && existing.source !== 'fdot') ||
+          (source === existing.source && vpd > existing.vpd)) {
+        roadMap.set(ap.roadName, { type: ap.roadType || 'unclassified', vpd, source, year });
+      }
+    }
+  }
+
+  // Build road breakdown
+  const roadBreakdown: Array<{ name: string; type: string; vpd: number; label: string; source: 'fdot' | 'estimated'; year?: number }> = [];
+  let maxVPD = 0;
+  let primaryRoad: { name: string; type: string; vpd: number; source: 'fdot' | 'estimated'; year?: number } = {
+    name: '', type: '', vpd: 0, source: 'estimated', year: undefined
+  };
+
+  for (const [roadName, info] of roadMap) {
+    const label = ROAD_TYPE_VPD[info.type]?.label || 'Road';
+
+    roadBreakdown.push({
+      name: roadName,
+      type: info.type,
+      vpd: info.vpd,
+      label,
+      source: info.source,
+      year: info.year,
+    });
+
+    if (info.vpd > maxVPD) {
+      maxVPD = info.vpd;
+      primaryRoad = { name: roadName, type: info.type, vpd: info.vpd, source: info.source, year: info.year };
+    }
+  }
+
+  // Sort by VPD descending
+  roadBreakdown.sort((a, b) => b.vpd - a.vpd);
+
+  // Total VPD is sum of all unique roads
+  const totalVPD = roadBreakdown.reduce((sum, r) => sum + r.vpd, 0);
+
+  return {
+    totalVPD,
+    primaryRoadVPD: primaryRoad.vpd,
+    primaryRoadType: primaryRoad.type,
+    primaryRoadName: primaryRoad.name,
+    primaryVpdSource: primaryRoad.source,
+    roadBreakdown,
+  };
+}
+
+export default function TrafficCharts({ trafficData, accessPoints: propAccessPoints, coordinates, parcelBoundary }: TrafficChartsProps) {
+  const [fetchedAccessPoints, setFetchedAccessPoints] = useState<AccessPoint[]>([]);
+  const [loadingAccessPoints, setLoadingAccessPoints] = useState(false);
+
+  // Fetch access points directly if not provided via props
+  useEffect(() => {
+    const fetchAccessPoints = async () => {
+      console.log('[TrafficCharts] fetchAccessPoints called', {
+        propAccessPoints: propAccessPoints?.length || 0,
+        coordinates: coordinates ? `${coordinates.lat},${coordinates.lng}` : 'null',
+        parcelBoundary: parcelBoundary?.length || 0
+      });
+
+      // Use prop access points if available
+      if (propAccessPoints && propAccessPoints.length > 0) {
+        console.log('[TrafficCharts] Using prop access points');
+        setFetchedAccessPoints(propAccessPoints);
+        return;
+      }
+
+      if (!coordinates) {
+        console.log('[TrafficCharts] No coordinates, skipping fetch');
+        return;
+      }
+
+      setLoadingAccessPoints(true);
+      try {
+        let boundary = parcelBoundary;
+
+        // If no boundary provided, fetch parcel data first
+        if (!boundary || boundary.length < 3) {
+          console.log('[TrafficCharts] No boundary, fetching parcel data...');
+          const parcelResponse = await fetch('/api/parcel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ coordinates }),
+          });
+
+          if (parcelResponse.ok) {
+            const parcelData = await parcelResponse.json();
+            boundary = parcelData.boundaries?.[0];
+            console.log('[TrafficCharts] Got parcel boundary:', boundary?.length || 0, 'points');
+          }
+        }
+
+        if (!boundary || boundary.length < 3) {
+          console.log('[TrafficCharts] No valid boundary available');
+          setLoadingAccessPoints(false);
+          return;
+        }
+
+        // Fetch access points with the boundary
+        const response = await fetch('/api/access-points', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parcelBoundary: boundary,
+            coordinates,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('[TrafficCharts] Fetched access points:', data.accessPoints?.length || 0);
+          setFetchedAccessPoints(data.accessPoints || []);
+        }
+      } catch (err) {
+        console.error('[TrafficCharts] Error fetching access points:', err);
+      } finally {
+        setLoadingAccessPoints(false);
+      }
+    };
+
+    fetchAccessPoints();
+  }, [propAccessPoints, coordinates?.lat, coordinates?.lng, parcelBoundary]);
+
+  // Use prop access points if available, otherwise use fetched ones
+  const accessPoints = (propAccessPoints && propAccessPoints.length > 0) ? propAccessPoints : fetchedAccessPoints;
+
   // DEBUG: Log received traffic data
-  console.log('[TrafficCharts] Received trafficData:', JSON.stringify(trafficData, null, 2));
+  console.log('[TrafficCharts] Using accessPoints:', accessPoints?.length || 0);
+
+  // Calculate VPD from access points
+  const accessPointVPD = calculateAccessPointVPD(accessPoints || []);
 
   // Build VPD comparison data - include individual roads if available
   const vpdComparison = [
@@ -97,6 +287,130 @@ export default function TrafficCharts({ trafficData }: TrafficChartsProps) {
 
   return (
     <div className="space-y-8">
+      {/* Access Points VPD Section */}
+      {loadingAccessPoints && (
+        <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-green)]/30">
+          <div className="flex items-center gap-3">
+            <svg className="animate-spin w-5 h-5 text-[var(--accent-green)]" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <span className="text-[var(--text-secondary)]">Loading access point traffic data...</span>
+          </div>
+        </div>
+      )}
+      {!loadingAccessPoints && accessPoints && accessPoints.length > 0 && (
+        <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-green)]/30">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <svg className="w-5 h-5 text-[var(--accent-green)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <DataSourceTooltip source={{
+              name: 'Access Point Traffic',
+              description: 'VPD from Florida DOT AADT at exact access point locations, with estimates for roads without official data',
+              type: 'api',
+              url: 'https://tdaappsprod.dot.state.fl.us/fto/'
+            }}>Property Access Points ({accessPoints.length})</DataSourceTooltip>
+          </h3>
+
+          {/* Primary Road Highlight */}
+          <div className="mb-4 p-4 bg-[var(--accent-green)]/10 rounded-lg border border-[var(--accent-green)]/20">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-[var(--text-muted)]">Primary Access Road</p>
+                <p className="font-semibold text-[var(--text-primary)]">{accessPointVPD.primaryRoadName}</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {accessPointVPD.primaryVpdSource === 'fdot' ? (
+                    <span className="text-green-400">Florida DOT Official</span>
+                  ) : (
+                    <span>{ROAD_TYPE_VPD[accessPointVPD.primaryRoadType]?.label || 'Road'} (Estimated)</span>
+                  )}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-bold text-[var(--accent-green)]">
+                  {accessPointVPD.primaryRoadVPD.toLocaleString()}
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">VPD</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Road Breakdown */}
+          {accessPointVPD.roadBreakdown.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-2">
+                All Access Roads ({accessPointVPD.roadBreakdown.length})
+              </p>
+              {accessPointVPD.roadBreakdown.map((road, index) => (
+                <div
+                  key={index}
+                  className="flex justify-between items-center p-3 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-color)]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      road.source === 'fdot' ? 'bg-green-500/20 text-green-400' :
+                      road.vpd >= 10000 ? 'bg-cyan-500/20 text-cyan-400' :
+                      road.vpd >= 5000 ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      {road.source === 'fdot' ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium text-[var(--text-primary)]">{road.name}</p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        {road.source === 'fdot' ? (
+                          <span className="text-green-400">FDOT AADT {road.year}</span>
+                        ) : (
+                          <span>{road.label} (Est.)</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-bold ${road.source === 'fdot' ? 'text-[var(--accent-green)]' : 'text-[var(--accent-cyan)]'}`}>
+                      {road.vpd.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-[var(--text-muted)]">VPD</p>
+                  </div>
+                </div>
+              ))}
+
+              {/* Combined VPD */}
+              {accessPointVPD.roadBreakdown.length > 1 && (
+                <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm font-medium text-[var(--text-secondary)]">Combined Traffic Exposure</p>
+                    <p className="text-lg font-bold text-[var(--accent-cyan)]">
+                      {accessPointVPD.totalVPD.toLocaleString()} VPD
+                    </p>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                    Total daily traffic from all adjacent roads
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <p className="text-xs text-[var(--text-muted)] mt-4 flex items-center gap-1">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            VPD from Florida DOT AADT at access point locations. Roads without official counts show estimates.
+          </p>
+        </div>
+      )}
+
       {/* Traffic Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="metric-card">

@@ -16,6 +16,7 @@ interface MapViewProps {
   onParcelSelect?: (parcel: SelectedParcel | null) => void;
   onCoordinatesChange?: (coords: { lat: number; lng: number }) => void;
   onAddressChange?: (address: string) => void;
+  onAccessPointsChange?: (accessPoints: AccessPoint[]) => void;
   interactiveMode?: boolean;
 }
 
@@ -82,6 +83,7 @@ export default function MapView({
   onParcelSelect,
   onCoordinatesChange,
   onAddressChange,
+  onAccessPointsChange,
   interactiveMode = true,
 }: MapViewProps) {
   const [mapType, setMapType] = useState<MapType>('satellite');
@@ -214,6 +216,7 @@ export default function MapView({
 
       if (!coordinates || !boundaries || boundaries.length < 3) {
         setAccessPoints([]);
+        onAccessPointsChange?.([]);
         return;
       }
 
@@ -230,22 +233,26 @@ export default function MapView({
 
         if (response.ok) {
           const data = await response.json();
-          setAccessPoints(data.accessPoints || []);
-          console.log(`[MapView] Found ${data.accessPoints?.length || 0} access points`);
+          const points = data.accessPoints || [];
+          setAccessPoints(points);
+          onAccessPointsChange?.(points);
+          console.log(`[MapView] Found ${points.length} access points`);
         } else {
           console.error('[MapView] Failed to fetch access points');
           setAccessPoints([]);
+          onAccessPointsChange?.([]);
         }
       } catch (err) {
         console.error('[MapView] Error fetching access points:', err);
         setAccessPoints([]);
+        onAccessPointsChange?.([]);
       } finally {
         setLoadingAccessPoints(false);
       }
     };
 
     fetchAccessPoints();
-  }, [coordinates?.lat, coordinates?.lng, parcelData?.boundaries, selectedParcel?.boundaries]);
+  }, [coordinates?.lat, coordinates?.lng, parcelData?.boundaries, selectedParcel?.boundaries, onAccessPointsChange]);
 
   // Fetch nearby parcels when bounds change
   const fetchNearbyParcels = useCallback(async (bounds: MapBounds) => {
@@ -446,6 +453,7 @@ export default function MapView({
           nearbyParcels={nearbyParcels}
           accessPoints={accessPoints}
           selectedParcelAPN={selectedParcel?.parcelInfo?.apn || null}
+          selectedParcelBoundaries={selectedParcel?.boundaries || null}
           suggestedParcelAPN={suggestedParcelAPN}
           onParcelClick={handleParcelClick}
           onBoundsChange={handleBoundsChange}
@@ -690,34 +698,63 @@ export default function MapView({
           )}
 
           {/* Access Points Info */}
-          {accessPoints.length > 0 && (
-            <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-green)]/30">
-              <div className="flex items-center gap-2 mb-2">
-                <svg className="w-4 h-4 text-[var(--accent-green)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="text-sm font-medium text-[var(--text-primary)]">
-                  Access Points ({accessPoints.length})
-                </span>
+          {accessPoints.length > 0 && (() => {
+            // Get unique roads with their best VPD
+            const roadVPDs = new Map<string, { vpd?: number; source?: string }>();
+            for (const ap of accessPoints) {
+              const existing = roadVPDs.get(ap.roadName);
+              if (!existing || (ap.vpd && (!existing.vpd || ap.vpd > existing.vpd))) {
+                roadVPDs.set(ap.roadName, { vpd: ap.vpd, source: ap.vpdSource });
+              }
+            }
+            const sortedRoads = Array.from(roadVPDs.entries())
+              .sort((a, b) => (b[1].vpd || 0) - (a[1].vpd || 0));
+            const primaryRoad = sortedRoads[0];
+            const totalVPD = sortedRoads.reduce((sum, [, data]) => sum + (data.vpd || 0), 0);
+
+            return (
+              <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-green)]/30">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-[var(--accent-green)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span className="text-sm font-medium text-[var(--text-primary)]">
+                      Access Points ({sortedRoads.length} roads)
+                    </span>
+                  </div>
+                  {totalVPD > 0 && (
+                    <span className="text-sm font-bold text-[var(--accent-green)]">
+                      {totalVPD.toLocaleString()} VPD
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {sortedRoads.slice(0, 3).map(([roadName, data], i) => (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <span className="text-[var(--text-secondary)]">{roadName}</span>
+                      {data.vpd ? (
+                        <span className={data.source === 'fdot' ? 'text-[var(--accent-green)] font-medium' : 'text-[var(--text-muted)]'}>
+                          {data.vpd.toLocaleString()} {data.source === 'fdot' ? '(FDOT)' : '(Est.)'}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--text-muted)]">--</span>
+                      )}
+                    </div>
+                  ))}
+                  {sortedRoads.length > 3 && (
+                    <p className="text-xs text-[var(--text-muted)]">
+                      +{sortedRoads.length - 3} more roads
+                    </p>
+                  )}
+                </div>
+                <p className="text-xs text-[var(--text-muted)] mt-2">
+                  VPD from Florida DOT at access point locations
+                </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {[...new Set(accessPoints.map(ap => ap.roadName))].slice(0, 5).map((roadName, i) => (
-                  <span key={i} className="tag tag-green text-xs">
-                    {roadName}
-                  </span>
-                ))}
-                {[...new Set(accessPoints.map(ap => ap.roadName))].length > 5 && (
-                  <span className="text-xs text-[var(--text-muted)]">
-                    +{[...new Set(accessPoints.map(ap => ap.roadName))].length - 5} more
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-[var(--text-muted)] mt-2">
-                Entry points where roads meet the property boundary
-              </p>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Environmental Risk Indicator */}
           {environmentalRisk && (

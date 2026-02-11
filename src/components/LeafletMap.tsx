@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, MutableRefObject } from 'react';
 import { MapContainer, TileLayer, Polygon, Popup, Tooltip, Marker, useMap, useMapEvents } from 'react-leaflet';
 import { LatLngExpression, Icon, DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -28,7 +28,12 @@ export interface AccessPoint {
   coordinates: [number, number]; // [lat, lng]
   roadName: string;
   type: 'entrance' | 'exit' | 'access';
-  roadType?: string;
+  roadType?: string; // OSM highway type (primary, secondary, residential, etc.)
+  distance?: number; // Distance from parcel boundary in meters
+  vpd?: number; // Official VPD from FDOT if available
+  vpdYear?: number; // Year of VPD count
+  vpdSource?: 'fdot' | 'estimated'; // Source of VPD data
+  estimatedVpd?: number; // Estimated VPD based on road classification
 }
 
 interface ParcelData {
@@ -66,6 +71,7 @@ interface LeafletMapProps {
   businesses?: Business[];
   accessPoints?: AccessPoint[];
   selectedParcelAPN?: string | null;
+  selectedParcelBoundaries?: Array<[number, number][]> | null;
   suggestedParcelAPN?: string | null;
   onParcelClick?: (parcel: NearbyParcel) => void;
   onBoundsChange?: (bounds: MapBounds) => void;
@@ -237,6 +243,68 @@ function MapRecenter({ coordinates }: { coordinates: { lat: number; lng: number 
   return null;
 }
 
+// Component to fit map to parcel bounds
+function FitToParcel({
+  parcelBoundaries,
+  coordinates
+}: {
+  parcelBoundaries?: Array<[number, number][]> | null;
+  coordinates: { lat: number; lng: number } | null;
+}) {
+  const map = useMap();
+  const hasFittedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!parcelBoundaries || parcelBoundaries.length === 0) return;
+
+    const firstBoundary = parcelBoundaries[0];
+    if (!firstBoundary || firstBoundary.length < 3) return;
+
+    // Create a unique key for this boundary to avoid re-fitting the same parcel
+    const boundaryKey = firstBoundary.slice(0, 3).map(c => `${c[0].toFixed(5)},${c[1].toFixed(5)}`).join('|');
+
+    // Skip if we've already fitted to this exact boundary
+    if (hasFittedRef.current === boundaryKey) return;
+    hasFittedRef.current = boundaryKey;
+
+    // Calculate bounds from parcel boundary
+    const lats = firstBoundary.map(c => c[0]);
+    const lngs = firstBoundary.map(c => c[1]);
+
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+
+    // Add padding around the parcel (10% of the span)
+    const latPadding = (maxLat - minLat) * 0.15;
+    const lngPadding = (maxLng - minLng) * 0.15;
+
+    const bounds: [[number, number], [number, number]] = [
+      [minLat - latPadding, minLng - lngPadding],
+      [maxLat + latPadding, maxLng + lngPadding]
+    ];
+
+    // Fit map to bounds with animation
+    map.fitBounds(bounds, {
+      padding: [20, 20],
+      maxZoom: 20,
+      animate: true,
+      duration: 0.5
+    });
+  }, [parcelBoundaries, map]);
+
+  // Reset the fitted ref when coordinates change significantly (new location search)
+  useEffect(() => {
+    if (coordinates) {
+      // Only reset if this is a new location (not just small adjustments)
+      hasFittedRef.current = null;
+    }
+  }, [coordinates?.lat, coordinates?.lng]);
+
+  return null;
+}
+
 export default function LeafletMap({
   coordinates,
   mapType,
@@ -245,6 +313,7 @@ export default function LeafletMap({
   businesses,
   accessPoints,
   selectedParcelAPN,
+  selectedParcelBoundaries,
   suggestedParcelAPN,
   onParcelClick,
   onBoundsChange,
@@ -379,6 +448,10 @@ export default function LeafletMap({
         interactiveMode={interactiveMode}
       />
       <MapRecenter coordinates={coordinates} />
+      <FitToParcel
+        parcelBoundaries={selectedParcelBoundaries || parcelData?.boundaries}
+        coordinates={coordinates}
+      />
 
       {/* Draggable Pin Marker */}
       {interactiveMode && markerPosition && pinIcon && (
