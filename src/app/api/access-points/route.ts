@@ -91,11 +91,16 @@ async function findDrivewayAccessPoints(
   radiusMeters: number = 100
 ): Promise<{ accessPoints: AccessPoint[]; publicRoads: OSMWay[] }> {
   try {
-    const overpassUrl = 'https://overpass-api.de/api/interpreter';
+    // Multiple Overpass API endpoints for redundancy
+    const overpassServers = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+    ];
 
     // Query for both public roads AND service roads/driveways
     const query = `
-      [out:json][timeout:20];
+      [out:json][timeout:15];
       (
         // Public roads
         way["highway"~"primary|secondary|tertiary|trunk|residential|unclassified"](around:${radiusMeters},${lat},${lng});
@@ -105,19 +110,35 @@ async function findDrivewayAccessPoints(
       out body geom;
     `;
 
-    const response = await fetch(overpassUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: AbortSignal.timeout(20000),
-    });
+    let data: OSMData | null = null;
 
-    if (!response.ok) {
-      console.error('[AccessPoints] Overpass API error:', response.status);
-      return { accessPoints: [], publicRoads: [] };
+    // Try each server until one succeeds
+    for (const overpassUrl of overpassServers) {
+      try {
+        console.log(`[AccessPoints] Trying Overpass server: ${overpassUrl}`);
+        const response = await fetch(overpassUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(query)}`,
+          signal: AbortSignal.timeout(12000),
+        });
+
+        if (response.ok) {
+          data = await response.json();
+          console.log(`[AccessPoints] Got response from ${overpassUrl}`);
+          break;
+        } else {
+          console.log(`[AccessPoints] ${overpassUrl} returned ${response.status}`);
+        }
+      } catch (err) {
+        console.log(`[AccessPoints] ${overpassUrl} failed: ${err}`);
+      }
     }
 
-    const data: OSMData = await response.json();
+    if (!data) {
+      console.error('[AccessPoints] All Overpass servers failed');
+      return { accessPoints: [], publicRoads: [] };
+    }
 
     // Separate public roads from service roads
     const publicRoads: OSMWay[] = [];
