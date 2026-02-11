@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { MarketComp, ExtendedDemographics } from '@/app/page';
+import { MarketComp, ExtendedDemographics } from '@/types';
 
 interface FinancialCalculatorProps {
   marketComps?: MarketComp[] | null;

@@ -1,4 +1,4 @@
-import { PropertyData, AnalysisResult, TrafficInfo, ExtendedDemographics, EnvironmentalRisk, MarketComp } from '@/app/page';
+import { PropertyData, AnalysisResult, TrafficInfo, ExtendedDemographics, EnvironmentalRisk, MarketComp } from '@/types';
 
 export interface ReportSection {
   title: string;

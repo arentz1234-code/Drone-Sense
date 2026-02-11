@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { PropertyData } from '@/app/page';
+import { PropertyData } from '@/types';
 
 interface SavedProperty {
   id: string;

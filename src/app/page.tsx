@@ -3,9 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PhotoUpload from '@/components/PhotoUpload';
 import AddressInput from '@/components/AddressInput';
-import NearbyBusinesses from '@/components/NearbyBusinesses';
-import TrafficData from '@/components/TrafficData';
-import DemographicsData from '@/components/DemographicsData';
 import MapView, { ParcelData } from '@/components/MapView';
 import AnalysisReport from '@/components/AnalysisReport';
 import TabNavigation, { TabPanel } from '@/components/ui/TabNavigation';
@@ -13,14 +10,11 @@ import { SkeletonCard } from '@/components/ui/Skeleton';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useSearchHistory } from '@/hooks/useSearchHistory';
 
-// Import all types from shared types file
+// Import types from shared types file
 import {
   Business,
   TrafficInfo,
-  BusinessSuitability,
-  RetailerMatch,
   RetailerMatchResult,
-  FeasibilityScore,
   AnalysisResult,
   ExtendedDemographics,
   EnvironmentalRisk,
@@ -30,20 +24,6 @@ import {
   AccessPoint,
 } from '@/types';
 
-// Re-export types for backward compatibility
-export type {
-  Business,
-  TrafficInfo,
-  BusinessSuitability,
-  RetailerMatch,
-  RetailerMatchResult,
-  FeasibilityScore,
-  AnalysisResult,
-  ExtendedDemographics,
-  EnvironmentalRisk,
-  MarketComp,
-  PropertyData,
-};
 
 // Lazy load new components
 import dynamic from 'next/dynamic';
@@ -54,11 +34,6 @@ const DemographicsCharts = dynamic(() => import('@/components/charts/Demographic
 });
 
 const TrafficCharts = dynamic(() => import('@/components/charts/TrafficCharts'), {
-  loading: () => <SkeletonCard />,
-  ssr: false
-});
-
-const FinancialCalculator = dynamic(() => import('@/components/FinancialCalculator'), {
   loading: () => <SkeletonCard />,
   ssr: false
 });
@@ -91,12 +66,9 @@ const RecommendationsPanel = dynamic(() => import('@/components/RecommendationsP
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },
-  { id: 'recommendations', label: 'Recommendations', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg> },
-  { id: 'demographics', label: 'Demographics', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg> },
-  { id: 'traffic', label: 'Traffic', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg> },
+  { id: 'recommendations', label: 'AI Analysis', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg> },
+  { id: 'site-data', label: 'Site Data', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> },
   { id: 'market', label: 'Market', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg> },
-  { id: 'financials', label: 'Financials', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
-  { id: 'risk', label: 'Risk', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> },
   { id: 'report', label: 'Report', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
 ];
 
@@ -120,9 +92,6 @@ export default function HomePage() {
 
   const { addToHistory, updateHistoryItem } = useSearchHistory();
   const currentHistoryIdRef = useRef<string | null>(null);
-
-  const allBusinesses = businesses;
-  const hasInput = address.trim().length > 0 || images.length > 0 || coordinates !== null;
 
   // Storage key for persisting current search
   const CURRENT_SEARCH_KEY = 'drone-sense-current-search';
@@ -261,6 +230,54 @@ export default function HomePage() {
     fetchMarketComps();
   }, [coordinates?.lat, coordinates?.lng]);
 
+  // Fetch nearby businesses when coordinates change
+  useEffect(() => {
+    const fetchNearbyBusinesses = async () => {
+      if (!coordinates) return;
+
+      try {
+        const response = await fetch('/api/places', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat: coordinates.lat, lng: coordinates.lng }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setBusinesses(data.businesses || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch nearby businesses:', err);
+      }
+    };
+
+    fetchNearbyBusinesses();
+  }, [coordinates?.lat, coordinates?.lng]);
+
+  // Fetch traffic data when coordinates change
+  useEffect(() => {
+    const fetchTrafficData = async () => {
+      if (!coordinates) return;
+
+      try {
+        const response = await fetch('/api/traffic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat: coordinates.lat, lng: coordinates.lng, address }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setTrafficData(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch traffic data:', err);
+      }
+    };
+
+    fetchTrafficData();
+  }, [coordinates?.lat, coordinates?.lng, address]);
+
   // Fetch retailer matches when we have sufficient data
   useEffect(() => {
     const fetchRetailerMatches = async () => {
@@ -368,7 +385,7 @@ export default function HomePage() {
           images,
           address,
           coordinates: selectedParcel?.isConfirmed ? selectedParcel.coordinates : coordinates,
-          nearbyBusinesses: allBusinesses,
+          nearbyBusinesses: businesses,
           trafficData,
           demographicsData,
           environmentalRisk,
@@ -465,22 +482,6 @@ export default function HomePage() {
         onTabChange={setActiveTab}
       />
 
-      {/* Hidden data fetching components - ALWAYS render these outside tabs so data loads regardless of active tab */}
-      <div className="hidden">
-        <DemographicsData coordinates={coordinates} onDataLoad={(data) => setDemographicsData(prev => prev ? { ...prev, ...data } : data)} />
-        <NearbyBusinesses
-          coordinates={coordinates}
-          businesses={businesses}
-          setBusinesses={setBusinesses}
-          marketContext={{
-            population: demographicsData?.population,
-            medianIncome: demographicsData?.medianHouseholdIncome,
-            isCollegeTown: demographicsData?.isCollegeTown,
-            vpd: trafficData?.estimatedVPD,
-          }}
-        />
-        <TrafficData coordinates={coordinates} address={address} onDataLoad={setTrafficData} />
-      </div>
 
       {/* Overview Tab */}
       <TabPanel id="overview" activeTab={activeTab}>
@@ -565,86 +566,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Live Retailer Matches - Shows before running full analysis */}
-        {retailerMatches && retailerMatches.matches.length > 0 && !analysis && (
-          <div className="mb-8">
-            <div className="terminal-card">
-              <div className="terminal-header">
-                <div className="terminal-dot red"></div>
-                <div className="terminal-dot yellow"></div>
-                <div className="terminal-dot green"></div>
-                <span className="terminal-title">retailer_matches.preview</span>
-              </div>
-              <div className="terminal-body">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <svg className="w-5 h-5 text-[var(--accent-purple)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                    Matching Retailers
-                  </h3>
-                  <span className="text-sm text-[var(--text-muted)]">
-                    {retailerMatches.totalMatches} matches from {retailerMatches.totalRetailersInDatabase || 80}+ retailers
-                  </span>
-                </div>
-                <p className="text-sm text-[var(--text-muted)] mb-4">
-                  Based on site data: lot size, traffic, demographics, and location
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {retailerMatches.matches.slice(0, 6).map((retailer, index) => (
-                    <div
-                      key={index}
-                      className={`p-3 rounded-lg border ${
-                        retailer.matchScore >= 70 ? 'bg-green-500/10 border-green-500/30' :
-                        retailer.matchScore >= 50 ? 'bg-cyan-500/10 border-cyan-500/30' :
-                        'bg-yellow-500/10 border-yellow-500/30'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h4 className="font-semibold text-sm">{retailer.name}</h4>
-                          <p className="text-xs text-[var(--text-muted)]">{retailer.category}</p>
-                        </div>
-                        <div className={`text-lg font-bold ${
-                          retailer.matchScore >= 70 ? 'text-green-400' :
-                          retailer.matchScore >= 50 ? 'text-cyan-400' : 'text-yellow-400'
-                        }`}>
-                          {retailer.matchScore}%
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {retailer.matchDetails.lotSize.matches && (
-                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 text-xs rounded">Lot ✓</span>
-                        )}
-                        {retailer.matchDetails.traffic.matches && (
-                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 text-xs rounded">Traffic ✓</span>
-                        )}
-                        {retailer.matchDetails.demographics.matches && (
-                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 text-xs rounded">Demo ✓</span>
-                        )}
-                        {retailer.matchDetails.region.matches && (
-                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 text-xs rounded">Region ✓</span>
-                        )}
-                        {retailer.activelyExpanding && (
-                          <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 text-xs rounded">Expanding</span>
-                        )}
-                        {retailer.franchiseAvailable && (
-                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded">Franchise</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {retailerMatches.matches.length > 6 && (
-                  <p className="text-sm text-[var(--text-muted)] mt-3 text-center">
-                    +{retailerMatches.matches.length - 6} more matches • Run full analysis for detailed breakdown
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Analyze Button */}
         <div className="flex items-center justify-center gap-4 mb-8">
           {error && (
@@ -686,26 +607,14 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Analysis Report */}
+        {/* Analysis complete message */}
         {analysis && (
-          <div className="terminal-card glow-cyan">
-            <div className="terminal-header">
-              <div className="terminal-dot red"></div>
-              <div className="terminal-dot yellow"></div>
-              <div className="terminal-dot green"></div>
-              <span className="terminal-title">analysis_report.output</span>
-            </div>
-            <div className="terminal-body">
-              <AnalysisReport
-                  analysis={analysis}
-                  address={address}
-                  trafficData={trafficData}
-                  demographicsData={demographicsData}
-                  businesses={businesses}
-                  environmentalRisk={environmentalRisk}
-                  marketComps={marketComps}
-                  accessPoints={accessPoints}
-                />
+          <div className="text-center py-4">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Analysis complete - View results in Report tab
             </div>
           </div>
         )}
@@ -744,55 +653,69 @@ export default function HomePage() {
         </div>
       </TabPanel>
 
-      {/* Demographics Tab */}
-      <TabPanel id="demographics" activeTab={activeTab}>
-        <div className="terminal-card">
-          <div className="terminal-header">
-            <div className="terminal-dot red"></div>
-            <div className="terminal-dot yellow"></div>
-            <div className="terminal-dot green"></div>
-            <span className="terminal-title">demographics_analysis.module</span>
-          </div>
-          <div className="terminal-body">
-            {coordinates && demographicsData ? (
-              <DemographicsCharts demographics={demographicsData} />
-            ) : (
-              <div className="text-center py-12 text-[var(--text-muted)]">
-                <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <p>Enter an address to view demographic analysis</p>
+      {/* Site Data Tab - Combined Demographics, Traffic, Risk */}
+      <TabPanel id="site-data" activeTab={activeTab}>
+        {coordinates ? (
+          <div className="space-y-6">
+            {/* Demographics Section */}
+            <div className="terminal-card">
+              <div className="terminal-header">
+                <div className="terminal-dot red"></div>
+                <div className="terminal-dot yellow"></div>
+                <div className="terminal-dot green"></div>
+                <span className="terminal-title">demographics.module</span>
               </div>
-            )}
-          </div>
-        </div>
-      </TabPanel>
+              <div className="terminal-body">
+                {demographicsData ? (
+                  <DemographicsCharts demographics={demographicsData} />
+                ) : (
+                  <div className="text-center py-8 text-[var(--text-muted)]">Loading demographics...</div>
+                )}
+              </div>
+            </div>
 
-      {/* Traffic Tab */}
-      <TabPanel id="traffic" activeTab={activeTab}>
-        <div className="terminal-card">
-          <div className="terminal-header">
-            <div className="terminal-dot red"></div>
-            <div className="terminal-dot yellow"></div>
-            <div className="terminal-dot green"></div>
-            <span className="terminal-title">traffic_analysis.module</span>
+            {/* Traffic Section */}
+            <div className="terminal-card">
+              <div className="terminal-header">
+                <div className="terminal-dot red"></div>
+                <div className="terminal-dot yellow"></div>
+                <div className="terminal-dot green"></div>
+                <span className="terminal-title">traffic.module</span>
+              </div>
+              <div className="terminal-body">
+                {trafficData ? (
+                  <TrafficCharts trafficData={trafficData} accessPoints={accessPoints} />
+                ) : (
+                  <div className="text-center py-8 text-[var(--text-muted)]">Loading traffic data...</div>
+                )}
+              </div>
+            </div>
+
+            {/* Risk Section */}
+            <div className="terminal-card">
+              <div className="terminal-header">
+                <div className="terminal-dot red"></div>
+                <div className="terminal-dot yellow"></div>
+                <div className="terminal-dot green"></div>
+                <span className="terminal-title">risk.module</span>
+              </div>
+              <div className="terminal-body">
+                <RiskAssessment coordinates={coordinates} environmentalRisk={environmentalRisk} />
+              </div>
+            </div>
           </div>
-          <div className="terminal-body">
-            {coordinates && trafficData ? (
-              <TrafficCharts
-                trafficData={trafficData}
-                accessPoints={accessPoints}
-              />
-            ) : (
+        ) : (
+          <div className="terminal-card">
+            <div className="terminal-body">
               <div className="text-center py-12 text-[var(--text-muted)]">
                 <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                <p>Enter an address to view traffic analysis</p>
+                <p>Enter an address to view site data</p>
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </TabPanel>
 
       {/* Market Tab */}
@@ -816,51 +739,6 @@ export default function HomePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
                 <p>Enter an address to view market comparables</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </TabPanel>
-
-      {/* Financials Tab */}
-      <TabPanel id="financials" activeTab={activeTab}>
-        <div className="terminal-card">
-          <div className="terminal-header">
-            <div className="terminal-dot red"></div>
-            <div className="terminal-dot yellow"></div>
-            <div className="terminal-dot green"></div>
-            <span className="terminal-title">financial_calculator.module</span>
-          </div>
-          <div className="terminal-body">
-            <FinancialCalculator
-              marketComps={marketComps}
-              demographicsData={demographicsData}
-            />
-          </div>
-        </div>
-      </TabPanel>
-
-      {/* Risk Tab */}
-      <TabPanel id="risk" activeTab={activeTab}>
-        <div className="terminal-card">
-          <div className="terminal-header">
-            <div className="terminal-dot red"></div>
-            <div className="terminal-dot yellow"></div>
-            <div className="terminal-dot green"></div>
-            <span className="terminal-title">risk_assessment.module</span>
-          </div>
-          <div className="terminal-body">
-            {coordinates ? (
-              <RiskAssessment
-                coordinates={coordinates}
-                environmentalRisk={environmentalRisk}
-              />
-            ) : (
-              <div className="text-center py-12 text-[var(--text-muted)]">
-                <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <p>Enter an address to view risk assessment</p>
               </div>
             )}
           </div>
