@@ -239,7 +239,7 @@ export default function HomePage() {
         const response = await fetch('/api/places', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lat: coordinates.lat, lng: coordinates.lng }),
+          body: JSON.stringify({ coordinates }),
         });
 
         if (response.ok) {
@@ -263,7 +263,7 @@ export default function HomePage() {
         const response = await fetch('/api/traffic', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lat: coordinates.lat, lng: coordinates.lng, address }),
+          body: JSON.stringify({ coordinates, address }),
         });
 
         if (response.ok) {
