@@ -531,6 +531,7 @@ export default function HomePage() {
                   businesses={businesses}
                   environmentalRisk={environmentalRisk}
                   marketComps={marketComps}
+                  accessPoints={accessPoints}
                 />
             </div>
           </div>
@@ -682,6 +683,7 @@ export default function HomePage() {
                   businesses={businesses}
                   environmentalRisk={environmentalRisk}
                   marketComps={marketComps}
+                  accessPoints={accessPoints}
                 />
               </div>
             </div>

@@ -1,11 +1,12 @@
-import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore } from '@/types';
+import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore, AccessPoint } from '@/types';
 
 export function calculateFeasibilityScore(
   trafficData: TrafficInfo | null,
   demographicsData: ExtendedDemographics | null,
   nearbyBusinesses: Business[],
   environmentalRisk: EnvironmentalRisk | null,
-  marketComps: MarketComp[] | null
+  marketComps: MarketComp[] | null,
+  accessPoints?: AccessPoint[]
 ): FeasibilityScore {
   let trafficScore = 5;
   let demographicsScore = 5;
@@ -30,35 +31,111 @@ export function calculateFeasibilityScore(
     market: !!marketComps && marketComps.length > 0,
   };
 
-  // TRAFFIC SCORE (0-10)
-  if (trafficData && trafficData.estimatedVPD != null) {
-    const vpd = trafficData.estimatedVPD;
-    if (vpd >= 30000) {
-      trafficScore = 10;
-      trafficDetail = `Excellent traffic: ${vpd.toLocaleString()} VPD supports all business types`;
-    } else if (vpd >= 20000) {
-      trafficScore = 9;
-      trafficDetail = `Very high traffic: ${vpd.toLocaleString()} VPD ideal for most retail`;
-    } else if (vpd >= 15000) {
-      trafficScore = 8;
-      trafficDetail = `High traffic: ${vpd.toLocaleString()} VPD supports drive-thru concepts`;
-    } else if (vpd >= 10000) {
-      trafficScore = 6;
-      trafficDetail = `Moderate traffic: ${vpd.toLocaleString()} VPD suitable for quick service`;
-    } else if (vpd >= 5000) {
-      trafficScore = 4;
-      trafficDetail = `Low-moderate traffic: ${vpd.toLocaleString()} VPD limits options`;
-    } else {
-      trafficScore = 2;
-      trafficDetail = `Low traffic: ${vpd.toLocaleString()} VPD - local service only`;
+  // TRAFFIC SCORE (0-10) - Use access points VPD if available (more accurate)
+  let primaryVpd = 0;
+  let totalVpd = 0;
+  let vpdSource = 'estimated';
+  let primaryRoadName = '';
+
+  // Calculate VPD from access points if available
+  if (accessPoints && accessPoints.length > 0) {
+    // Get unique roads with their best VPD
+    const roadVPDs = new Map<string, { vpd: number; source: string; type: string }>();
+    for (const ap of accessPoints) {
+      const existing = roadVPDs.get(ap.roadName);
+      const apVpd = ap.vpd || ap.estimatedVpd || 0;
+      if (!existing || apVpd > existing.vpd) {
+        roadVPDs.set(ap.roadName, {
+          vpd: apVpd,
+          source: ap.vpdSource || 'estimated',
+          type: ap.roadType || 'unknown'
+        });
+      }
     }
 
-    // Road type affects access score
+    // Find primary (highest VPD) road and calculate total
+    for (const [roadName, data] of roadVPDs) {
+      totalVpd += data.vpd;
+      if (data.vpd > primaryVpd) {
+        primaryVpd = data.vpd;
+        primaryRoadName = roadName;
+        vpdSource = data.source;
+      }
+    }
+  }
+
+  // Fall back to trafficData if no access points
+  if (primaryVpd === 0 && trafficData && trafficData.estimatedVPD != null) {
+    primaryVpd = trafficData.estimatedVPD;
+    totalVpd = trafficData.estimatedVPD;
+    primaryRoadName = trafficData.roadType || 'Unknown';
+  }
+
+  // Score based on primary road VPD
+  if (primaryVpd > 0) {
+    const sourceLabel = vpdSource === 'fdot' ? ' (FDOT official)' : ' (estimated)';
+    if (primaryVpd >= 30000) {
+      trafficScore = 10;
+      trafficDetail = `Excellent traffic: ${primaryVpd.toLocaleString()} VPD${sourceLabel} - supports all business types`;
+    } else if (primaryVpd >= 20000) {
+      trafficScore = 9;
+      trafficDetail = `Very high traffic: ${primaryVpd.toLocaleString()} VPD${sourceLabel} - ideal for most retail`;
+    } else if (primaryVpd >= 15000) {
+      trafficScore = 8;
+      trafficDetail = `High traffic: ${primaryVpd.toLocaleString()} VPD${sourceLabel} - supports drive-thru concepts`;
+    } else if (primaryVpd >= 10000) {
+      trafficScore = 6;
+      trafficDetail = `Moderate traffic: ${primaryVpd.toLocaleString()} VPD${sourceLabel} - suitable for quick service`;
+    } else if (primaryVpd >= 5000) {
+      trafficScore = 4;
+      trafficDetail = `Low-moderate traffic: ${primaryVpd.toLocaleString()} VPD${sourceLabel} - limits options`;
+    } else {
+      trafficScore = 2;
+      trafficDetail = `Low traffic: ${primaryVpd.toLocaleString()} VPD${sourceLabel} - local service only`;
+    }
+
+    if (primaryRoadName) {
+      trafficDetail += ` (${primaryRoadName})`;
+    }
+  }
+
+  // ACCESS SCORE (0-10) - Based on access points
+  if (accessPoints && accessPoints.length > 0) {
+    const uniqueRoads = new Set(accessPoints.map(ap => ap.roadName)).size;
+    const hasFdotData = accessPoints.some(ap => ap.vpdSource === 'fdot');
+    const hasPrimaryRoad = accessPoints.some(ap =>
+      ap.roadType === 'primary' || ap.roadType === 'secondary' || ap.roadType === 'trunk'
+    );
+
+    // Base score on number of access roads
+    if (uniqueRoads >= 3) {
+      accessScore = 9;
+      accessDetail = `Excellent access: ${uniqueRoads} roads provide multiple entry points`;
+    } else if (uniqueRoads === 2) {
+      accessScore = 8;
+      accessDetail = `Good access: ${uniqueRoads} roads - corner lot or dual access`;
+    } else {
+      accessScore = 6;
+      accessDetail = `Single road access from ${primaryRoadName || 'nearby road'}`;
+    }
+
+    // Bonus for major roads
+    if (hasPrimaryRoad) {
+      accessScore = Math.min(10, accessScore + 1);
+      accessDetail += ' + major road frontage';
+    }
+
+    // Add total exposure info
+    if (totalVpd > primaryVpd) {
+      accessDetail += ` (${totalVpd.toLocaleString()} total VPD exposure)`;
+    }
+  } else if (trafficData) {
+    // Fall back to road type from traffic data
     const roadType = trafficData.roadType || 'Unknown';
-    if (roadType.includes('Major') || roadType.includes('Motorway')) {
-      accessScore = Math.min(10, 7 + 2);
+    if (roadType.toLowerCase().includes('primary') || roadType.toLowerCase().includes('major')) {
+      accessScore = 8;
       accessDetail = `${roadType} with high visibility`;
-    } else if (roadType.includes('Secondary')) {
+    } else if (roadType.toLowerCase().includes('secondary')) {
       accessScore = 6;
       accessDetail = `${roadType} - good local access`;
     } else {

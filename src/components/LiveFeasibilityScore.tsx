@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp } from '@/types';
+import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, AccessPoint } from '@/types';
 import { calculateFeasibilityScore, getScoreColor, getRatingColor } from '@/utils/feasibilityScore';
 
 interface LiveFeasibilityScoreProps {
@@ -10,6 +10,7 @@ interface LiveFeasibilityScoreProps {
   businesses: Business[];
   environmentalRisk: EnvironmentalRisk | null;
   marketComps: MarketComp[] | null;
+  accessPoints?: AccessPoint[];
   isVisible?: boolean;
 }
 
@@ -19,6 +20,7 @@ export default function LiveFeasibilityScore({
   businesses,
   environmentalRisk,
   marketComps,
+  accessPoints = [],
   isVisible = true,
 }: LiveFeasibilityScoreProps) {
   const feasibilityScore = useMemo(() => {
@@ -28,7 +30,8 @@ export default function LiveFeasibilityScore({
         demographicsData,
         businesses,
         environmentalRisk,
-        marketComps
+        marketComps,
+        accessPoints
       );
     } catch (err) {
       console.error('Error calculating feasibility score:', err);

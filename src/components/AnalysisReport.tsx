@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore } from '@/types';
+import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore, AccessPoint } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 import { calculateFeasibilityScore } from '@/utils/feasibilityScore';
 
@@ -14,6 +14,7 @@ interface AnalysisReportProps {
   businesses?: Business[];
   environmentalRisk?: EnvironmentalRisk | null;
   marketComps?: MarketComp[] | null;
+  accessPoints?: AccessPoint[];
 }
 
 export default function AnalysisReport({
@@ -24,11 +25,12 @@ export default function AnalysisReport({
   businesses = [],
   environmentalRisk,
   marketComps,
+  accessPoints = [],
 }: AnalysisReportProps) {
   // Calculate live feasibility score if data is provided
   const liveFeasibilityScore = useMemo(() => {
     try {
-      const hasLiveData = trafficData || demographicsData || businesses.length > 0 || environmentalRisk || (marketComps && marketComps.length > 0);
+      const hasLiveData = trafficData || demographicsData || businesses.length > 0 || environmentalRisk || (marketComps && marketComps.length > 0) || accessPoints.length > 0;
       if (!hasLiveData) return null;
 
       return calculateFeasibilityScore(
@@ -36,13 +38,14 @@ export default function AnalysisReport({
         demographicsData || null,
         businesses,
         environmentalRisk || null,
-        marketComps || null
+        marketComps || null,
+        accessPoints
       );
     } catch (err) {
       console.error('Error calculating live feasibility score:', err);
       return null;
     }
-  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps]);
+  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps, accessPoints]);
 
   // Use live score if available, otherwise use analysis score
   const feasibilityScore: FeasibilityScore | undefined = liveFeasibilityScore || analysis.feasibilityScore;
