@@ -354,9 +354,9 @@ async function findAccessPoints(
       return (a.distance || 0) - (b.distance || 0);
     });
 
-    // Deduplicate: keep multiple access points per road if they're far apart (>15 meters)
-    // This handles corner lots and large parcels with multiple entrances
-    const deduped: AccessPoint[] = [];
+    // Keep only ONE access point per unique road name
+    // This ensures clean labeling with only unique roads shown
+    const uniqueRoads = new Map<string, AccessPoint>();
 
     for (const ap of accessPoints) {
       // Skip unnamed roads - these are typically service roads, parking lots, driveways
@@ -364,25 +364,17 @@ async function findAccessPoints(
         continue;
       }
 
-      // Check if there's already a nearby access point (same road or very close)
-      const hasTooClose = deduped.some(existing => {
-        // Calculate distance between points
-        const point1 = turf.point([ap.coordinates[1], ap.coordinates[0]]);
-        const point2 = turf.point([existing.coordinates[1], existing.coordinates[0]]);
-        const dist = turf.distance(point1, point2, { units: 'meters' });
-
-        // If same road, require more separation (15m)
-        // If different roads, allow closer points (5m)
-        const minDistance = existing.roadName === ap.roadName ? 15 : 5;
-        return dist < minDistance;
-      });
-
-      if (!hasTooClose) {
-        deduped.push(ap);
+      // Only keep the best (closest) access point for each unique road
+      const existing = uniqueRoads.get(ap.roadName);
+      if (!existing || (ap.distance || 0) < (existing.distance || Infinity)) {
+        uniqueRoads.set(ap.roadName, ap);
       }
     }
 
-    console.log(`[AccessPoints] Final: ${deduped.length} access points (from ${accessPoints.length} candidates)`);
+    // Convert to array
+    const deduped = Array.from(uniqueRoads.values());
+
+    console.log(`[AccessPoints] Final: ${deduped.length} unique roads (from ${accessPoints.length} candidates)`);
 
     return { accessPoints: deduped, allRoads };
   } catch (error) {
