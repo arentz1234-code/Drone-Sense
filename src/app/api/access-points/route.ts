@@ -359,6 +359,11 @@ async function findAccessPoints(
     const deduped: AccessPoint[] = [];
 
     for (const ap of accessPoints) {
+      // Skip unnamed roads - these are typically service roads, parking lots, driveways
+      if (ap.roadName === 'Unnamed Road' || ap.roadName.toLowerCase().includes('unnamed')) {
+        continue;
+      }
+
       // Check if there's already a nearby access point (same road or very close)
       const hasTooClose = deduped.some(existing => {
         // Calculate distance between points
@@ -436,8 +441,13 @@ export async function POST(request: Request) {
     );
 
     // Get unique roads with their best access point (for VPD lookup)
+    // Filter out unnamed roads
     const roadAccessPoints = new Map<string, AccessPoint>();
     for (const ap of accessPoints) {
+      // Skip unnamed roads
+      if (ap.roadName === 'Unnamed Road' || ap.roadName.toLowerCase().includes('unnamed')) {
+        continue;
+      }
       const existing = roadAccessPoints.get(ap.roadName);
       // Keep the access point with smallest distance (closest to boundary)
       if (!existing || (ap.distance || 0) < (existing.distance || Infinity)) {
