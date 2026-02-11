@@ -6,7 +6,7 @@ import AddressInput from '@/components/AddressInput';
 import NearbyBusinesses from '@/components/NearbyBusinesses';
 import TrafficData from '@/components/TrafficData';
 import DemographicsData from '@/components/DemographicsData';
-import MapView from '@/components/MapView';
+import MapView, { ParcelData } from '@/components/MapView';
 import AnalysisReport from '@/components/AnalysisReport';
 import TabNavigation, { TabPanel } from '@/components/ui/TabNavigation';
 import { SkeletonCard } from '@/components/ui/Skeleton';
@@ -107,6 +107,7 @@ export default function HomePage() {
   const [marketComps, setMarketComps] = useState<MarketComp[] | null>(null);
   const [selectedParcel, setSelectedParcel] = useState<SelectedParcel | null>(null);
   const [accessPoints, setAccessPoints] = useState<AccessPoint[]>([]);
+  const [parcelData, setParcelData] = useState<ParcelData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -466,6 +467,7 @@ export default function HomePage() {
                 onCoordinatesChange={setCoordinates}
                 onAddressChange={setAddress}
                 onAccessPointsChange={setAccessPoints}
+                onParcelDataChange={setParcelData}
                 interactiveMode={true}
               />
             </div>
@@ -576,8 +578,6 @@ export default function HomePage() {
               <TrafficCharts
                 trafficData={trafficData}
                 accessPoints={accessPoints}
-                coordinates={coordinates}
-                parcelBoundary={selectedParcel?.boundaries?.[0]}
               />
             ) : (
               <div className="text-center py-12 text-[var(--text-muted)]">

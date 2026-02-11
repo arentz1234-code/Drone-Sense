@@ -1,15 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar } from 'recharts';
 import { TrafficInfo, AccessPoint } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 interface TrafficChartsProps {
   trafficData: TrafficInfo;
-  accessPoints?: AccessPoint[];
-  coordinates?: { lat: number; lng: number } | null;
-  parcelBoundary?: Array<[number, number]>;
+  accessPoints?: AccessPoint[];  // Provided by MapView via page.tsx - single source of truth
 }
 
 // VPD estimates based on OSM highway classification
@@ -117,87 +114,9 @@ function calculateAccessPointVPD(accessPoints: AccessPoint[]): {
   };
 }
 
-export default function TrafficCharts({ trafficData, accessPoints: propAccessPoints, coordinates, parcelBoundary }: TrafficChartsProps) {
-  const [fetchedAccessPoints, setFetchedAccessPoints] = useState<AccessPoint[]>([]);
-  const [loadingAccessPoints, setLoadingAccessPoints] = useState(false);
-
-  // Fetch access points directly if not provided via props
-  useEffect(() => {
-    const fetchAccessPoints = async () => {
-      console.log('[TrafficCharts] fetchAccessPoints called', {
-        propAccessPoints: propAccessPoints?.length || 0,
-        coordinates: coordinates ? `${coordinates.lat},${coordinates.lng}` : 'null',
-        parcelBoundary: parcelBoundary?.length || 0
-      });
-
-      // Use prop access points if available
-      if (propAccessPoints && propAccessPoints.length > 0) {
-        console.log('[TrafficCharts] Using prop access points');
-        setFetchedAccessPoints(propAccessPoints);
-        return;
-      }
-
-      if (!coordinates) {
-        console.log('[TrafficCharts] No coordinates, skipping fetch');
-        return;
-      }
-
-      setLoadingAccessPoints(true);
-      try {
-        let boundary = parcelBoundary;
-
-        // If no boundary provided, fetch parcel data first
-        if (!boundary || boundary.length < 3) {
-          console.log('[TrafficCharts] No boundary, fetching parcel data...');
-          const parcelResponse = await fetch('/api/parcel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ coordinates }),
-          });
-
-          if (parcelResponse.ok) {
-            const parcelData = await parcelResponse.json();
-            boundary = parcelData.boundaries?.[0];
-            console.log('[TrafficCharts] Got parcel boundary:', boundary?.length || 0, 'points');
-          }
-        }
-
-        if (!boundary || boundary.length < 3) {
-          console.log('[TrafficCharts] No valid boundary available');
-          setLoadingAccessPoints(false);
-          return;
-        }
-
-        // Fetch access points with the boundary
-        const response = await fetch('/api/access-points', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            parcelBoundary: boundary,
-            coordinates,
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('[TrafficCharts] Fetched access points:', data.accessPoints?.length || 0);
-          setFetchedAccessPoints(data.accessPoints || []);
-        }
-      } catch (err) {
-        console.error('[TrafficCharts] Error fetching access points:', err);
-      } finally {
-        setLoadingAccessPoints(false);
-      }
-    };
-
-    fetchAccessPoints();
-  }, [propAccessPoints, coordinates?.lat, coordinates?.lng, parcelBoundary]);
-
-  // Use prop access points if available, otherwise use fetched ones
-  const accessPoints = (propAccessPoints && propAccessPoints.length > 0) ? propAccessPoints : fetchedAccessPoints;
-
-  // DEBUG: Log received traffic data
-  console.log('[TrafficCharts] Using accessPoints:', accessPoints?.length || 0);
+export default function TrafficCharts({ trafficData, accessPoints: propAccessPoints }: TrafficChartsProps) {
+  // Use access points directly from props - MapView is the single source of truth
+  const accessPoints = propAccessPoints || [];
 
   // Calculate VPD from access points
   const accessPointVPD = calculateAccessPointVPD(accessPoints || []);
@@ -288,18 +207,7 @@ export default function TrafficCharts({ trafficData, accessPoints: propAccessPoi
   return (
     <div className="space-y-8">
       {/* Access Points VPD Section */}
-      {loadingAccessPoints && (
-        <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-green)]/30">
-          <div className="flex items-center gap-3">
-            <svg className="animate-spin w-5 h-5 text-[var(--accent-green)]" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            <span className="text-[var(--text-secondary)]">Loading access point traffic data...</span>
-          </div>
-        </div>
-      )}
-      {!loadingAccessPoints && accessPoints && accessPoints.length > 0 && (
+      {accessPoints && accessPoints.length > 0 && (
         <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-green)]/30">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <svg className="w-5 h-5 text-[var(--accent-green)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">

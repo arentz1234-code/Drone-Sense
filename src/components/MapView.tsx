@@ -17,10 +17,11 @@ interface MapViewProps {
   onCoordinatesChange?: (coords: { lat: number; lng: number }) => void;
   onAddressChange?: (address: string) => void;
   onAccessPointsChange?: (accessPoints: AccessPoint[]) => void;
+  onParcelDataChange?: (parcelData: ParcelData | null) => void;
   interactiveMode?: boolean;
 }
 
-interface ParcelData {
+export interface ParcelData {
   boundaries: Array<[number, number][]>;
   parcelInfo: {
     apn?: string;
@@ -84,6 +85,7 @@ export default function MapView({
   onCoordinatesChange,
   onAddressChange,
   onAccessPointsChange,
+  onParcelDataChange,
   interactiveMode = true,
 }: MapViewProps) {
   const [mapType, setMapType] = useState<MapType>('satellite');
@@ -193,8 +195,10 @@ export default function MapView({
       if (!response.ok) {
         setError(data.message || 'Failed to fetch parcel data');
         setParcelData(null);
+        onParcelDataChange?.(null);
       } else {
         setParcelData(data);
+        onParcelDataChange?.(data);
         // Set the suggested parcel APN from the geocoded location
         if (data.parcelInfo?.apn) {
           setSuggestedParcelAPN(data.parcelInfo.apn);
