@@ -94,6 +94,45 @@ export default function AnalysisReport({
       ).join('\n\n')}`
       : '';
 
+    // Create traffic/access section from access points
+    let trafficSection = '';
+    if (accessPoints && accessPoints.length > 0) {
+      const uniqueRoads = new Map<string, { vpd: number; source: string; type: string }>();
+      accessPoints.forEach(ap => {
+        const existing = uniqueRoads.get(ap.roadName);
+        const apVpd = ap.vpd || ap.estimatedVpd || 0;
+        if (!existing || apVpd > existing.vpd) {
+          uniqueRoads.set(ap.roadName, {
+            vpd: apVpd,
+            source: ap.vpdSource || 'estimated',
+            type: ap.roadType || 'road'
+          });
+        }
+      });
+
+      const totalVpd = Array.from(uniqueRoads.values()).reduce((sum, r) => sum + r.vpd, 0);
+      const primaryRoad = accessPoints.reduce((best, ap) => {
+        const apVpd = ap.vpd || ap.estimatedVpd || 0;
+        const bestVpd = best?.vpd || best?.estimatedVpd || 0;
+        return apVpd > bestVpd ? ap : best;
+      }, accessPoints[0]);
+      const primaryVpd = primaryRoad?.vpd || primaryRoad?.estimatedVpd || 0;
+
+      trafficSection = `
+      TRAFFIC & ACCESS POINTS
+      -----------------------
+      Primary Road: ${primaryRoad?.roadName || 'Unknown'} - ${primaryVpd.toLocaleString()} VPD (${primaryRoad?.vpdSource === 'fdot' ? 'FDOT Official' : 'Estimated'})
+      Total VPD Exposure: ${totalVpd.toLocaleString()}
+      Access Points: ${accessPoints.length} from ${uniqueRoads.size} road(s)
+
+      Road Details:
+      ${Array.from(uniqueRoads.entries())
+        .sort((a, b) => b[1].vpd - a[1].vpd)
+        .map(([name, data]) => `  - ${name} (${data.type}): ${data.vpd.toLocaleString()} VPD [${data.source === 'fdot' ? 'FDOT' : 'Est.'}]`)
+        .join('\n')}
+      `;
+    }
+
     // Create a printable version
     const printContent = `
       DRONE SENSE - SITE ANALYSIS REPORT
@@ -103,7 +142,7 @@ export default function AnalysisReport({
       Generated: ${new Date().toLocaleString()}
 
       VIABILITY SCORE: ${viabilityScore.toFixed(1)}/10 (${getScoreLabel(viabilityScore)})
-
+      ${trafficSection}
       SITE ANALYSIS
       -------------
       Terrain: ${analysis.terrain}
@@ -306,6 +345,121 @@ export default function AnalysisReport({
             <p><span className="text-[var(--accent-blue)]">Access:</span> {feasibilityScore.details.access}</p>
             <p><span className="text-[var(--accent-purple)]">Environmental:</span> {feasibilityScore.details.environmental || 'No data'}</p>
             <p><span className="text-[var(--accent-red)]">Market:</span> {feasibilityScore.details.market || 'No data'}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Traffic & Access Points */}
+      {accessPoints && accessPoints.length > 0 && (
+        <div className="mb-8 p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <svg className="w-5 h-5 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+            Property Access & Traffic
+          </h3>
+
+          {/* Access Points Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            {/* Primary Road */}
+            {(() => {
+              const primaryRoad = accessPoints.reduce((best, ap) => {
+                const apVpd = ap.vpd || ap.estimatedVpd || 0;
+                const bestVpd = best?.vpd || best?.estimatedVpd || 0;
+                return apVpd > bestVpd ? ap : best;
+              }, accessPoints[0]);
+              const primaryVpd = primaryRoad?.vpd || primaryRoad?.estimatedVpd || 0;
+
+              return (
+                <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Primary Road</p>
+                  <p className="font-semibold text-[var(--accent-cyan)]">{primaryRoad?.roadName || 'Unknown'}</p>
+                  <p className="text-2xl font-bold">{primaryVpd.toLocaleString()}</p>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    VPD {primaryRoad?.vpdSource === 'fdot' ? '(FDOT Official)' : '(Estimated)'}
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* Total VPD Exposure */}
+            {(() => {
+              const uniqueRoads = new Map<string, { vpd: number; source: string }>();
+              accessPoints.forEach(ap => {
+                const existing = uniqueRoads.get(ap.roadName);
+                const apVpd = ap.vpd || ap.estimatedVpd || 0;
+                if (!existing || apVpd > existing.vpd) {
+                  uniqueRoads.set(ap.roadName, { vpd: apVpd, source: ap.vpdSource || 'estimated' });
+                }
+              });
+              const totalVpd = Array.from(uniqueRoads.values()).reduce((sum, r) => sum + r.vpd, 0);
+
+              return (
+                <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+                  <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Total VPD Exposure</p>
+                  <p className="text-2xl font-bold text-[var(--accent-green)]">{totalVpd.toLocaleString()}</p>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Combined traffic from {uniqueRoads.size} road{uniqueRoads.size !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* Access Point Count */}
+            <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">
+              <p className="text-xs text-[var(--text-muted)] uppercase tracking-wide mb-1">Access Points</p>
+              <p className="text-2xl font-bold text-[var(--accent-orange)]">{accessPoints.length}</p>
+              <p className="text-xs text-[var(--text-muted)]">
+                {new Set(accessPoints.map(ap => ap.roadName)).size} unique road{new Set(accessPoints.map(ap => ap.roadName)).size !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+
+          {/* Road Details Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border-color)]">
+                  <th className="text-left py-2 text-[var(--text-muted)] font-medium">Road Name</th>
+                  <th className="text-left py-2 text-[var(--text-muted)] font-medium">Type</th>
+                  <th className="text-right py-2 text-[var(--text-muted)] font-medium">VPD</th>
+                  <th className="text-left py-2 text-[var(--text-muted)] font-medium pl-3">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const uniqueRoads = new Map<string, { vpd: number; source: string; type: string }>();
+                  accessPoints.forEach(ap => {
+                    const existing = uniqueRoads.get(ap.roadName);
+                    const apVpd = ap.vpd || ap.estimatedVpd || 0;
+                    if (!existing || apVpd > existing.vpd) {
+                      uniqueRoads.set(ap.roadName, {
+                        vpd: apVpd,
+                        source: ap.vpdSource || 'estimated',
+                        type: ap.roadType || 'road'
+                      });
+                    }
+                  });
+
+                  return Array.from(uniqueRoads.entries())
+                    .sort((a, b) => b[1].vpd - a[1].vpd)
+                    .map(([roadName, data], index) => (
+                      <tr key={index} className="border-b border-[var(--border-color)]/50">
+                        <td className="py-2 font-medium">{roadName}</td>
+                        <td className="py-2 text-[var(--text-muted)] capitalize">{data.type.replace('_', ' ')}</td>
+                        <td className="py-2 text-right font-semibold">{data.vpd.toLocaleString()}</td>
+                        <td className="py-2 pl-3">
+                          {data.source === 'fdot' ? (
+                            <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full">FDOT</span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded-full">Est.</span>
+                          )}
+                        </td>
+                      </tr>
+                    ));
+                })()}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
