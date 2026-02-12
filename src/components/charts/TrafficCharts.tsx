@@ -121,15 +121,29 @@ export default function TrafficCharts({ trafficData, accessPoints: propAccessPoi
   // Calculate VPD from access points
   const accessPointVPD = calculateAccessPointVPD(accessPoints || []);
 
+  // Determine primary VPD source - prefer access points
+  const hasAccessPointData = accessPoints && accessPoints.length > 0 && accessPointVPD.totalVPD > 0;
+  const primaryVPD = hasAccessPointData ? accessPointVPD.totalVPD : trafficData.estimatedVPD;
+
   // Build VPD comparison data - include individual roads if available
   const vpdComparison = [
     { category: 'Low Traffic', vpd: 5000, fill: '#22c55e' },
     { category: 'Moderate', vpd: 15000, fill: '#eab308' },
   ];
 
-  // Add individual roads or average
-  if (trafficData.roads && trafficData.roads.length > 1) {
-    // Multiple roads - show each one
+  // Add individual roads from access points or traffic data
+  if (hasAccessPointData && accessPointVPD.roadBreakdown.length > 0) {
+    // Use access point roads
+    const colors = ['#06b6d4', '#8b5cf6', '#ec4899', '#f59e0b'];
+    accessPointVPD.roadBreakdown.forEach((road, index) => {
+      vpdComparison.push({
+        category: road.name,
+        vpd: road.vpd,
+        fill: colors[index % colors.length],
+      });
+    });
+  } else if (trafficData.roads && trafficData.roads.length > 1) {
+    // Multiple roads from traffic API - show each one
     trafficData.roads.forEach((road, index) => {
       const colors = ['#06b6d4', '#8b5cf6', '#ec4899', '#f59e0b'];
       vpdComparison.push({
@@ -139,10 +153,10 @@ export default function TrafficCharts({ trafficData, accessPoints: propAccessPoi
       });
     });
   } else {
-    // Single road
+    // Single road fallback
     vpdComparison.push({
       category: 'This Location',
-      vpd: trafficData.estimatedVPD,
+      vpd: primaryVPD,
       fill: '#06b6d4',
     });
   }
@@ -152,9 +166,9 @@ export default function TrafficCharts({ trafficData, accessPoints: propAccessPoi
     { category: 'Very High', vpd: 50000, fill: '#ef4444' },
   );
 
-  // Traffic level gauge
+  // Traffic level gauge - use access points VPD when available
   const getTrafficScore = () => {
-    const vpd = trafficData.estimatedVPD;
+    const vpd = primaryVPD;
     if (vpd >= 40000) return 100;
     if (vpd >= 25000) return 80;
     if (vpd >= 15000) return 60;
@@ -166,7 +180,7 @@ export default function TrafficCharts({ trafficData, accessPoints: propAccessPoi
     {
       name: 'Traffic Score',
       value: getTrafficScore(),
-      fill: trafficData.estimatedVPD >= 25000 ? '#22c55e' : trafficData.estimatedVPD >= 15000 ? '#06b6d4' : trafficData.estimatedVPD >= 8000 ? '#eab308' : '#ef4444',
+      fill: primaryVPD >= 25000 ? '#22c55e' : primaryVPD >= 15000 ? '#06b6d4' : primaryVPD >= 8000 ? '#eab308' : '#ef4444',
     },
   ];
 
@@ -319,46 +333,59 @@ export default function TrafficCharts({ trafficData, accessPoints: propAccessPoi
         </div>
       )}
 
-      {/* Traffic Summary */}
+      {/* Traffic Summary - ONLY use access points data */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="metric-card">
           <p className="metric-card-label">
             <DataSourceTooltip source={{
-              name: trafficData.vpdSource?.includes('Florida DOT') ? 'Florida DOT AADT' : 'Traffic Estimation',
-              description: `Traffic count for ${trafficData.roadType !== 'N/A' ? trafficData.roadType : 'nearby roads'}. ${trafficData.vpdSource || 'Estimated from road classification.'}`,
-              url: trafficData.vpdSource?.includes('Florida DOT') ? 'https://tdaappsprod.dot.state.fl.us/fto/' : undefined,
-              type: trafficData.vpdSource?.includes('Florida DOT') ? 'api' : 'estimate'
+              name: accessPointVPD.roadBreakdown.some(r => r.source === 'fdot') ? 'Florida DOT AADT' : 'Traffic Estimation',
+              description: `Combined traffic from ${accessPointVPD.roadBreakdown.length} access road(s): ${accessPointVPD.roadBreakdown.map(r => r.name).join(', ')}`,
+              url: accessPointVPD.roadBreakdown.some(r => r.source === 'fdot') ? 'https://tdaappsprod.dot.state.fl.us/fto/' : undefined,
+              type: accessPointVPD.roadBreakdown.some(r => r.source === 'fdot') ? 'api' : 'estimate'
             }}>Vehicles Per Day</DataSourceTooltip>
           </p>
-          <p className="metric-card-value">{trafficData.estimatedVPD?.toLocaleString() || 'N/A'}</p>
+          <p className="metric-card-value">{accessPointVPD.totalVPD.toLocaleString()}</p>
         </div>
         <div className="metric-card">
           <p className="metric-card-label">
             <DataSourceTooltip source={{
-              name: trafficData.vpdSource?.includes('Florida DOT') ? 'Florida DOT AADT' : 'Traffic Estimation',
-              description: `VPD range for ${trafficData.roadType !== 'N/A' ? trafficData.roadType : 'nearby roads'}. ${trafficData.vpdSource || 'Estimated from road classification.'}`,
-              url: trafficData.vpdSource?.includes('Florida DOT') ? 'https://tdaappsprod.dot.state.fl.us/fto/' : undefined,
-              type: trafficData.vpdSource?.includes('Florida DOT') ? 'api' : 'estimate'
+              name: accessPointVPD.roadBreakdown.some(r => r.source === 'fdot') ? 'Florida DOT AADT' : 'Traffic Estimation',
+              description: `VPD range across ${accessPointVPD.roadBreakdown.length} access road(s)`,
+              url: accessPointVPD.roadBreakdown.some(r => r.source === 'fdot') ? 'https://tdaappsprod.dot.state.fl.us/fto/' : undefined,
+              type: accessPointVPD.roadBreakdown.some(r => r.source === 'fdot') ? 'api' : 'estimate'
             }}>VPD Range</DataSourceTooltip>
           </p>
-          <p className="text-lg font-semibold text-[var(--text-primary)]">{trafficData.vpdRange}</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)]">
+            {accessPointVPD.roadBreakdown.length > 1
+              ? `${Math.min(...accessPointVPD.roadBreakdown.map(r => r.vpd)).toLocaleString()} - ${Math.max(...accessPointVPD.roadBreakdown.map(r => r.vpd)).toLocaleString()}`
+              : `${Math.round(accessPointVPD.primaryRoadVPD * 0.85).toLocaleString()} - ${Math.round(accessPointVPD.primaryRoadVPD * 1.15).toLocaleString()}`
+            }
+          </p>
         </div>
         <div className="metric-card">
           <p className="metric-card-label">
             <DataSourceTooltip source={DATA_SOURCES.overpass}>Road Type</DataSourceTooltip>
           </p>
-          <p className="text-lg font-semibold text-[var(--text-primary)]">{trafficData.roadType}</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)]">
+            {ROAD_TYPE_VPD[accessPointVPD.primaryRoadType]?.label || accessPointVPD.primaryRoadName || 'Road'}
+          </p>
         </div>
         <div className="metric-card">
           <p className="metric-card-label">
             <DataSourceTooltip source={{
               name: 'Traffic Classification',
-              description: 'Categorized based on VPD thresholds: Low (<8K), Moderate (8-15K), High (>15K)',
+              description: 'Categorized based on VPD thresholds: Low (<8K), Moderate (8-15K), High (15-25K), Very High (>25K)',
               type: 'calculation'
             }}>Traffic Level</DataSourceTooltip>
           </p>
-          <p className={`text-lg font-semibold ${getTrafficLevelColor(trafficData.trafficLevel)}`}>
-            {trafficData.trafficLevel}
+          <p className={`text-lg font-semibold ${
+            accessPointVPD.totalVPD >= 25000 ? 'text-green-400' :
+            accessPointVPD.totalVPD >= 15000 ? 'text-cyan-400' :
+            accessPointVPD.totalVPD >= 8000 ? 'text-yellow-400' : 'text-red-400'
+          }`}>
+            {accessPointVPD.totalVPD >= 25000 ? 'Very High' :
+             accessPointVPD.totalVPD >= 15000 ? 'High' :
+             accessPointVPD.totalVPD >= 8000 ? 'Moderate' : 'Low'}
           </p>
         </div>
       </div>
