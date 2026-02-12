@@ -44,8 +44,42 @@ export interface TrafficData {
   averageVPD?: number;
 }
 
+// Road classification labels
+const HIGHWAY_TYPE_LABELS: Record<string, string> = {
+  motorway: 'Highway/Interstate',
+  motorway_link: 'Highway Ramp',
+  trunk: 'Major Highway',
+  trunk_link: 'Highway Ramp',
+  primary: 'Primary Arterial',
+  primary_link: 'Primary Ramp',
+  secondary: 'Secondary Arterial',
+  secondary_link: 'Secondary Ramp',
+  tertiary: 'Collector Road',
+  tertiary_link: 'Collector Ramp',
+  residential: 'Residential Street',
+  unclassified: 'Local Road',
+  living_street: 'Living Street',
+  service: 'Service Road',
+};
+
+// VPD ranges by road type
+const VPD_RANGES: Record<string, { min: number; max: number }> = {
+  motorway: { min: 40000, max: 150000 },
+  trunk: { min: 20000, max: 60000 },
+  primary: { min: 10000, max: 35000 },
+  secondary: { min: 5000, max: 20000 },
+  tertiary: { min: 2000, max: 10000 },
+  residential: { min: 500, max: 3000 },
+  unclassified: { min: 200, max: 2000 },
+};
+
+interface RoadWithType {
+  name: string;
+  highwayType: string;
+}
+
 // Find adjacent roads using OpenStreetMap Overpass API
-async function findAdjacentRoads(lat: number, lng: number, boundaryCoords?: Array<[number, number]>): Promise<string[]> {
+async function findAdjacentRoads(lat: number, lng: number, boundaryCoords?: Array<[number, number]>): Promise<RoadWithType[]> {
   try {
     const overpassUrl = 'https://overpass-api.de/api/interpreter';
 
@@ -75,19 +109,21 @@ async function findAdjacentRoads(lat: number, lng: number, boundaryCoords?: Arra
     }
 
     const data = await response.json();
-    const roadNames: string[] = [];
+    const roads: RoadWithType[] = [];
+    const seenNames = new Set<string>();
 
     for (const el of data.elements || []) {
-      if (el.type === 'way' && el.tags?.name) {
+      if (el.type === 'way' && el.tags?.name && el.tags?.highway) {
         const name = el.tags.name;
-        if (!roadNames.includes(name)) {
-          roadNames.push(name);
+        if (!seenNames.has(name)) {
+          seenNames.add(name);
+          roads.push({ name, highwayType: el.tags.highway });
         }
       }
     }
 
-    console.log('[Traffic] Found adjacent roads from OSM:', roadNames);
-    return roadNames;
+    console.log('[Traffic] Found adjacent roads from OSM:', roads.map(r => `${r.name} (${r.highwayType})`).join(', '));
+    return roads;
   } catch (error) {
     console.error('[Traffic] Overpass error:', error);
     return [];
@@ -460,16 +496,17 @@ export async function POST(request: Request) {
     const reverseGeocodedRoad = await getRoadNameAtLocation(lat, lng);
     console.log(`[Traffic] Reverse geocoded road: ${reverseGeocodedRoad}`);
 
-    // STEP 3: Find adjacent roads from OpenStreetMap
+    // STEP 3: Find adjacent roads from OpenStreetMap (with highway types)
     const osmRoads = await findAdjacentRoads(lat, lng, parcelBoundary);
-    console.log(`[Traffic] OSM adjacent roads: ${osmRoads.join(', ') || 'none'}`);
+    console.log(`[Traffic] OSM adjacent roads: ${osmRoads.map(r => `${r.name} (${r.highwayType})`).join(', ') || 'none'}`);
 
     // Add reverse geocoded road to OSM roads if not already present
     if (reverseGeocodedRoad) {
       const reverseNormalized = normalizeStreetName(reverseGeocodedRoad);
-      const alreadyHas = osmRoads.some(r => normalizeStreetName(r) === reverseNormalized);
+      const alreadyHas = osmRoads.some(r => normalizeStreetName(r.name) === reverseNormalized);
       if (!alreadyHas) {
-        osmRoads.unshift(reverseGeocodedRoad);
+        // Default to primary if we don't know the type
+        osmRoads.unshift({ name: reverseGeocodedRoad, highwayType: 'primary' });
       }
     }
 
@@ -482,12 +519,12 @@ export async function POST(request: Request) {
 
     // Strategy 1: Match property street with OSM roads first
     // If the address street matches an OSM road, use that as the property's main road
-    let propertyOSMRoad: string | null = null;
+    let propertyOSMRoad: RoadWithType | null = null;
     if (propertyStreet) {
       for (const osmRoad of osmRoads) {
-        if (roadNamesMatch(osmRoad, propertyStreet)) {
+        if (roadNamesMatch(osmRoad.name, propertyStreet)) {
           propertyOSMRoad = osmRoad;
-          console.log(`[Traffic] Property street "${propertyStreet}" matches OSM road "${osmRoad}"`);
+          console.log(`[Traffic] Property street "${propertyStreet}" matches OSM road "${osmRoad.name}" (${osmRoad.highwayType})`);
           break;
         }
       }
@@ -521,7 +558,7 @@ export async function POST(request: Request) {
       if (matchedPropertyRoad) {
         matchedRoads.push({
           ...matchedPropertyRoad,
-          roadName: propertyOSMRoad || propertyStreet,
+          roadName: propertyOSMRoad?.name || propertyStreet,
         });
         matchedRoadwayIds.add(matchedPropertyRoad.roadwayId!);
       } else {
@@ -529,7 +566,7 @@ export async function POST(request: Request) {
         const mainRoad = allFDOTRoads[0];
         matchedRoads.push({
           ...mainRoad,
-          roadName: propertyOSMRoad || propertyStreet,
+          roadName: propertyOSMRoad?.name || propertyStreet,
         });
         matchedRoadwayIds.add(mainRoad.roadwayId!);
         console.log(`[Traffic] WARNING: No name match for "${propertyStreet}", using highest VPD: ${mainRoad.vpd}`);
@@ -539,16 +576,16 @@ export async function POST(request: Request) {
     // Strategy 3: Match other OSM roads with remaining FDOT roads
     for (const osmRoad of osmRoads) {
       // Skip if this is the property street (already handled)
-      if (propertyStreet && roadNamesMatch(osmRoad, propertyStreet)) continue;
+      if (propertyStreet && roadNamesMatch(osmRoad.name, propertyStreet)) continue;
 
       // Try matching with FDOT roads that haven't been claimed
       for (const fdotRoad of allFDOTRoads) {
         if (fdotRoad.roadwayId && !matchedRoadwayIds.has(fdotRoad.roadwayId)) {
           // Match if names are similar OR if it's a minor road
-          if (roadNamesMatch(fdotRoad.roadName, osmRoad)) {
+          if (roadNamesMatch(fdotRoad.roadName, osmRoad.name)) {
             matchedRoads.push({
               ...fdotRoad,
-              roadName: osmRoad,
+              roadName: osmRoad.name,
             });
             matchedRoadwayIds.add(fdotRoad.roadwayId);
             break;
@@ -598,6 +635,25 @@ export async function POST(request: Request) {
       ? matchedRoads[0].roadName
       : (propertyStreet || 'Unknown');
 
+    // Get road classification from OSM data
+    let roadClassification = 'Unknown';
+    if (propertyOSMRoad) {
+      roadClassification = HIGHWAY_TYPE_LABELS[propertyOSMRoad.highwayType] || 'Road';
+    } else if (osmRoads.length > 0) {
+      // Use the first (highest priority) road's type
+      roadClassification = HIGHWAY_TYPE_LABELS[osmRoads[0].highwayType] || 'Road';
+    } else if (primaryVPD >= 25000) {
+      roadClassification = 'Major Arterial';
+    } else if (primaryVPD >= 15000) {
+      roadClassification = 'Primary Arterial';
+    } else if (primaryVPD >= 8000) {
+      roadClassification = 'Secondary Arterial';
+    } else if (primaryVPD >= 3000) {
+      roadClassification = 'Collector Road';
+    } else {
+      roadClassification = 'Local Road';
+    }
+
     // Build VPD source string
     let vpdSource = '';
     if (matchedRoads.length > 1) {
@@ -608,14 +664,18 @@ export async function POST(request: Request) {
       vpdSource = 'No official data available';
     }
 
-    // Build VPD range string
+    // Build VPD range string - show ±15% range for single road official counts
     let vpdRange = '';
     if (matchedRoads.length > 1) {
       const minVPD = Math.min(...matchedRoads.map(r => r.vpd));
       const maxVPD = Math.max(...matchedRoads.map(r => r.vpd));
       vpdRange = `${minVPD.toLocaleString()} - ${maxVPD.toLocaleString()}`;
     } else if (matchedRoads.length === 1) {
-      vpdRange = `Official count: ${matchedRoads[0].vpd.toLocaleString()}`;
+      // Show ±15% variance range even for official counts (accounts for seasonal variation)
+      const vpd = matchedRoads[0].vpd;
+      const lowRange = Math.round(vpd * 0.85);
+      const highRange = Math.round(vpd * 1.15);
+      vpdRange = `${lowRange.toLocaleString()} - ${highRange.toLocaleString()}`;
     } else {
       vpdRange = 'N/A';
     }
@@ -625,7 +685,7 @@ export async function POST(request: Request) {
       estimatedVPD: primaryVPD,
       vpdRange,
       vpdSource,
-      roadType: primaryRoad,
+      roadType: roadClassification,
       currentSpeed: Math.round(currentSpeed),
       freeFlowSpeed: Math.round(freeFlowSpeed),
       currentTravelTime: flowData?.currentTravelTime || 0,
