@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getRecommendationsForSite, ALL_BUSINESSES } from '@/data/BusinessIntelligence';
+import { LOT_SIZE_REFERENCE, findMatchingTenants, LotSizeRequirement } from '@/data/lotSizeReference';
 
 // Business type requirements for scoring
 const BUSINESS_TYPE_REQUIREMENTS: Record<string, {
@@ -539,47 +540,96 @@ function generateSuggestedUses(
   nearbyBusinesses: Array<{ name: string; type: string }>,
   isCornerLot: boolean
 ): string[] {
+  // Use the CRE Lot Size Reference data to find matching tenants
+  if (!lotSizeAcres) {
+    // Fallback if no lot size - return generic suggestions
+    return ['QSR/Fast Food', 'Retail Strip', 'Professional Office', 'Medical Clinic'];
+  }
+
+  // Find all tenants that fit this lot size
+  const matchingTenants = findMatchingTenants(lotSizeAcres);
+
+  if (matchingTenants.length === 0) {
+    return ['Custom Development', 'Multi-Tenant Center', 'Mixed-Use Development'];
+  }
+
+  // Filter and prioritize based on VPD and site characteristics
+  const prioritizedTenants: LotSizeRequirement[] = [];
+
+  for (const tenant of matchingTenants) {
+    // Skip categories that don't match traffic levels
+    const category = tenant.category;
+
+    // High traffic required categories
+    const highTrafficCategories = [
+      'QUICK-SERVICE RESTAURANT (QSR)',
+      'CONVENIENCE STORE / GAS STATION',
+      'BIG BOX / WAREHOUSE RETAIL',
+    ];
+
+    // Medium traffic categories
+    const mediumTrafficCategories = [
+      'CASUAL / FULL-SERVICE RESTAURANT',
+      'GROCERY / SUPERMARKET',
+      'DEPARTMENT STORE / MALL ANCHOR',
+      'PHARMACY / HEALTH / MEDICAL',
+      'BANK / FINANCIAL',
+      'DOLLAR STORE / DISCOUNT',
+      'AUTO PARTS / SERVICE / DEALERSHIP',
+      'HOME IMPROVEMENT / SPECIALTY RETAIL',
+    ];
+
+    // Low traffic OK categories
+    const lowTrafficCategories = [
+      'OFFICE',
+      'INDUSTRIAL / WAREHOUSE / DISTRIBUTION',
+      'HOTEL / HOSPITALITY',
+      'CHILDCARE / EDUCATION',
+      'MISCELLANEOUS',
+    ];
+
+    // Filter based on VPD
+    if (vpd !== null) {
+      if (vpd < 10000 && highTrafficCategories.includes(category)) continue;
+      if (vpd < 5000 && mediumTrafficCategories.includes(category)) continue;
+    }
+
+    // Prioritize corner lot for QSR and gas stations
+    if (isCornerLot && (category === 'QUICK-SERVICE RESTAURANT (QSR)' || category === 'CONVENIENCE STORE / GAS STATION' || category === 'BANK / FINANCIAL')) {
+      prioritizedTenants.unshift(tenant);
+    } else {
+      prioritizedTenants.push(tenant);
+    }
+  }
+
+  // Get unique tenant suggestions (max 8)
   const suggestions: string[] = [];
-  const existingTypes = new Set(nearbyBusinesses.map(b => b.type.toLowerCase()));
+  const seenCategories = new Set<string>();
 
-  // High traffic suggestions
-  if (vpd && vpd >= 25000) {
-    if (isCornerLot) suggestions.push('Drive-Thru QSR');
-    suggestions.push('Fast Casual Restaurant');
-    suggestions.push('Coffee Shop with Drive-Thru');
-    if (!existingTypes.has('gas')) suggestions.push('Gas Station/Convenience');
-  } else if (vpd && vpd >= 15000) {
-    suggestions.push('Fast Casual Restaurant');
-    suggestions.push('Retail Strip Center');
-    if (!existingTypes.has('bank')) suggestions.push('Bank Branch');
-    suggestions.push('Medical/Dental Office');
-  } else if (vpd && vpd >= 8000) {
-    suggestions.push('Professional Office');
-    suggestions.push('Medical Clinic');
-    suggestions.push('Service Business');
-    suggestions.push('Specialty Retail');
-  } else {
-    suggestions.push('Office Building');
-    suggestions.push('Light Industrial');
-    suggestions.push('Warehouse/Distribution');
-    suggestions.push('Self-Storage');
+  for (const tenant of prioritizedTenants) {
+    // Include tenant name with lot size context
+    const lotFit = tenant.typicalLotAcres === lotSizeAcres
+      ? '(ideal fit)'
+      : lotSizeAcres >= tenant.lotRangeAcres.min && lotSizeAcres <= tenant.typicalLotAcres * 1.1
+        ? '(good fit)'
+        : '';
+
+    const suggestion = `${tenant.tenant} ${lotFit}`.trim();
+
+    // Limit to 2 per category to ensure variety
+    const categoryCount = [...suggestions].filter(s => {
+      const t = prioritizedTenants.find(pt => s.includes(pt.tenant));
+      return t?.category === tenant.category;
+    }).length;
+
+    if (categoryCount < 2 && suggestions.length < 10) {
+      suggestions.push(suggestion);
+    }
+
+    if (suggestions.length >= 10) break;
   }
 
-  // Income-based additions
-  if (medianIncome && medianIncome >= 85000) {
-    suggestions.push('Upscale Dining');
-    suggestions.push('Boutique Retail');
-    suggestions.push('Fitness/Wellness Center');
-  }
-
-  // Lot size considerations
-  if (lotSizeAcres && lotSizeAcres >= 3) {
-    suggestions.push('Multi-Tenant Retail Center');
-    suggestions.push('Hotel/Extended Stay');
-  }
-
-  // Deduplicate and limit
-  return [...new Set(suggestions)].slice(0, 8);
+  return suggestions.slice(0, 8);
 }
 
 function generateConcerns(
