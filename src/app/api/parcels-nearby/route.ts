@@ -329,15 +329,24 @@ function isInLeonCountyArea(centerLat?: number, centerLng?: number): boolean {
   return centerLat >= 30.26 && centerLat <= 30.70 && centerLng >= -84.65 && centerLng <= -83.98;
 }
 
+// Convert WGS84 lat/lng to Web Mercator x/y
+function toWebMercator(lat: number, lng: number): { x: number; y: number } {
+  const x = lng * 20037508.34 / 180;
+  let y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+  y = y * 20037508.34 / 180;
+  return { x, y };
+}
+
 // Florida county configurations
 interface FloridaCountyConfig {
   name: string;
   url: string;
   bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number };
+  webMercator?: boolean;
 }
 
 const FLORIDA_COUNTIES: FloridaCountyConfig[] = [
-  { name: 'Leon County', url: 'https://intervector.leoncountyfl.gov/intervector/rest/services/MapServices/TLC_OverlayParnal_D_WM/MapServer/0/query', bounds: { minLat: 30.26, maxLat: 30.70, minLng: -84.65, maxLng: -83.98 } },
+  { name: 'Leon County', url: 'https://intervector.leoncountyfl.gov/intervector/rest/services/MapServices/TLC_OverlayParnal_D_WM/MapServer/0/query', bounds: { minLat: 30.26, maxLat: 30.70, minLng: -84.65, maxLng: -83.98 }, webMercator: true },
   { name: 'Hillsborough County', url: 'https://maps.hillsboroughcounty.org/arcgis/rest/services/InfoLayers/Parcels/MapServer/0/query', bounds: { minLat: 27.57, maxLat: 28.17, minLng: -82.82, maxLng: -82.05 } },
   { name: 'Orange County', url: 'https://maps.ocfl.net/arcgis/rest/services/Parcels/MapServer/0/query', bounds: { minLat: 28.34, maxLat: 28.79, minLng: -81.66, maxLng: -80.95 } },
   { name: 'Duval County', url: 'https://maps.coj.net/arcgis/rest/services/Parcels/Parcels/MapServer/0/query', bounds: { minLat: 30.10, maxLat: 30.59, minLng: -82.05, maxLng: -81.32 } },
@@ -357,18 +366,33 @@ async function fetchParcelsFromFloridaCounty(bounds: ParcelBounds, county: Flori
   try {
     const url = new URL(county.url);
 
-    const envelope = JSON.stringify({
-      xmin: bounds.west,
-      ymin: bounds.south,
-      xmax: bounds.east,
-      ymax: bounds.north,
-      spatialReference: { wkid: 4326 }
-    });
+    // Handle Web Mercator coordinates if required by the county
+    let envelope: string;
+    if (county.webMercator) {
+      const sw = toWebMercator(bounds.south, bounds.west);
+      const ne = toWebMercator(bounds.north, bounds.east);
+      envelope = JSON.stringify({
+        xmin: sw.x,
+        ymin: sw.y,
+        xmax: ne.x,
+        ymax: ne.y,
+        spatialReference: { wkid: 102100 }
+      });
+      url.searchParams.set('inSR', '102100');  // Web Mercator
+    } else {
+      envelope = JSON.stringify({
+        xmin: bounds.west,
+        ymin: bounds.south,
+        xmax: bounds.east,
+        ymax: bounds.north,
+        spatialReference: { wkid: 4326 }
+      });
+      url.searchParams.set('inSR', '4326');  // WGS84
+    }
 
     url.searchParams.set('where', '1=1');
     url.searchParams.set('geometry', envelope);
     url.searchParams.set('geometryType', 'esriGeometryEnvelope');
-    url.searchParams.set('inSR', '4326');  // Input coordinates are WGS84
     url.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
     url.searchParams.set('outFields', '*');
     url.searchParams.set('returnGeometry', 'true');

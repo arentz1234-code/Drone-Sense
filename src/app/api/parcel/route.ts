@@ -360,8 +360,16 @@ const STATE_GIS_ENDPOINTS: Record<string, { url: string; name: string }[]> = {
   ],
 };
 
+// Convert WGS84 lat/lng to Web Mercator x/y
+function toWebMercator(lat: number, lng: number): { x: number; y: number } {
+  const x = lng * 20037508.34 / 180;
+  let y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+  y = y * 20037508.34 / 180;
+  return { x, y };
+}
+
 // Florida county-specific GIS endpoints (Florida doesn't have a statewide parcel layer)
-const FLORIDA_COUNTY_GIS: { name: string; url: string; bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number } }[] = [
+const FLORIDA_COUNTY_GIS: { name: string; url: string; bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }; webMercator?: boolean }[] = [
   // Hillsborough County (Tampa)
   {
     name: 'Hillsborough County',
@@ -446,11 +454,12 @@ const FLORIDA_COUNTY_GIS: { name: string; url: string; bounds: { minLat: number;
     url: 'https://gis.myescambia.com/arcgis/rest/services/Parcels/MapServer/0/query',
     bounds: { minLat: 30.27, maxLat: 30.98, minLng: -87.63, maxLng: -86.78 }
   },
-  // Leon County (Tallahassee)
+  // Leon County (Tallahassee) - requires Web Mercator coordinates
   {
     name: 'Leon County',
     url: 'https://intervector.leoncountyfl.gov/intervector/rest/services/MapServices/TLC_OverlayParnal_D_WM/MapServer/0/query',
-    bounds: { minLat: 30.26, maxLat: 30.70, minLng: -84.65, maxLng: -83.98 }
+    bounds: { minLat: 30.26, maxLat: 30.70, minLng: -84.65, maxLng: -83.98 },
+    webMercator: true
   },
   // Alachua County (Gainesville)
   {
@@ -515,9 +524,18 @@ async function fetchParcelFromFloridaCountyGIS(lat: number, lng: number): Promis
   try {
     const url = new URL(matchingCounty.url);
     url.searchParams.set('where', '1=1');
-    url.searchParams.set('geometry', `${lng},${lat}`);
+
+    // Handle Web Mercator coordinates if required by the county
+    if (matchingCounty.webMercator) {
+      const wm = toWebMercator(lat, lng);
+      url.searchParams.set('geometry', `${wm.x},${wm.y}`);
+      url.searchParams.set('inSR', '102100');  // Web Mercator
+    } else {
+      url.searchParams.set('geometry', `${lng},${lat}`);
+      url.searchParams.set('inSR', '4326');  // WGS84
+    }
+
     url.searchParams.set('geometryType', 'esriGeometryPoint');
-    url.searchParams.set('inSR', '4326');  // Input coordinates are WGS84
     url.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
     url.searchParams.set('outFields', '*');
     url.searchParams.set('returnGeometry', 'true');
