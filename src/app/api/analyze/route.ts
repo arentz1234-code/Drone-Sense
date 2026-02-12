@@ -1483,11 +1483,18 @@ function calculateBusinessSuitability(
       continue;
     }
 
-    // Skip value-oriented categories in high income areas
-    // These businesses target budget-conscious consumers, not affluent markets
-    const valueCategories = ['fastFoodValue', 'casualDiningValue', 'coffeeValue', 'quickServiceValue', 'discountRetail'];
-    const isHighIncomeArea = incomeLevel === 'upper-middle' || incomeLevel === 'high';
-    if (valueCategories.includes(key) && isHighIncomeArea) {
+    // Skip value-oriented categories in middle+ income areas
+    // These businesses target budget-conscious consumers
+    const valueCategories = ['fastFoodValue', 'casualDiningValue', 'coffeeValue', 'quickServiceValue', 'discountRetail', 'financialServices'];
+    const isMiddleOrHigherIncome = incomeLevel === 'middle' || incomeLevel === 'upper-middle' || incomeLevel === 'high';
+    if (valueCategories.includes(key) && isMiddleOrHigherIncome) {
+      continue;
+    }
+
+    // Skip premium categories in low income areas
+    const premiumCategories = ['fastFoodPremium', 'casualDiningPremium', 'coffeePremium', 'quickServicePremium', 'retailPremium', 'fitnessPremium', 'autoServicePremium'];
+    const isLowIncomeArea = incomeLevel === 'low';
+    if (premiumCategories.includes(key) && isLowIncomeArea) {
       continue;
     }
 
@@ -1501,18 +1508,22 @@ function calculateBusinessSuitability(
     let reasoning = '';
     let lotSizeIssue: string | undefined;
 
-    // Check VPD fit
-    if (vpd >= threshold.ideal) {
-      score = 10;
-      reasoning = `Excellent traffic - VPD of ${vpd.toLocaleString()} exceeds ideal threshold`;
+    // Check VPD fit - more graduated scoring
+    // Cap base traffic score at 7, require other factors to reach 10
+    if (vpd >= threshold.ideal * 1.5) {
+      score = 8; // Significantly exceeds ideal
+      reasoning = `Excellent traffic - VPD of ${vpd.toLocaleString()} well exceeds ideal`;
+    } else if (vpd >= threshold.ideal) {
+      score = 7; // Meets ideal
+      reasoning = `Strong traffic - VPD of ${vpd.toLocaleString()} meets ideal threshold`;
     } else if (vpd >= threshold.min) {
-      score = Math.round(5 + (5 * (vpd - threshold.min) / (threshold.ideal - threshold.min)));
-      reasoning = `Good traffic - VPD of ${vpd.toLocaleString()} meets threshold`;
+      score = Math.round(4 + (3 * (vpd - threshold.min) / (threshold.ideal - threshold.min)));
+      reasoning = `Good traffic - VPD of ${vpd.toLocaleString()} meets minimum`;
     } else if (vpd >= threshold.min * 0.7) {
-      score = Math.round(3 + (2 * vpd / threshold.min));
+      score = Math.round(2 + (2 * vpd / threshold.min));
       reasoning = `Marginal traffic - VPD of ${vpd.toLocaleString()} is below ideal`;
     } else {
-      score = Math.round(3 * vpd / threshold.min);
+      score = Math.round(2 * vpd / threshold.min);
       reasoning = `Low traffic - VPD of ${vpd.toLocaleString()} below threshold`;
     }
 
