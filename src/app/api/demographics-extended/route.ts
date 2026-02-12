@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export interface ExtendedDemographicsResponse {
+  // Base demographics fields (for direct access)
+  population: number;
+  medianHouseholdIncome: number;
+  employmentRate: number;
+  totalHouseholds: number;
+  // Multi-radius data
   multiRadius: {
     oneMile: { population: number; households: number; medianIncome: number };
     threeMile: { population: number; households: number; medianIncome: number };
@@ -338,7 +344,18 @@ export async function POST(request: NextRequest) {
     // Scale consumer spending by 3-mile radius factor (4.5x the single tract data)
     const scaledConsumerSpending = Math.round(baseData.consumerSpendingFromBrackets * 4.5);
 
+    // Estimate employment rate based on income (higher income areas typically have higher employment)
+    const estimatedEmploymentRate = baseData.medianIncome >= 75000 ? 96 :
+      baseData.medianIncome >= 55000 ? 94 :
+      baseData.medianIncome >= 40000 ? 92 : 89;
+
     const response: ExtendedDemographicsResponse = {
+      // Base demographics fields for direct access
+      population: multiRadius.oneMile.population,
+      medianHouseholdIncome: baseData.medianIncome,
+      employmentRate: estimatedEmploymentRate,
+      totalHouseholds: multiRadius.oneMile.households,
+      // Multi-radius data
       multiRadius,
       growthTrend: estimateGrowthTrend(baseData.medianIncome),
       consumerSpending: scaledConsumerSpending,
