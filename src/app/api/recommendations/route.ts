@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getRecommendationsForSite, ALL_BUSINESSES } from '@/data/BusinessIntelligence';
 import { LOT_SIZE_REFERENCE, findMatchingTenants, LotSizeRequirement } from '@/data/lotSizeReference';
+import { SE_CRE_TENANTS, getTopRecommendations, SETenantRequirement } from '@/data/seCRETenants';
 
 // Business type requirements for scoring
 const BUSINESS_TYPE_REQUIREMENTS: Record<string, {
@@ -538,92 +539,78 @@ function generateSuggestedUses(
   lotSizeAcres: number | null,
   medianIncome: number | null,
   nearbyBusinesses: Array<{ name: string; type: string }>,
-  isCornerLot: boolean
+  isCornerLot: boolean,
+  population?: number | null
 ): string[] {
-  // Use the CRE Lot Size Reference data to find matching tenants
+  // Use the comprehensive SE CRE tenant database (358 tenants)
   if (!lotSizeAcres) {
     // Fallback if no lot size - return generic suggestions
     return ['QSR/Fast Food', 'Retail Strip', 'Professional Office', 'Medical Clinic'];
   }
 
-  // Find all tenants that fit this lot size
-  const matchingTenants = findMatchingTenants(lotSizeAcres);
+  // Get top recommendations using SE CRE data with all site criteria
+  const topMatches = getTopRecommendations(
+    lotSizeAcres,
+    vpd,
+    population,
+    medianIncome,
+    15 // Get more matches to filter
+  );
 
-  if (matchingTenants.length === 0) {
-    return ['Custom Development', 'Multi-Tenant Center', 'Mixed-Use Development'];
+  if (topMatches.length === 0) {
+    // Fallback to old method if no SE CRE matches
+    const matchingTenants = findMatchingTenants(lotSizeAcres);
+    if (matchingTenants.length === 0) {
+      return ['Custom Development', 'Multi-Tenant Center', 'Mixed-Use Development'];
+    }
+    return matchingTenants.slice(0, 8).map(t => t.tenant);
   }
 
-  // Filter and prioritize based on VPD and site characteristics
-  const prioritizedTenants: LotSizeRequirement[] = [];
+  // Prioritize based on corner lot preference
+  const prioritized: SETenantRequirement[] = [];
+  const cornerCategories = [
+    'QSR — BURGER / CHICKEN / SANDWICH',
+    'QSR — COFFEE / BAKERY / SMOOTHIE / DESSERT',
+    'CONVENIENCE STORE / FUEL',
+    'BANK / FINANCIAL / TAX / INSURANCE',
+  ];
 
-  for (const tenant of matchingTenants) {
-    // Skip categories that don't match traffic levels
-    const category = tenant.category;
-
-    // High traffic required categories
-    const highTrafficCategories = [
-      'QUICK-SERVICE RESTAURANT (QSR)',
-      'CONVENIENCE STORE / GAS STATION',
-      'BIG BOX / WAREHOUSE RETAIL',
-    ];
-
-    // Medium traffic categories
-    const mediumTrafficCategories = [
-      'CASUAL / FULL-SERVICE RESTAURANT',
-      'GROCERY / SUPERMARKET',
-      'DEPARTMENT STORE / MALL ANCHOR',
-      'PHARMACY / HEALTH / MEDICAL',
-      'BANK / FINANCIAL',
-      'DOLLAR STORE / DISCOUNT',
-      'AUTO PARTS / SERVICE / DEALERSHIP',
-      'HOME IMPROVEMENT / SPECIALTY RETAIL',
-    ];
-
-    // Low traffic OK categories
-    const lowTrafficCategories = [
-      'OFFICE',
-      'INDUSTRIAL / WAREHOUSE / DISTRIBUTION',
-      'HOTEL / HOSPITALITY',
-      'CHILDCARE / EDUCATION',
-      'MISCELLANEOUS',
-    ];
-
-    // Filter based on VPD
-    if (vpd !== null) {
-      if (vpd < 10000 && highTrafficCategories.includes(category)) continue;
-      if (vpd < 5000 && mediumTrafficCategories.includes(category)) continue;
-    }
-
-    // Prioritize corner lot for QSR and gas stations
-    if (isCornerLot && (category === 'QUICK-SERVICE RESTAURANT (QSR)' || category === 'CONVENIENCE STORE / GAS STATION' || category === 'BANK / FINANCIAL')) {
-      prioritizedTenants.unshift(tenant);
+  for (const tenant of topMatches) {
+    if (isCornerLot && cornerCategories.includes(tenant.category)) {
+      prioritized.unshift(tenant);
     } else {
-      prioritizedTenants.push(tenant);
+      prioritized.push(tenant);
     }
   }
 
-  // Get unique tenant suggestions (max 8)
+  // Build suggestions with fit quality indicators
   const suggestions: string[] = [];
-  const seenCategories = new Set<string>();
+  const categoryCount: Record<string, number> = {};
 
-  for (const tenant of prioritizedTenants) {
-    // Include tenant name with lot size context
-    const lotFit = tenant.typicalLotAcres === lotSizeAcres
-      ? '(ideal fit)'
-      : lotSizeAcres >= tenant.lotRangeAcres.min && lotSizeAcres <= tenant.typicalLotAcres * 1.1
-        ? '(good fit)'
-        : '';
+  for (const tenant of prioritized) {
+    // Calculate fit quality
+    let fitLabel = '';
+    if (tenant.typicalLotAcres && tenant.lotRangeAcres) {
+      const typicalDiff = Math.abs((tenant.typicalLotAcres - lotSizeAcres) / tenant.typicalLotAcres);
+      if (typicalDiff < 0.1) {
+        fitLabel = '(ideal fit)';
+      } else if (lotSizeAcres >= tenant.lotRangeAcres.min && lotSizeAcres <= tenant.lotRangeAcres.max) {
+        fitLabel = '(good fit)';
+      }
+    }
 
-    const suggestion = `${tenant.tenant} ${lotFit}`.trim();
+    // Check if VPD requirements are well-met
+    if (vpd && tenant.preferredVPD && vpd >= tenant.preferredVPD) {
+      fitLabel = fitLabel || '(excellent traffic)';
+    }
+
+    const suggestion = `${tenant.tenant} ${fitLabel}`.trim();
 
     // Limit to 2 per category to ensure variety
-    const categoryCount = [...suggestions].filter(s => {
-      const t = prioritizedTenants.find(pt => s.includes(pt.tenant));
-      return t?.category === tenant.category;
-    }).length;
-
-    if (categoryCount < 2 && suggestions.length < 10) {
+    const catCount = categoryCount[tenant.category] || 0;
+    if (catCount < 2 && suggestions.length < 10) {
       suggestions.push(suggestion);
+      categoryCount[tenant.category] = catCount + 1;
     }
 
     if (suggestions.length >= 10) break;
@@ -773,13 +760,14 @@ export async function POST(request: Request) {
 
     const overallGrade = calculateGrade(overallValue);
 
-    // Generate recommendations
+    // Generate recommendations using SE CRE database
     const suggestedUses = generateSuggestedUses(
       vpd,
       lotSizeAcres,
       medianIncome,
       nearbyBusinesses || [],
-      isCornerLot
+      isCornerLot,
+      population
     );
 
     const concerns = generateConcerns(
