@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, MutableRefObject } from 'react';
 import { MapContainer, TileLayer, Polygon, Popup, Tooltip, Marker, useMap, useMapEvents } from 'react-leaflet';
 import { LatLngExpression, Icon, DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { Business as BaseBusiness, AccessPoint } from '@/types';
 
 export interface NearbyParcel {
   boundaries: Array<[number, number][]>;
@@ -15,26 +16,14 @@ export interface NearbyParcel {
   landUse?: string;
 }
 
-interface Business {
-  name: string;
-  type: string;
-  distance: string;
-  address?: string;
+// Extend Business with optional coordinates for map display
+interface Business extends BaseBusiness {
   lat?: number;
   lng?: number;
 }
 
-export interface AccessPoint {
-  coordinates: [number, number]; // [lat, lng]
-  roadName: string;
-  type: 'entrance' | 'exit' | 'access';
-  roadType?: string; // OSM highway type (primary, secondary, residential, etc.)
-  distance?: number; // Distance from parcel boundary in meters
-  vpd?: number; // Official VPD from FDOT if available
-  vpdYear?: number; // Year of VPD count
-  vpdSource?: 'fdot' | 'estimated'; // Source of VPD data
-  estimatedVpd?: number; // Estimated VPD based on road classification
-}
+// Re-export AccessPoint for components that import from here
+export type { AccessPoint };
 
 interface ParcelData {
   boundaries: Array<[number, number][]>;
