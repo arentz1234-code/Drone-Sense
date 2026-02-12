@@ -49,8 +49,9 @@ export async function POST(request: Request) {
   const mapillaryToken = process.env.MAPILLARY_ACCESS_TOKEN;
   if (mapillaryToken) {
     try {
-      // Search within ~100m radius for street-level imagery
-      const bbox = `${coordinates.lng - 0.001},${coordinates.lat - 0.001},${coordinates.lng + 0.001},${coordinates.lat + 0.001}`;
+      // Search within ~500m radius for street-level imagery (0.005 degrees each direction)
+      // Max allowed is 0.01 sq degrees (0.1 x 0.1), we use 0.01 x 0.01 = 0.0001 sq degrees
+      const bbox = `${coordinates.lng - 0.005},${coordinates.lat - 0.005},${coordinates.lng + 0.005},${coordinates.lat + 0.005}`;
       const mapillaryUrl = `https://graph.mapillary.com/images?fields=id,thumb_1024_url,captured_at,compass_angle&bbox=${bbox}&limit=1`;
 
       const response = await fetch(mapillaryUrl, {
