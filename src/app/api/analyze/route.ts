@@ -10,6 +10,36 @@ import {
   BusinessRequirements,
   CONSTRUCTION_LABELS,
 } from '@/data/BusinessIntelligence';
+import { LOT_SIZE_REFERENCE } from '@/data/lotSizeReference';
+
+// Helper to get tenant examples from CRE Lot Size Reference spreadsheet
+function getTenantsFromSpreadsheet(category: string): string[] {
+  const categoryMap: Record<string, string[]> = {
+    'qsr': ['QUICK-SERVICE RESTAURANT (QSR)'],
+    'casual_dining': ['CASUAL / FULL-SERVICE RESTAURANT'],
+    'coffee': ['QUICK-SERVICE RESTAURANT (QSR)'],
+    'convenience': ['CONVENIENCE STORE / GAS STATION'],
+    'discount_retail': ['DOLLAR STORE / DISCOUNT'],
+    'retail': ['DEPARTMENT STORE / MALL ANCHOR', 'HOME IMPROVEMENT / SPECIALTY RETAIL'],
+    'bank': ['BANK / FINANCIAL'],
+    'pharmacy': ['PHARMACY / HEALTH / MEDICAL'],
+    'auto_service': ['AUTO PARTS / SERVICE / DEALERSHIP'],
+    'fitness': ['CLUB / FITNESS / ENTERTAINMENT'],
+    'medical': ['PHARMACY / HEALTH / MEDICAL'],
+    'grocery': ['GROCERY / SUPERMARKET'],
+    'big_box': ['BIG BOX / WAREHOUSE RETAIL'],
+    'hotel': ['HOTEL / HOSPITALITY'],
+    'office': ['OFFICE'],
+    'industrial': ['INDUSTRIAL / WAREHOUSE / DISTRIBUTION'],
+  };
+
+  const categories = categoryMap[category] || [];
+  const tenants = LOT_SIZE_REFERENCE
+    .filter(t => categories.includes(t.category))
+    .map(t => t.tenant);
+
+  return tenants.slice(0, 8);
+}
 
 // Re-export for use in other files
 export type { RetailerMatch } from '@/app/api/retailer-match/route';
@@ -143,43 +173,43 @@ const VPD_THRESHOLDS = {
     min: 10000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.2, ideal: 0.5 }, // Coffee shops need 0.2-0.5 acres
-    examples: ['Dunkin', 'Scooters', '7 Brew', "McDonald's McCafe"]
+    examples: ["Dunkin'", "Panera Bread", "McDonald's"] // From CRE Lot Size Reference
   },
   coffeePremium: {
     min: 15000, ideal: 20000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.25, ideal: 0.6 }, // Premium coffee needs 0.25-0.6 acres
-    examples: ['Starbucks', 'Dutch Bros', 'Black Rifle Coffee', 'Peet\'s Coffee']
+    examples: ['Starbucks (Drive-Thru)', 'Panera Bread'] // From CRE Lot Size Reference
   },
   quickServiceValue: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 0.2, ideal: 0.5 }, // Quick service needs 0.2-0.5 acres
-    examples: ['Subway', 'Wingstop', 'Zaxby\'s', 'Moe\'s', 'Tropical Smoothie']
+    examples: ['Wingstop', "Zaxby's", 'Popeyes', 'Taco Bell'] // From CRE Lot Size Reference
   },
   quickServicePremium: {
     min: 12000, ideal: 18000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.3, ideal: 0.6 }, // Premium quick service needs 0.3-0.6 acres
-    examples: ['Chipotle', 'Jersey Mike\'s', 'Firehouse Subs', 'Panera Bread', 'Cava', 'Sweetgreen', 'MOD Pizza']
+    examples: ['Chipotle', 'Panera Bread', 'Panda Express', "Culver's"] // From CRE Lot Size Reference
   },
   convenience: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.3, ideal: 0.8 }, // Convenience stores need 0.3-0.8 acres
-    examples: ['7-Eleven', 'Circle K', 'Wawa', 'QuikTrip', 'Speedway', 'Casey\'s']
+    examples: ['7-Eleven / Circle K (Standard)', 'Wawa', 'QuikTrip (QT)', 'RaceTrac', 'Sheetz'] // From CRE Lot Size Reference
   },
   discountRetail: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 0.5, ideal: 1.2 }, // Discount retail needs 0.5-1.2 acres
-    examples: ['Dollar General', 'Dollar Tree', 'Family Dollar', 'Five Below', 'Big Lots', 'Save-A-Lot', 'ALDI']
+    examples: ['Dollar General', 'Dollar Tree / Family Dollar', 'Five Below', "Ollie's Bargain Outlet"] // From CRE Lot Size Reference
   },
   retailPremium: {
     min: 15000, ideal: 22000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 1.5, ideal: 3.0 }, // Premium retail needs 1.5-3 acres
-    examples: ['Target', 'TJ Maxx', 'Ross', 'Marshalls', 'HomeGoods', 'Ulta', 'Sephora', 'Trader Joe\'s', 'Whole Foods']
+    examples: ['Target', 'TJ Maxx / Marshalls / HomeGoods', 'Ross Dress for Less', 'Burlington', 'Ulta Beauty', "Trader Joe's", 'Whole Foods Market'] // From CRE Lot Size Reference
   },
   bank: {
     min: 10000, ideal: 15000,
@@ -203,25 +233,25 @@ const VPD_THRESHOLDS = {
     min: 10000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.3, ideal: 0.7 }, // Auto service needs 0.3-0.7 acres
-    examples: ['Jiffy Lube', 'AutoZone', "O'Reilly", 'Advance Auto Parts', 'Discount Tire', 'Take 5 Oil Change', 'Valvoline']
+    examples: ['Jiffy Lube / Take 5 Oil Change', "AutoZone / O'Reilly / Advance Auto", 'Tire Shop (Discount Tire)'] // From CRE Lot Size Reference
   },
   autoServicePremium: {
     min: 15000, ideal: 20000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.5, ideal: 1.0 }, // Premium auto service needs 0.5-1 acre
-    examples: ['Firestone', 'Goodyear', 'Caliber Collision', 'Christian Brothers Auto']
+    examples: ['Car Wash (Express Tunnel)', 'Collision Center / Body Shop', 'Auto Dealership (New Car)'] // From CRE Lot Size Reference
   },
   fitness: {
     min: 10000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 1.0, ideal: 2.0 }, // Fitness centers need 1-2 acres
-    examples: ['Planet Fitness', 'Crunch Fitness', 'Anytime Fitness', 'Gold\'s Gym']
+    examples: ['Planet Fitness', 'Chuck E. Cheese'] // From CRE Lot Size Reference
   },
   fitnessPremium: {
     min: 15000, ideal: 20000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 1.5, ideal: 3.0 }, // Premium fitness needs 1.5-3 acres
-    examples: ['LA Fitness', 'Lifetime Fitness', 'Orangetheory', 'F45', 'CrossFit', 'Equinox']
+    examples: ['LA Fitness / Esporta', 'Lifetime Fitness', "Dave & Buster's", 'Main Event', 'Topgolf'] // From CRE Lot Size Reference
   },
   medical: {
     min: 8000, ideal: 12000,
