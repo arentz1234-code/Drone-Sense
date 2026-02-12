@@ -1763,9 +1763,21 @@ function generateTopRecommendations(
       categoryScore -= 2;
     }
 
-    // Boost score if lot size is ideal for this concept
-    if (lotSizeAcres !== null && threshold.lotSize && lotSizeAcres >= threshold.lotSize.ideal) {
-      categoryScore += 1;
+    // Calculate lot size fit score
+    if (lotSizeAcres !== null && threshold.lotSize) {
+      const idealMax = threshold.lotSize.ideal * 1.5;
+      const workableMax = threshold.lotSize.ideal * 3;
+
+      if (lotSizeAcres >= threshold.lotSize.min && lotSizeAcres <= idealMax) {
+        // Optimal fit - lot is right-sized
+        categoryScore += 3;
+      } else if (lotSizeAcres > idealMax && lotSizeAcres <= workableMax) {
+        // Workable but larger than ideal
+        categoryScore += 1;
+      } else if (lotSizeAcres > workableMax) {
+        // Lot way too large for this concept - underutilized
+        categoryScore -= 2;
+      }
     }
 
     for (const example of availableExamples.slice(0, 3)) {
@@ -1786,30 +1798,68 @@ function generateTopRecommendations(
     for (const business of demoPreferred.slice(0, 5)) {
       // Check if not already in recommendations
       if (!recommendations.some(r => r.name.toLowerCase() === business.toLowerCase())) {
-        // Check if lot size can accommodate (estimate based on business type)
+        // Check if lot size can accommodate and calculate fit score
         let canFit = true;
+        let fitScore = 12; // Base score for demographic matches
+
         if (lotSizeAcres !== null) {
-          // Big box stores need 8+ acres
+          const businessLower = business.toLowerCase();
+
+          // Big box stores: min 8 acres, ideal 12 acres
           const bigBoxNames = ['walmart', 'target', 'costco', 'home depot', 'lowes', 'best buy', 'kohls'];
-          if (bigBoxNames.some(b => business.toLowerCase().includes(b)) && lotSizeAcres < 8) {
-            canFit = false;
+          if (bigBoxNames.some(b => businessLower.includes(b))) {
+            if (lotSizeAcres < 8) {
+              canFit = false;
+            } else {
+              const idealMax = 12 * 1.5; // 18 acres
+              const workableMax = 12 * 3; // 36 acres
+              if (lotSizeAcres <= idealMax) fitScore += 3;
+              else if (lotSizeAcres <= workableMax) fitScore += 1;
+              else fitScore -= 2;
+            }
           }
-          // Premium retail needs 1.5+ acres
-          const premiumRetailNames = ['tj maxx', 'ross', 'marshalls', 'homegoods', 'whole foods', 'trader joe'];
-          if (premiumRetailNames.some(b => business.toLowerCase().includes(b)) && lotSizeAcres < 1.5) {
-            canFit = false;
+          // Premium retail: min 1.5 acres, ideal 2.5 acres
+          else if (['tj maxx', 'ross', 'marshalls', 'homegoods', 'whole foods', 'trader joe'].some(b => businessLower.includes(b))) {
+            if (lotSizeAcres < 1.5) {
+              canFit = false;
+            } else {
+              const idealMax = 2.5 * 1.5; // 3.75 acres
+              const workableMax = 2.5 * 3; // 7.5 acres
+              if (lotSizeAcres <= idealMax) fitScore += 3;
+              else if (lotSizeAcres <= workableMax) fitScore += 1;
+              else fitScore -= 2;
+            }
           }
-          // Fitness centers need 1+ acre
-          const fitnessNames = ['planet fitness', 'la fitness', 'lifetime', 'crunch', 'gold'];
-          if (fitnessNames.some(b => business.toLowerCase().includes(b)) && lotSizeAcres < 1.0) {
-            canFit = false;
+          // Fitness centers: min 1 acre, ideal 1.5 acres
+          else if (['planet fitness', 'la fitness', 'lifetime', 'crunch', 'gold'].some(b => businessLower.includes(b))) {
+            if (lotSizeAcres < 1.0) {
+              canFit = false;
+            } else {
+              const idealMax = 1.5 * 1.5; // 2.25 acres
+              const workableMax = 1.5 * 3; // 4.5 acres
+              if (lotSizeAcres <= idealMax) fitScore += 3;
+              else if (lotSizeAcres <= workableMax) fitScore += 1;
+              else fitScore -= 2;
+            }
+          }
+          // Small format (QSR, coffee, banks): min 0.2 acres, ideal 0.4 acres
+          else if (['dunkin', 'starbucks', 'mcdonald', 'chick-fil-a', 'wendy', 'taco bell', 'bank', 'credit union', '7-eleven', 'wawa'].some(b => businessLower.includes(b))) {
+            if (lotSizeAcres < 0.2) {
+              canFit = false;
+            } else {
+              const idealMax = 0.4 * 1.5; // 0.6 acres
+              const workableMax = 0.4 * 3; // 1.2 acres
+              if (lotSizeAcres <= idealMax) fitScore += 3;
+              else if (lotSizeAcres <= workableMax) fitScore += 1;
+              else fitScore -= 2;
+            }
           }
         }
 
         if (canFit) {
           recommendations.push({
             name: business,
-            score: 12, // High priority for demographic matches
+            score: fitScore,
             reason: `Matches ${demographics.consumerProfile.type} consumer profile`
           });
         }
