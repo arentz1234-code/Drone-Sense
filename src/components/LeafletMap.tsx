@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Polygon, Popup, Tooltip, Marker, useMap, useMa
 import { LatLngExpression, Icon, DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Business as BaseBusiness, AccessPoint } from '@/types';
+import { getZoningColor, CATEGORY_COLORS } from '@/constants/zoning';
 
 export interface NearbyParcel {
   boundaries: Array<[number, number][]>;
@@ -375,16 +376,6 @@ export default function LeafletMap({
     }
   };
 
-  const getZoningColor = (zoning?: string) => {
-    if (!zoning) return '#3388ff';
-    const code = zoning.toUpperCase();
-    if (code.includes('COMMERCIAL') || code.startsWith('C')) return '#ff6b6b';
-    if (code.includes('RESIDENTIAL') || code.startsWith('R')) return '#4ecdc4';
-    if (code.includes('INDUSTRIAL') || code.startsWith('I') || code.startsWith('M')) return '#9b59b6';
-    if (code.includes('AGRICULTURAL') || code.startsWith('A')) return '#27ae60';
-    if (code.includes('MIXED')) return '#f39c12';
-    return '#3388ff';
-  };
 
   // Format owner name for display (truncate if too long)
   const formatOwnerName = (owner?: string): string => {
@@ -595,29 +586,35 @@ export default function LeafletMap({
 }
 
 // Zoning Legend Component
-export function ZoningLegend() {
-  const legendItems = [
-    { color: '#ff6b6b', label: 'Commercial' },
-    { color: '#4ecdc4', label: 'Residential' },
-    { color: '#9b59b6', label: 'Industrial' },
-    { color: '#27ae60', label: 'Agricultural' },
-    { color: '#f39c12', label: 'Mixed Use' },
+export function ZoningLegend({ expanded = false, onToggle }: { expanded?: boolean; onToggle?: () => void }) {
+  const categories = [
+    { color: CATEGORY_COLORS['Commercial'], label: 'Commercial' },
+    { color: CATEGORY_COLORS['Industrial'], label: 'Industrial' },
+    { color: CATEGORY_COLORS['Residential'], label: 'Residential' },
+    { color: CATEGORY_COLORS['Office'], label: 'Office' },
+    { color: CATEGORY_COLORS['Mixed-Use'], label: 'Mixed Use' },
+    { color: CATEGORY_COLORS['Agricultural'], label: 'Agricultural' },
   ];
 
   return (
-    <div className="absolute bottom-4 left-4 bg-[var(--bg-secondary)] rounded-lg p-3 shadow-lg border border-[var(--border-color)] z-[1000]">
-      <h4 className="text-xs font-medium text-[var(--text-primary)] mb-2">Zoning</h4>
-      <div className="space-y-1.5">
-        {legendItems.map((item) => (
-          <div key={item.label} className="flex items-center gap-2">
-            <div
-              className="w-3 h-3 rounded-sm"
-              style={{ backgroundColor: item.color }}
-            />
-            <span className="text-xs text-[var(--text-secondary)]">{item.label}</span>
-          </div>
-        ))}
-      </div>
+    <div className="absolute bottom-4 left-4 bg-[var(--bg-secondary)] rounded-lg shadow-lg border border-[var(--border-color)] z-[1000]">
+      <button
+        onClick={onToggle}
+        className="flex items-center gap-2 p-3 w-full text-left"
+      >
+        <h4 className="text-xs font-medium text-[var(--text-primary)]">Zoning</h4>
+        <span className="text-xs text-[var(--text-muted)]">{expanded ? '▼' : '▶'}</span>
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 space-y-1.5">
+          {categories.map((item) => (
+            <div key={item.label} className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: item.color }} />
+              <span className="text-xs text-[var(--text-secondary)]">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

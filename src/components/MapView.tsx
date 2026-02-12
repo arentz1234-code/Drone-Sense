@@ -4,6 +4,8 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { EnvironmentalRisk, SelectedParcel } from '@/types';
 import { NearbyParcel, AccessPoint } from './LeafletMap';
+import { getZoningColor, CATEGORY_COLORS } from '@/constants/zoning';
+import { PropertyPhotos } from './PropertyPhotos';
 
 // Re-export for backward compatibility
 export type { SelectedParcel };
@@ -196,12 +198,32 @@ export default function MapView({
         setError(data.message || 'Failed to fetch parcel data');
         setParcelData(null);
         onParcelDataChange?.(null);
+        onParcelSelect?.(null);
       } else {
         setParcelData(data);
         onParcelDataChange?.(data);
         // Set the suggested parcel APN from the geocoded location
         if (data.parcelInfo?.apn) {
           setSuggestedParcelAPN(data.parcelInfo.apn);
+        }
+
+        // Auto-select the parcel containing the pin
+        if (data.boundaries && data.boundaries.length > 0 && onParcelSelect) {
+          const selected: SelectedParcel = {
+            boundaries: data.boundaries,
+            parcelInfo: data.parcelInfo ? {
+              apn: data.parcelInfo.apn,
+              owner: data.parcelInfo.owner,
+              address: data.parcelInfo.address,
+              acres: data.parcelInfo.acres,
+              sqft: data.parcelInfo.sqft,
+              zoning: data.parcelInfo.zoning,
+              landUse: data.parcelInfo.landUse,
+            } : null,
+            coordinates,
+            isConfirmed: true,
+          };
+          onParcelSelect(selected);
         }
       }
     } catch (err) {
@@ -375,16 +397,6 @@ export default function MapView({
     }
   }, [onParcelSelect]);
 
-  const getZoningColor = (zoning?: string) => {
-    if (!zoning) return '#3388ff';
-    const code = zoning.toUpperCase();
-    if (code.includes('COMMERCIAL') || code.startsWith('C')) return '#ff6b6b';
-    if (code.includes('RESIDENTIAL') || code.startsWith('R')) return '#4ecdc4';
-    if (code.includes('INDUSTRIAL') || code.startsWith('I') || code.startsWith('M')) return '#9b59b6';
-    if (code.includes('AGRICULTURAL') || code.startsWith('A')) return '#27ae60';
-    if (code.includes('MIXED')) return '#f39c12';
-    return '#3388ff';
-  };
 
   // Show interactive map even without coordinates
   const showInteractiveEmptyState = !coordinates && interactiveMode;
@@ -614,6 +626,15 @@ export default function MapView({
         </div>
       )}
 
+      {/* Property Photos */}
+      {(selectedParcel?.coordinates || coordinates) && (
+        <PropertyPhotos
+          coordinates={selectedParcel?.coordinates || coordinates}
+          address={selectedParcel?.parcelInfo?.address || address}
+          apn={selectedParcel?.parcelInfo?.apn}
+        />
+      )}
+
       {/* Parcel Info */}
       {(parcelData || selectedParcel) && (
         <div className="mt-4 space-y-3">
@@ -676,10 +697,10 @@ export default function MapView({
           {/* Legend */}
           <div className="flex flex-wrap gap-2 text-xs">
             <span className="text-[var(--text-muted)]">Zoning:</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: '#ff6b6b'}}></span>Commercial</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: '#4ecdc4'}}></span>Residential</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: '#9b59b6'}}></span>Industrial</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: '#27ae60'}}></span>Agricultural</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: CATEGORY_COLORS['Commercial']}}></span>Commercial</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: CATEGORY_COLORS['Residential']}}></span>Residential</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: CATEGORY_COLORS['Industrial']}}></span>Industrial</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{backgroundColor: CATEGORY_COLORS['Agricultural']}}></span>Agricultural</span>
           </div>
 
           {/* Parcel Selection Legend */}

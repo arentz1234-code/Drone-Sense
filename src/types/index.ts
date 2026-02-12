@@ -178,6 +178,14 @@ export interface SelectedParcel {
   isConfirmed: boolean;
 }
 
+// Property photo types
+export interface PropertyPhoto {
+  url: string;
+  label: string;
+  type: 'streetView' | 'aerial' | 'map' | 'mapillary' | 'county';
+  available: boolean;
+}
+
 // Property data (for saving/loading)
 export interface PropertyData {
   images: string[];
