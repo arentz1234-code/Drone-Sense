@@ -26,7 +26,6 @@ export async function POST(request: Request) {
   const photos: PhotoResponse['photos'] = [];
 
   // 1. ArcGIS World Imagery (Aerial/Satellite) - FREE, no API key required
-  // Using ArcGIS REST API for static export
   const aerialUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${coordinates.lng - 0.001},${coordinates.lat - 0.0008},${coordinates.lng + 0.001},${coordinates.lat + 0.0008}&bboxSR=4326&size=600,400&format=jpg&f=image`;
 
   photos.push({
@@ -37,7 +36,6 @@ export async function POST(request: Request) {
   });
 
   // 2. OpenStreetMap Static Map - FREE, no API key required
-  // Using OSM static map service
   const osmUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${coordinates.lat},${coordinates.lng}&zoom=18&size=600x400&markers=${coordinates.lat},${coordinates.lng},red-pushpin`;
 
   photos.push({
@@ -47,29 +45,39 @@ export async function POST(request: Request) {
     available: true,
   });
 
-  // 3. Check Mapillary for street-level imagery (FREE, crowdsourced)
-  // Mapillary is free but coverage varies by location
-  try {
-    const mapillaryClientId = process.env.MAPILLARY_CLIENT_ID;
-    if (mapillaryClientId) {
-      const searchRadius = 50; // meters
-      const mapillaryUrl = `https://graph.mapillary.com/images?access_token=${mapillaryClientId}&fields=id,thumb_1024_url&bbox=${coordinates.lng - 0.0005},${coordinates.lat - 0.0005},${coordinates.lng + 0.0005},${coordinates.lat + 0.0005}&limit=1`;
+  // 3. Mapillary Street-Level Imagery - FREE (50k requests/day)
+  const mapillaryToken = process.env.MAPILLARY_ACCESS_TOKEN;
+  if (mapillaryToken) {
+    try {
+      // Search within ~100m radius for street-level imagery
+      const bbox = `${coordinates.lng - 0.001},${coordinates.lat - 0.001},${coordinates.lng + 0.001},${coordinates.lat + 0.001}`;
+      const mapillaryUrl = `https://graph.mapillary.com/images?fields=id,thumb_1024_url,captured_at,compass_angle&bbox=${bbox}&limit=1`;
 
-      const response = await fetch(mapillaryUrl);
+      const response = await fetch(mapillaryUrl, {
+        headers: {
+          'Authorization': `OAuth ${mapillaryToken}`,
+        },
+      });
+
       if (response.ok) {
         const data = await response.json();
-        if (data.data && data.data.length > 0 && data.data[0].thumb_1024_url) {
-          photos.push({
-            url: data.data[0].thumb_1024_url,
-            label: 'Street View (Mapillary)',
-            type: 'mapillary',
-            available: true,
-          });
+        if (data.data && data.data.length > 0) {
+          const image = data.data[0];
+          if (image.thumb_1024_url) {
+            photos.push({
+              url: image.thumb_1024_url,
+              label: 'Street View',
+              type: 'mapillary',
+              available: true,
+            });
+          }
         }
+      } else {
+        console.log('Mapillary API error:', response.status, await response.text());
       }
+    } catch (e) {
+      console.error('Mapillary fetch error:', e);
     }
-  } catch (e) {
-    // Mapillary not available, continue without it
   }
 
   return NextResponse.json({ photos });
