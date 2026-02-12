@@ -517,6 +517,7 @@ async function fetchParcelFromFloridaCountyGIS(lat: number, lng: number): Promis
     url.searchParams.set('where', '1=1');
     url.searchParams.set('geometry', `${lng},${lat}`);
     url.searchParams.set('geometryType', 'esriGeometryPoint');
+    url.searchParams.set('inSR', '4326');  // Input coordinates are WGS84
     url.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
     url.searchParams.set('outFields', '*');
     url.searchParams.set('returnGeometry', 'true');

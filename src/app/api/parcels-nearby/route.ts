@@ -368,6 +368,7 @@ async function fetchParcelsFromFloridaCounty(bounds: ParcelBounds, county: Flori
     url.searchParams.set('where', '1=1');
     url.searchParams.set('geometry', envelope);
     url.searchParams.set('geometryType', 'esriGeometryEnvelope');
+    url.searchParams.set('inSR', '4326');  // Input coordinates are WGS84
     url.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
     url.searchParams.set('outFields', '*');
     url.searchParams.set('returnGeometry', 'true');
