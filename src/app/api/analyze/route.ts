@@ -143,31 +143,31 @@ const VPD_THRESHOLDS = {
     min: 15000, ideal: 25000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.5, ideal: 1.5 }, // Gas stations need 0.5-1.5 acres
-    examples: ['Shell', 'BP', 'Chevron', 'RaceTrac', "Buc-ee's", 'QuikTrip', 'Wawa', 'Sheetz']
+    examples: ["Buc-ee's", 'QuikTrip (QT)', 'RaceTrac', 'Wawa', 'Sheetz', '7-Eleven / Circle K (Standard)'] // From CRE Lot Size Reference
   },
   fastFoodValue: {
     min: 12000, ideal: 18000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 0.4, ideal: 0.8 }, // Fast food needs 0.4-0.8 acres for building + drive-thru
-    examples: ["Hardee's", "McDonald's", "Wendy's", 'Taco Bell', "Popeyes", "Little Caesars", "Checkers/Rally's", "Krystal", "Captain D's", "Cook Out"]
+    examples: ["McDonald's", "Wendy's", 'Taco Bell', "Popeyes", "Burger King", "Sonic Drive-In"] // From CRE Lot Size Reference
   },
   fastFoodPremium: {
     min: 15000, ideal: 22000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.5, ideal: 1.0 }, // Premium fast food needs 0.5-1 acre
-    examples: ["Chick-fil-A", "Raising Cane's", "Five Guys", "Shake Shack", "In-N-Out", "Whataburger", "Culver's", "PDQ"]
+    examples: ["Chick-fil-A", "Raising Cane's", "Whataburger", "Culver's", "Zaxby's", "Popeyes"] // From CRE Lot Size Reference
   },
   casualDiningValue: {
     min: 12000, ideal: 18000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.8, ideal: 1.5 }, // Casual dining needs 0.8-1.5 acres
-    examples: ["Applebee's", "IHOP", "Denny's", "Waffle House", "Cracker Barrel", "Golden Corral", "Huddle House"]
+    examples: ["Chili's / Applebee's", "IHOP / Denny's", "Waffle House", "Cracker Barrel"] // From CRE Lot Size Reference
   },
   casualDiningPremium: {
     min: 15000, ideal: 20000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 1.0, ideal: 2.0 }, // Premium casual dining needs 1-2 acres
-    examples: ["Olive Garden", "Red Lobster", "Texas Roadhouse", "Outback", "The Cheesecake Factory", "P.F. Chang's", "BJ's Restaurant"]
+    examples: ["Olive Garden / Red Lobster", "Texas Roadhouse", "Buffalo Wild Wings"] // From CRE Lot Size Reference
   },
   coffeeValue: {
     min: 10000, ideal: 15000,
@@ -215,19 +215,19 @@ const VPD_THRESHOLDS = {
     min: 10000, ideal: 15000,
     incomePreference: ['moderate', 'middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.2, ideal: 0.5 }, // Banks need 0.2-0.5 acres
-    examples: ['Chase', 'Bank of America', 'Wells Fargo', 'Regions', 'PNC', 'Truist', 'TD Bank']
+    examples: ['Bank Branch (Chase, Wells Fargo, etc.)'] // From CRE Lot Size Reference
   },
   financialServices: {
     min: 6000, ideal: 10000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 0.1, ideal: 0.3 }, // Financial services need 0.1-0.3 acres
-    examples: ['Check Into Cash', 'Advance America', 'ACE Cash Express', 'Check \'n Go', 'Title Max', 'Rent-A-Center', 'Aaron\'s']
+    examples: ["Aaron's / Rent-A-Center"] // From CRE Lot Size Reference
   },
   pharmacy: {
     min: 12000, ideal: 18000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.8, ideal: 1.5 }, // Pharmacies need 0.8-1.5 acres (with drive-thru)
-    examples: ['CVS', 'Walgreens', 'Rite Aid']
+    examples: ['CVS Pharmacy', 'Walgreens'] // From CRE Lot Size Reference
   },
   autoService: {
     min: 10000, ideal: 15000,
@@ -264,379 +264,379 @@ const VPD_THRESHOLDS = {
     min: 15000, ideal: 25000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.4, ideal: 0.8 }, // Express car wash needs 0.4-0.8 acres
-    examples: ['Zips Car Wash', 'Take 5 Car Wash', 'Splash Car Wash', 'Goo Goo Express', 'Whistle Express']
+    examples: ['Car Wash (Express Tunnel)'] // From CRE Lot Size Reference
   },
   carWashFull: {
     min: 12000, ideal: 20000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.8, ideal: 1.5 }, // Full service car wash needs 0.8-1.5 acres
-    examples: ['Mister Car Wash', 'Delta Sonic', 'Autobell', 'Flagship Carwash', 'Palms Car Wash']
+    examples: ['Car Wash (Express Tunnel)'] // From CRE Lot Size Reference - same category
   },
   // ============ AUTOMOTIVE ============
   carDealershipUsed: {
     min: 15000, ideal: 25000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 1.5, ideal: 3.0 }, // Used car lots need 1.5-3 acres
-    examples: ['CarMax', 'Carvana', 'DriveTime', 'AutoNation USA', 'Enterprise Car Sales']
+    examples: ['Auto Dealership (New Car)'] // From CRE Lot Size Reference
   },
   carDealershipNew: {
     min: 20000, ideal: 30000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 3.0, ideal: 6.0 }, // New car dealerships need 3-6 acres
-    examples: ['Toyota', 'Honda', 'Ford', 'Chevrolet', 'BMW', 'Mercedes-Benz', 'Lexus']
+    examples: ['Auto Dealership (New Car)'] // From CRE Lot Size Reference
   },
   tireShop: {
     min: 10000, ideal: 18000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.3, ideal: 0.6 }, // Tire shops need 0.3-0.6 acres
-    examples: ['Discount Tire', 'Tire Kingdom', 'Big O Tires', 'Firestone', 'NTB', 'Mavis Tire']
+    examples: ['Tire Shop (Discount Tire)'] // From CRE Lot Size Reference
   },
   oilChange: {
     min: 10000, ideal: 18000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.15, ideal: 0.3 }, // Oil change shops need 0.15-0.3 acres
-    examples: ['Jiffy Lube', 'Valvoline', 'Take 5 Oil Change', 'Express Oil Change', 'Grease Monkey']
+    examples: ['Jiffy Lube / Take 5 Oil Change'] // From CRE Lot Size Reference
   },
   autoBodyShop: {
     min: 8000, ideal: 15000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.5, ideal: 1.0 }, // Body shops need 0.5-1 acre
-    examples: ['Caliber Collision', 'ABRA Auto Body', 'Gerber Collision', 'Service King', 'Maaco']
+    examples: ['Collision Center / Body Shop'] // From CRE Lot Size Reference
   },
   // ============ HOTELS & LODGING ============
   hotelBudget: {
     min: 15000, ideal: 25000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 1.0, ideal: 2.0 }, // Budget hotels need 1-2 acres
-    examples: ['Motel 6', 'Super 8', 'Red Roof Inn', 'Days Inn', 'Econo Lodge', 'Americas Best Value']
+    examples: ['Economy Hotel (Holiday Inn Express, 80 keys)'] // From CRE Lot Size Reference
   },
   hotelMidScale: {
     min: 18000, ideal: 28000,
     incomePreference: ['moderate', 'middle'] as const,
     lotSize: { min: 1.5, ideal: 2.5 }, // Mid-scale hotels need 1.5-2.5 acres
-    examples: ['Hampton Inn', 'Holiday Inn Express', 'La Quinta', 'Best Western', 'Comfort Inn', 'Fairfield Inn']
+    examples: ['Select Service Hotel (Hampton Inn, 80-120 keys)'] // From CRE Lot Size Reference
   },
   hotelUpscale: {
     min: 20000, ideal: 30000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 2.0, ideal: 4.0 }, // Upscale hotels need 2-4 acres
-    examples: ['Marriott', 'Hilton', 'Hyatt', 'Sheraton', 'DoubleTree', 'Embassy Suites', 'Courtyard']
+    examples: ['Full-Service Hotel (Marriott, 200+ keys)'] // From CRE Lot Size Reference
   },
   // ============ STORAGE ============
   selfStorage: {
     min: 8000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 2.0, ideal: 5.0 }, // Self storage needs 2-5 acres
-    examples: ['Public Storage', 'Extra Space Storage', 'CubeSmart', 'Life Storage', 'U-Haul', 'StorQuest']
+    examples: ['Self-Storage Facility', 'U-Haul / Public Storage (multi-story)'] // From CRE Lot Size Reference
   },
   rvBoatStorage: {
     min: 5000, ideal: 10000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 3.0, ideal: 8.0 }, // RV/Boat storage needs 3-8 acres
-    examples: ['Boat & RV Storage', 'Good Neighbor RV', 'SecurCare RV Storage']
+    examples: ['Self-Storage Facility'] // From CRE Lot Size Reference - closest match
   },
   // ============ CHILDCARE & EDUCATION ============
   daycare: {
     min: 8000, ideal: 12000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.5, ideal: 1.0 }, // Daycares need 0.5-1 acre
-    examples: ['KinderCare', 'Bright Horizons', 'The Learning Experience', 'Primrose Schools', 'Kiddie Academy', 'Goddard School']
+    examples: ['Childcare Center (KinderCare, Primrose)'] // From CRE Lot Size Reference
   },
   tutoringCenter: {
     min: 8000, ideal: 12000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.1, ideal: 0.25 }, // Tutoring centers need 0.1-0.25 acres (strip mall)
-    examples: ['Kumon', 'Mathnasium', 'Sylvan Learning', 'Huntington Learning', 'Club Z', 'Eye Level']
+    examples: ['Childcare Center (KinderCare, Primrose)'] // From CRE Lot Size Reference - closest education match
   },
   tradeSchool: {
     min: 10000, ideal: 18000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 1.0, ideal: 2.5 }, // Trade schools need 1-2.5 acres
-    examples: ['UTI', 'Lincoln Tech', 'Paul Mitchell', 'Aveda Institute', 'Empire Beauty School']
+    examples: ['Small Industrial / Flex Space'] // From CRE Lot Size Reference - similar footprint
   },
   // ============ PET SERVICES ============
   petStore: {
     min: 12000, ideal: 18000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.8, ideal: 1.5 }, // Pet stores need 0.8-1.5 acres
-    examples: ['PetSmart', 'Petco', 'Pet Supplies Plus', 'Hollywood Feed', 'Chuck & Don\'s']
+    examples: ['PetSmart / Petco'] // From CRE Lot Size Reference
   },
   vetClinic: {
     min: 8000, ideal: 12000,
     incomePreference: ['moderate', 'middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.25, ideal: 0.5 }, // Vet clinics need 0.25-0.5 acres
-    examples: ['Banfield Pet Hospital', 'VCA Animal Hospital', 'BluePearl', 'Veterinary Emergency Group']
+    examples: ['PetSmart / Petco'] // From CRE Lot Size Reference - often co-located
   },
   petGrooming: {
     min: 6000, ideal: 10000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.1, ideal: 0.2 }, // Pet grooming needs 0.1-0.2 acres
-    examples: ['PetSmart Grooming', 'Petco Grooming', 'Dogtopia', 'Scenthound', 'Aussie Pet Mobile']
+    examples: ['PetSmart / Petco'] // From CRE Lot Size Reference - grooming services
   },
   doggyDaycare: {
     min: 8000, ideal: 12000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.5, ideal: 1.0 }, // Doggy daycare needs 0.5-1 acre
-    examples: ['Camp Bow Wow', 'Dogtopia', 'Wag Hotels', 'K9 Resorts', 'Central Bark']
+    examples: ['PetSmart / Petco'] // From CRE Lot Size Reference - doggy daycare services
   },
   // ============ PERSONAL SERVICES ============
   hairSalon: {
     min: 6000, ideal: 10000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.1, ideal: 0.2 }, // Hair salons need 0.1-0.2 acres
-    examples: ['Great Clips', 'Sport Clips', 'Supercuts', 'Cost Cutters', 'Fantastic Sams']
+    examples: ['Ulta Beauty'] // From CRE Lot Size Reference - closest match
   },
   salonPremium: {
     min: 10000, ideal: 15000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.15, ideal: 0.3 }, // Premium salons need 0.15-0.3 acres
-    examples: ['Ulta Salon', 'Drybar', 'Madison Reed', 'Regis Salons', 'JC Penney Salon']
+    examples: ['Ulta Beauty'] // From CRE Lot Size Reference
   },
   nailSalon: {
     min: 6000, ideal: 10000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.08, ideal: 0.15 }, // Nail salons need 0.08-0.15 acres
-    examples: ['Nail Garden', 'Regal Nails', 'Tips & Toes', 'Polished Perfect']
+    examples: ['Ulta Beauty'] // From CRE Lot Size Reference - closest match
   },
   spa: {
     min: 10000, ideal: 15000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.15, ideal: 0.3 }, // Spas need 0.15-0.3 acres
-    examples: ['Massage Envy', 'Hand & Stone', 'European Wax Center', 'Elements Massage', 'Spavia']
+    examples: ['Ulta Beauty'] // From CRE Lot Size Reference - beauty services
   },
   barbershop: {
     min: 5000, ideal: 8000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.05, ideal: 0.1 }, // Barbershops need 0.05-0.1 acres
-    examples: ['Floyd\'s 99 Barbershop', 'The Boardroom', 'Roosters', 'V\'s Barbershop']
+    examples: ['Ulta Beauty'] // From CRE Lot Size Reference - closest personal care match
   },
   tattooShop: {
     min: 5000, ideal: 10000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.05, ideal: 0.1 }, // Tattoo shops need 0.05-0.1 acres
-    examples: ['Ink & Iron', 'Studio 21', 'Sacred Art', 'Black Ink']
+    examples: ['Small Industrial / Flex Space'] // From CRE Lot Size Reference - similar footprint
   },
   // ============ RETAIL SPECIALTY ============
   cellPhoneStore: {
     min: 10000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.08, ideal: 0.15 }, // Cell phone stores need 0.08-0.15 acres
-    examples: ['Verizon', 'AT&T', 'T-Mobile', 'Sprint', 'Cricket', 'Metro by T-Mobile', 'Boost Mobile']
+    examples: ['Best Buy'] // From CRE Lot Size Reference - electronics retail
   },
   liquorStore: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.15, ideal: 0.3 }, // Liquor stores need 0.15-0.3 acres
-    examples: ['Total Wine', 'BevMo', 'ABC Fine Wine & Spirits', 'Spec\'s', 'Twin Liquors']
+    examples: ['Dollar General', 'Dollar Tree / Family Dollar'] // From CRE Lot Size Reference - small retail
   },
   tobaccoVape: {
     min: 6000, ideal: 10000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 0.05, ideal: 0.1 }, // Tobacco/vape shops need 0.05-0.1 acres
-    examples: ['Smoker Friendly', 'Wild Bill\'s Tobacco', 'Tobacco Plus', 'VaporFi']
+    examples: ['Dollar General'] // From CRE Lot Size Reference - small retail format
   },
   pawnShop: {
     min: 6000, ideal: 10000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 0.1, ideal: 0.2 }, // Pawn shops need 0.1-0.2 acres
-    examples: ['Cash America', 'First Cash', 'EZCorp', 'SuperPawn', 'Cash Pawn']
+    examples: ["Aaron's / Rent-A-Center"] // From CRE Lot Size Reference - similar market
   },
   mattressStore: {
     min: 10000, ideal: 15000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.2, ideal: 0.4 }, // Mattress stores need 0.2-0.4 acres
-    examples: ['Mattress Firm', 'Sleep Number', 'Tempur-Pedic', 'Ashley Sleep', 'Purple']
+    examples: ['Mattress Firm / Sleep Number'] // From CRE Lot Size Reference
   },
   furnitureValue: {
     min: 12000, ideal: 18000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 1.0, ideal: 2.0 }, // Value furniture stores need 1-2 acres
-    examples: ['Big Lots', 'At Home', 'Tuesday Morning', 'Rooms To Go', 'American Freight']
+    examples: ["Aaron's / Rent-A-Center", 'Burlington'] // From CRE Lot Size Reference
   },
   furniturePremium: {
     min: 15000, ideal: 22000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 1.5, ideal: 3.0 }, // Premium furniture stores need 1.5-3 acres
-    examples: ['Ashley Furniture', 'Pottery Barn', 'Crate & Barrel', 'West Elm', 'Ethan Allen', 'Restoration Hardware']
+    examples: ['TJ Maxx / Marshalls / HomeGoods', 'Ross Dress for Less'] // From CRE Lot Size Reference
   },
   // ============ SERVICES ============
   laundromat: {
     min: 5000, ideal: 8000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 0.15, ideal: 0.3 }, // Laundromats need 0.15-0.3 acres
-    examples: ['Speed Queen', 'Wash House', 'Spin Cycle', 'Clean Laundry']
+    examples: ['Dollar General'] // From CRE Lot Size Reference - similar small retail format
   },
   dryCleaner: {
     min: 6000, ideal: 10000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.1, ideal: 0.2 }, // Dry cleaners need 0.1-0.2 acres
-    examples: ['Martinizing', 'ZIPS Dry Cleaners', 'Tide Cleaners', 'Lapels']
+    examples: ['Dollar General'] // From CRE Lot Size Reference - similar small retail format
   },
   shippingStore: {
     min: 8000, ideal: 12000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.08, ideal: 0.15 }, // Shipping stores need 0.08-0.15 acres
-    examples: ['The UPS Store', 'FedEx Office', 'Postal Connections', 'PostNet', 'Pak Mail']
+    examples: ['Staples / Office Depot'] // From CRE Lot Size Reference
   },
   printCopy: {
     min: 8000, ideal: 12000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.1, ideal: 0.2 }, // Print shops need 0.1-0.2 acres
-    examples: ['FedEx Office', 'Staples', 'Office Depot', 'AlphaGraphics', 'Minuteman Press']
+    examples: ['Staples / Office Depot'] // From CRE Lot Size Reference
   },
   // ============ FOOD & BEVERAGE SPECIALTY ============
   pizzaDelivery: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.1, ideal: 0.2 }, // Pizza delivery needs 0.1-0.2 acres
-    examples: ['Domino\'s', 'Pizza Hut', 'Papa John\'s', 'Little Caesars', 'Marco\'s Pizza', 'Hungry Howie\'s']
+    examples: ["McDonald's", "Wendy's", "Taco Bell"] // From CRE Lot Size Reference - similar QSR format
   },
   pizzaSitDown: {
     min: 10000, ideal: 15000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.4, ideal: 0.8 }, // Sit-down pizza needs 0.4-0.8 acres
-    examples: ['Mellow Mushroom', 'Blaze Pizza', 'MOD Pizza', 'Pieology', 'Your Pie', '&pizza']
+    examples: ['Panera Bread', 'Chipotle'] // From CRE Lot Size Reference - fast-casual similar format
   },
   iceCream: {
     min: 8000, ideal: 12000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.08, ideal: 0.15 }, // Ice cream shops need 0.08-0.15 acres
-    examples: ['Baskin-Robbins', 'Cold Stone Creamery', 'Dairy Queen', 'Marble Slab', 'Bruster\'s', 'Handel\'s']
+    examples: ["Dunkin'", "Starbucks (Drive-Thru)"] // From CRE Lot Size Reference - similar small format
   },
   frozenYogurt: {
     min: 8000, ideal: 12000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.08, ideal: 0.15 }, // Frozen yogurt needs 0.08-0.15 acres
-    examples: ['Menchie\'s', 'sweetFrog', 'Orange Leaf', 'TCBY', 'Pinkberry', 'Yogurtland']
+    examples: ["Dunkin'", "Starbucks (Drive-Thru)"] // From CRE Lot Size Reference - similar small format
   },
   smoothieJuice: {
     min: 10000, ideal: 15000,
     incomePreference: ['moderate', 'middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.1, ideal: 0.2 }, // Smoothie/juice bars need 0.1-0.2 acres
-    examples: ['Smoothie King', 'Jamba', 'Tropical Smoothie', 'Juice It Up!', 'Clean Juice', 'Nekter']
+    examples: ["Dunkin'", "Starbucks (Drive-Thru)"] // From CRE Lot Size Reference - similar format
   },
   donutBakery: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.1, ideal: 0.2 }, // Donut/bakery shops need 0.1-0.2 acres
-    examples: ['Krispy Kreme', 'Dunkin\'', 'Duck Donuts', 'Shipley Do-Nuts', 'Hurts Donut', 'Cinnabon']
+    examples: ["Dunkin'", 'Panera Bread'] // From CRE Lot Size Reference
   },
   sportsBar: {
     min: 12000, ideal: 18000,
     incomePreference: ['moderate', 'middle'] as const,
     lotSize: { min: 0.6, ideal: 1.2 }, // Sports bars need 0.6-1.2 acres
-    examples: ['Buffalo Wild Wings', 'Hooters', 'Twin Peaks', 'Walk-On\'s', 'Tilted Kilt', 'Miller\'s Ale House']
+    examples: ['Buffalo Wild Wings'] // From CRE Lot Size Reference
   },
   breweryTaproom: {
     min: 10000, ideal: 15000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.4, ideal: 1.0 }, // Breweries/taprooms need 0.4-1 acre
-    examples: ['World of Beer', 'Yard House', 'BJ\'s Brewhouse', 'Gordon Biersch', 'Rock Bottom']
+    examples: ['Buffalo Wild Wings', "Chili's / Applebee's"] // From CRE Lot Size Reference - similar sit-down format
   },
   wineBar: {
     min: 8000, ideal: 12000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.1, ideal: 0.25 }, // Wine bars need 0.1-0.25 acres
-    examples: ['Cooper\'s Hawk', 'The Wine Loft', 'Vino Volo', 'Total Wine Bar']
+    examples: ['Buffalo Wild Wings'] // From CRE Lot Size Reference - similar format
   },
   mexicanCasual: {
     min: 12000, ideal: 18000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.4, ideal: 0.8 }, // Casual Mexican needs 0.4-0.8 acres
-    examples: ['Taco Bell', 'Del Taco', 'Taco Cabana', 'Taco Bueno', 'Qdoba', 'Moe\'s']
+    examples: ['Taco Bell', 'Chipotle'] // From CRE Lot Size Reference
   },
   mexicanSitDown: {
     min: 12000, ideal: 18000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.8, ideal: 1.5 }, // Sit-down Mexican needs 0.8-1.5 acres
-    examples: ['Chili\'s', 'On The Border', 'Chuy\'s', 'El Fenix', 'Abuelo\'s', 'El Torito']
+    examples: ["Chili's / Applebee's", "Olive Garden / Red Lobster"] // From CRE Lot Size Reference - similar casual dining
   },
   asianFastCasual: {
     min: 10000, ideal: 15000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.3, ideal: 0.6 }, // Asian fast casual needs 0.3-0.6 acres
-    examples: ['Panda Express', 'Pei Wei', 'Noodles & Company', 'Pick Up Stix', 'Teriyaki Madness']
+    examples: ['Panda Express', 'Chipotle'] // From CRE Lot Size Reference
   },
   asianSitDown: {
     min: 12000, ideal: 18000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.6, ideal: 1.2 }, // Sit-down Asian needs 0.6-1.2 acres
-    examples: ['P.F. Chang\'s', 'Benihana', 'Kona Grill', 'RA Sushi', 'Seasons 52']
+    examples: ["Olive Garden / Red Lobster", 'Texas Roadhouse'] // From CRE Lot Size Reference - similar casual dining
   },
   // ============ ENTERTAINMENT ============
   movieTheater: {
     min: 20000, ideal: 30000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 4.0, ideal: 8.0 }, // Movie theaters need 4-8 acres
-    examples: ['AMC', 'Regal', 'Cinemark', 'Marcus Theatres', 'Alamo Drafthouse', 'Studio Movie Grill']
+    examples: ['Movie Theater (AMC/Regal, 12-16 screen)'] // From CRE Lot Size Reference
   },
   bowlingAlley: {
     min: 12000, ideal: 18000,
     incomePreference: ['moderate', 'middle'] as const,
     lotSize: { min: 2.0, ideal: 4.0 }, // Bowling alleys need 2-4 acres
-    examples: ['Bowlero', 'AMF', 'Main Event', 'Lucky Strike', 'Round1', 'Dave & Buster\'s']
+    examples: ['Main Event', "Dave & Buster's"] // From CRE Lot Size Reference
   },
   arcadeFEC: {
     min: 15000, ideal: 22000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 1.5, ideal: 3.0 }, // Family entertainment centers need 1.5-3 acres
-    examples: ['Dave & Buster\'s', 'Main Event', 'Round1', 'Chuck E. Cheese', 'Scene75', 'Andretti']
+    examples: ["Dave & Buster's", 'Main Event', 'Chuck E. Cheese'] // From CRE Lot Size Reference
   },
   trampolinePark: {
     min: 12000, ideal: 18000,
     incomePreference: ['moderate', 'middle'] as const,
     lotSize: { min: 1.5, ideal: 2.5 }, // Trampoline parks need 1.5-2.5 acres
-    examples: ['Sky Zone', 'Urban Air', 'Launch Trampoline', 'Altitude', 'Rockin\' Jump', 'Defy']
+    examples: ["Dave & Buster's", 'Main Event', 'Chuck E. Cheese'] // From CRE Lot Size Reference - family entertainment
   },
   miniGolf: {
     min: 10000, ideal: 15000,
     incomePreference: ['moderate', 'middle'] as const,
     lotSize: { min: 1.0, ideal: 2.0 }, // Mini golf needs 1-2 acres
-    examples: ['Topgolf', 'Drive Shack', 'PopStroke', 'Puttshack', 'Monster Mini Golf']
+    examples: ['Topgolf'] // From CRE Lot Size Reference
   },
   martialArts: {
     min: 6000, ideal: 10000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.15, ideal: 0.3 }, // Martial arts studios need 0.15-0.3 acres
-    examples: ['ATA Martial Arts', 'Premier Martial Arts', 'TITLE Boxing', '9Round', 'UFC Gym']
+    examples: ['Planet Fitness', 'LA Fitness / Esporta'] // From CRE Lot Size Reference - fitness category
   },
   yogaPilates: {
     min: 8000, ideal: 12000,
     incomePreference: ['middle', 'upper-middle', 'high'] as const,
     lotSize: { min: 0.1, ideal: 0.2 }, // Yoga/Pilates studios need 0.1-0.2 acres
-    examples: ['CorePower Yoga', 'Club Pilates', 'Pure Barre', 'YogaWorks', 'Bikram Yoga']
+    examples: ['Planet Fitness', 'Lifetime Fitness'] // From CRE Lot Size Reference - fitness category
   },
   danceStudio: {
     min: 6000, ideal: 10000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.15, ideal: 0.3 }, // Dance studios need 0.15-0.3 acres
-    examples: ['Arthur Murray', 'Fred Astaire', 'Dance With Me', 'Jazzercise']
+    examples: ['Planet Fitness'] // From CRE Lot Size Reference - fitness category
   },
   // ============ GROCERY ============
   groceryValue: {
     min: 15000, ideal: 22000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 1.5, ideal: 3.0 }, // Value grocers need 1.5-3 acres
-    examples: ['ALDI', 'Lidl', 'Save-A-Lot', 'WinCo', 'Food 4 Less', 'Grocery Outlet']
+    examples: ['Aldi', 'Lidl'] // From CRE Lot Size Reference
   },
   groceryMid: {
     min: 18000, ideal: 28000,
     incomePreference: ['moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 3.0, ideal: 5.0 }, // Mid-tier grocers need 3-5 acres
-    examples: ['Kroger', 'Publix', 'H-E-B', 'Albertsons', 'Safeway', 'Food Lion', 'Harris Teeter']
+    examples: ['Kroger', 'Publix'] // From CRE Lot Size Reference
   },
   groceryPremium: {
     min: 20000, ideal: 30000,
     incomePreference: ['upper-middle', 'high'] as const,
     lotSize: { min: 2.0, ideal: 4.0 }, // Premium grocers need 2-4 acres
-    examples: ['Whole Foods', 'Trader Joe\'s', 'Sprouts', 'Fresh Market', 'Natural Grocers']
+    examples: ['Whole Foods Market', "Trader Joe's", 'Sprouts Farmers Market'] // From CRE Lot Size Reference
   },
   // ============ TRUCK STOP ============
   truckStop: {
     min: 25000, ideal: 40000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 5.0, ideal: 15.0 }, // Truck stops need 5-15 acres
-    examples: ['Pilot Flying J', 'Love\'s Travel Stops', 'TA Travel Centers', 'Petro', 'Sapp Bros']
+    examples: ["Love's Travel Stop", 'Pilot / Flying J'] // From CRE Lot Size Reference
   },
   // ============ COLLEGE TOWN FAVORITES ============
   // These businesses thrive in college markets despite low census income
@@ -644,31 +644,31 @@ const VPD_THRESHOLDS = {
     min: 10000, ideal: 18000,
     incomePreference: ['low', 'moderate', 'middle', 'upper-middle'] as const, // Works across income levels in college towns
     lotSize: { min: 0.4, ideal: 0.8 },
-    examples: ["Chick-fil-A", "Chipotle", "Raising Cane's", "Wingstop", "Panda Express", "Moe's Southwest Grill", "Blaze Pizza", "Five Guys"]
+    examples: ["Chick-fil-A", "Chipotle", "Raising Cane's", "Wingstop", "Panda Express", "Panera Bread", "Taco Bell", "Wendy's"] // From CRE Lot Size Reference
   },
   collegeTownCoffee: {
     min: 8000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle', 'upper-middle'] as const,
     lotSize: { min: 0.2, ideal: 0.5 },
-    examples: ["Starbucks", "Dunkin'", "Panera Bread", "McAlister's Deli", "Scooters Coffee", "Dutch Bros"]
+    examples: ["Starbucks (Drive-Thru)", "Dunkin'", "Panera Bread"] // From CRE Lot Size Reference
   },
   collegeTownLateNight: {
     min: 8000, ideal: 12000,
     incomePreference: ['low', 'moderate'] as const,
     lotSize: { min: 0.3, ideal: 0.6 },
-    examples: ["Insomnia Cookies", "Waffle House", "Cookout", "Taco Bell", "Jimmy John's", "Domino's", "Papa John's"]
+    examples: ["Waffle House", "Taco Bell", "McDonald's", "Wendy's", "Popeyes"] // From CRE Lot Size Reference
   },
   collegeTownServices: {
     min: 6000, ideal: 10000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.2, ideal: 0.5 },
-    examples: ["Planet Fitness", "Urgent Care", "Phone Repair", "Print/Copy Shop", "Great Clips", "Sport Clips"]
+    examples: ["Planet Fitness", "McDonald's", "Wendy's", "Chick-fil-A"] // From CRE Lot Size Reference
   },
   collegeTownEntertainment: {
     min: 10000, ideal: 15000,
     incomePreference: ['low', 'moderate', 'middle'] as const,
     lotSize: { min: 0.5, ideal: 1.5 },
-    examples: ["Buffalo Wild Wings", "Sports Bar", "Brewpub", "Topgolf", "Dave & Buster's", "Main Event"]
+    examples: ["Buffalo Wild Wings", "Topgolf", "Dave & Buster's", "Main Event", "Chuck E. Cheese"] // From CRE Lot Size Reference
   },
 };
 
