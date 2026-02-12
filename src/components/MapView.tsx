@@ -78,6 +78,24 @@ function debounce<T extends unknown[], R>(fn: (...args: T) => R, delay: number):
   };
 }
 
+// Point-in-polygon check using ray casting algorithm
+function isPointInPolygon(point: { lat: number; lng: number }, polygon: [number, number][]): boolean {
+  const x = point.lat;
+  const y = point.lng;
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0], yi = polygon[i][1];
+    const xj = polygon[j][0], yj = polygon[j][1];
+
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
 export default function MapView({
   coordinates,
   address,
@@ -302,12 +320,37 @@ export default function MapView({
         setNearbyParcels(data.parcels);
         setParcelSource(data.source || null);
 
-        // If we have a suggested parcel APN from the point query, try to find it in nearby parcels
-        if (suggestedParcelAPN && data.parcels.length > 0) {
-          const foundSuggested = data.parcels.find((p: NearbyParcel) => p.apn === suggestedParcelAPN);
-          if (!foundSuggested && parcelData?.parcelInfo?.apn) {
-            // If we can't find by APN, try to identify the parcel at center coordinates
-            // This could be enhanced with point-in-polygon check
+        // Auto-select the parcel containing the pin using point-in-polygon
+        if (data.parcels.length > 0 && !selectedParcel?.isConfirmed) {
+          const containingParcel = data.parcels.find((p: NearbyParcel) => {
+            if (!p.boundaries || p.boundaries.length === 0) return false;
+            return p.boundaries.some((boundary: [number, number][]) =>
+              isPointInPolygon(coordinates, boundary)
+            );
+          });
+
+          if (containingParcel && onParcelSelect) {
+            // Calculate centroid for coordinates
+            const firstBoundary = containingParcel.boundaries[0];
+            const centroidLat = firstBoundary.reduce((sum: number, c: [number, number]) => sum + c[0], 0) / firstBoundary.length;
+            const centroidLng = firstBoundary.reduce((sum: number, c: [number, number]) => sum + c[1], 0) / firstBoundary.length;
+            const sqft = containingParcel.acres ? Math.round(containingParcel.acres * 43560) : undefined;
+
+            const selected: SelectedParcel = {
+              boundaries: containingParcel.boundaries,
+              parcelInfo: {
+                apn: containingParcel.apn,
+                owner: containingParcel.owner,
+                address: containingParcel.address,
+                acres: containingParcel.acres,
+                sqft,
+                zoning: containingParcel.zoning,
+                landUse: containingParcel.landUse,
+              },
+              coordinates: { lat: centroidLat, lng: centroidLng },
+              isConfirmed: true,
+            };
+            onParcelSelect(selected);
           }
         }
       }
