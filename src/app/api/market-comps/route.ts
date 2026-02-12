@@ -12,6 +12,7 @@ export interface MarketCompResponse {
     assetClass?: string;
     yearBuilt?: number;
     lotSize?: number;
+    coordinates?: { lat: number; lng: number };
   }[];
   marketStats: {
     avgPricePerSqft: number;
@@ -250,6 +251,15 @@ async function generateEstimatedComps(lat: number, lng: number): Promise<MarketC
     // Generate realistic distances (0.1 to 1.2 miles, formatted)
     const distanceMiles = 0.1 + (i * 0.15) + (Math.random() * 0.2);
 
+    // Generate coordinates based on distance from center
+    // Use different angles to spread comps around the center
+    const angle = (i / 6) * 2 * Math.PI + (Math.random() * 0.5 - 0.25); // Spread evenly with some variance
+    const distanceKm = distanceMiles * 1.60934;
+    const latOffset = (distanceKm / 111) * Math.cos(angle);
+    const lngOffset = (distanceKm / (111 * Math.cos(lat * Math.PI / 180))) * Math.sin(angle);
+    const compLat = lat + latOffset;
+    const compLng = lng + lngOffset;
+
     // Year built - commercial properties typically 1960s-2020s
     const yearBuilt = 1965 + Math.floor(Math.random() * 58);
 
@@ -268,6 +278,7 @@ async function generateEstimatedComps(lat: number, lng: number): Promise<MarketC
       assetClass: propType.assetClass,
       yearBuilt,
       lotSize,
+      coordinates: { lat: compLat, lng: compLng },
     });
   }
 

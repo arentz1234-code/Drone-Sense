@@ -134,6 +134,7 @@ export interface ExtendedDemographics extends DemographicsData {
   consumerSpending?: number;
   ageDistribution?: { age: string; percent: number }[];
   educationLevels?: { level: string; percent: number }[];
+  incomeDistribution?: { range: string; percent: number }[];
 }
 
 // Environmental risk types
@@ -158,6 +159,7 @@ export interface MarketComp {
   assetClass?: string; // e.g., Retail, Office, Industrial, Mixed-Use
   yearBuilt?: number;
   lotSize?: number;
+  coordinates?: { lat: number; lng: number }; // Location for map display
 }
 
 // Selected parcel types

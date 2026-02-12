@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { MarketComp } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
+import dynamic from 'next/dynamic';
+
+// Dynamically import the CompsMap to avoid SSR issues with Leaflet
+const CompsMap = dynamic(() => import('./CompsMap'), { ssr: false });
 
 interface MarketCompsProps {
   coordinates: { lat: number; lng: number };
@@ -86,6 +90,42 @@ export default function MarketComps({ coordinates, comps }: MarketCompsProps) {
 
   return (
     <div className="space-y-8">
+      {/* Comps Map - Visual Overview */}
+      <div>
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <svg className="w-5 h-5 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+          </svg>
+          Comparable Sales Map
+        </h3>
+        <div className="rounded-lg overflow-hidden border border-[var(--border-color)]">
+          <CompsMap coordinates={coordinates} comps={comps} />
+        </div>
+        {/* Map Legend */}
+        <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-[var(--text-muted)]">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-[#ef4444]"></div>
+            <span>Subject Property</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-[#06b6d4]"></div>
+            <span>Retail</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-[#3b82f6]"></div>
+            <span>Office</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-[#f97316]"></div>
+            <span>Industrial</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-[#a855f7]"></div>
+            <span>Mixed-Use</span>
+          </div>
+        </div>
+      </div>
+
       {/* Market Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="metric-card">
