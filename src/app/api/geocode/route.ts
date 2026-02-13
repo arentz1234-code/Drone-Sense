@@ -1,5 +1,31 @@
 import { NextResponse } from 'next/server';
 
+// Parse address components for structured geocoding
+function parseAddress(address: string): { street?: string; city?: string; state?: string; zip?: string } {
+  // Common patterns: "123 Main St, City, ST 12345" or "123 Main St, City, State 12345"
+  const parts = address.split(',').map(p => p.trim());
+
+  if (parts.length >= 2) {
+    const street = parts[0];
+    const lastPart = parts[parts.length - 1];
+
+    // Extract state and zip from last part (e.g., "FL 32312" or "Florida 32312")
+    const stateZipMatch = lastPart.match(/([A-Za-z]{2,})\s*(\d{5}(?:-\d{4})?)?$/);
+    const state = stateZipMatch?.[1];
+    const zip = stateZipMatch?.[2];
+
+    // City is typically second-to-last part, or extract from last part before state
+    let city = parts.length >= 3 ? parts[parts.length - 2] : undefined;
+    if (!city && lastPart && stateZipMatch) {
+      city = lastPart.replace(stateZipMatch[0], '').trim();
+    }
+
+    return { street, city, state, zip };
+  }
+
+  return {};
+}
+
 export async function POST(request: Request) {
   try {
     const { address } = await request.json();
@@ -23,19 +49,57 @@ export async function POST(request: Request) {
           lat: location.lat,
           lng: location.lng,
           formattedAddress: googleData.results[0].formatted_address,
+          source: 'google',
         });
       }
     }
 
-    // Fallback to Nominatim
-    const nominatimResponse = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`,
-      {
+    // Try US Census Geocoder (free and very accurate for US addresses)
+    try {
+      const censusUrl = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(address)}&benchmark=Public_AR_Current&format=json`;
+
+      const censusResponse = await fetch(censusUrl, {
         headers: {
-          'User-Agent': 'DroneSense/1.0 (https://drone-sense.vercel.app; Commercial Site Analysis)',
+          'Accept': 'application/json',
         },
+      });
+
+      if (censusResponse.ok) {
+        const censusData = await censusResponse.json();
+
+        if (censusData.result?.addressMatches?.length > 0) {
+          const match = censusData.result.addressMatches[0];
+          const coords = match.coordinates;
+
+          return NextResponse.json({
+            lat: coords.y,
+            lng: coords.x,
+            formattedAddress: match.matchedAddress,
+            source: 'census',
+          });
+        }
       }
-    );
+    } catch (censusError) {
+      console.log('Census geocoder error, falling back to Nominatim:', censusError);
+    }
+
+    // Try Nominatim with structured search for better accuracy
+    const parsed = parseAddress(address);
+    let nominatimUrl: string;
+
+    if (parsed.street && parsed.city && parsed.state) {
+      // Use structured search for more precise results
+      nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&street=${encodeURIComponent(parsed.street)}&city=${encodeURIComponent(parsed.city)}&state=${encodeURIComponent(parsed.state)}${parsed.zip ? `&postalcode=${parsed.zip}` : ''}&countrycodes=us&limit=1&addressdetails=1`;
+    } else {
+      // Fallback to free-form search
+      nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&countrycodes=us&limit=1&addressdetails=1`;
+    }
+
+    const nominatimResponse = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': 'DroneSense/1.0 (https://drone-sense.vercel.app; Commercial Site Analysis)',
+      },
+    });
 
     if (!nominatimResponse.ok) {
       throw new Error(`Nominatim error: ${nominatimResponse.status}`);
@@ -44,10 +108,18 @@ export async function POST(request: Request) {
     const nominatimData = await nominatimResponse.json();
 
     if (nominatimData && nominatimData.length > 0) {
+      const result = nominatimData[0];
+
+      // Check if we got a specific address or just a street/road
+      // If it's just a road, try to warn but still return
+      const isStreetOnly = result.addresstype === 'road' || result.class === 'highway';
+
       return NextResponse.json({
-        lat: parseFloat(nominatimData[0].lat),
-        lng: parseFloat(nominatimData[0].lon),
-        formattedAddress: nominatimData[0].display_name,
+        lat: parseFloat(result.lat),
+        lng: parseFloat(result.lon),
+        formattedAddress: result.display_name,
+        source: 'nominatim',
+        warning: isStreetOnly ? 'Could not find exact address, showing approximate street location' : undefined,
       });
     }
 
