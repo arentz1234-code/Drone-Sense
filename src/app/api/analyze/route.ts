@@ -1721,6 +1721,9 @@ function generateTopRecommendations(
   const actualMedianIncome = demographics?.medianHouseholdIncome || 0;
   const actualIncomeLevel = demographics?.incomeLevel || 'middle';
 
+  // Debug logging
+  console.log(`[Recommendations] Input metrics: VPD=${actualVPD}, Pop=${actualPopulation}, Income=$${actualMedianIncome}, Level=${actualIncomeLevel}`);
+
   // Get list of existing business names (normalized for comparison)
   const existingNames = nearbyBusinesses.map(b =>
     b.name.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -1801,41 +1804,59 @@ function generateTopRecommendations(
       matchCount++;
     }
 
-    // === INCOME SCORING (0-25 points) ===
+    // === INCOME SCORING (0-25 points, with strict penalties for mismatches) ===
     totalChecks++;
     if (retailer.incomePreference && retailer.incomePreference.length > 0) {
+      const incomeOrder = ['low', 'moderate', 'middle', 'upper-middle', 'high'];
+      const actualIndex = incomeOrder.indexOf(actualIncomeLevel);
+
       // Check if actual income level matches retailer's preference
       const incomeMatches = retailer.incomePreference.includes(actualIncomeLevel as typeof retailer.incomePreference[number]);
+
       if (incomeMatches) {
         score += 25;
         matchCount++;
       } else {
-        // Check if income is in adjacent bracket (partial match)
-        const incomeOrder = ['low', 'moderate', 'middle', 'upper-middle', 'high'];
-        const actualIndex = incomeOrder.indexOf(actualIncomeLevel);
-        const hasAdjacentMatch = retailer.incomePreference.some(pref => {
+        // Check distance from nearest preferred income bracket
+        let minDistance = 5;
+        for (const pref of retailer.incomePreference) {
           const prefIndex = incomeOrder.indexOf(pref);
-          return Math.abs(prefIndex - actualIndex) === 1;
-        });
-        if (hasAdjacentMatch) {
-          score += 12;
+          minDistance = Math.min(minDistance, Math.abs(prefIndex - actualIndex));
+        }
+
+        if (minDistance === 1) {
+          // Adjacent bracket - partial match
+          score += 10;
           matchCount += 0.5;
+        } else if (minDistance === 2) {
+          // 2 brackets away - small penalty
+          score -= 10;
+        } else {
+          // 3+ brackets away - large penalty (e.g., low-income retailer in high-income area)
+          score -= 25;
         }
       }
 
-      // Bonus/penalty for specific income ranges if defined
-      if (retailer.minMedianIncome && actualMedianIncome > 0) {
-        if (actualMedianIncome >= retailer.minMedianIncome) {
-          score += 5;
+      // STRICT enforcement of income ranges
+      if (retailer.maxMedianIncome && actualMedianIncome > 0) {
+        if (actualMedianIncome > retailer.maxMedianIncome * 1.3) {
+          // Income is 30%+ above retailer's max target - SKIP this retailer entirely
+          continue;
+        } else if (actualMedianIncome > retailer.maxMedianIncome) {
+          score -= 15; // Above max but within 30%
         } else {
-          score -= 5;
+          score += 5; // Within target range
         }
       }
-      if (retailer.maxMedianIncome && actualMedianIncome > 0) {
-        if (actualMedianIncome <= retailer.maxMedianIncome) {
-          score += 5;
+
+      if (retailer.minMedianIncome && actualMedianIncome > 0) {
+        if (actualMedianIncome < retailer.minMedianIncome * 0.7) {
+          // Income is 30%+ below retailer's min target - SKIP this retailer entirely
+          continue;
+        } else if (actualMedianIncome < retailer.minMedianIncome) {
+          score -= 15; // Below min but within 30%
         } else {
-          score -= 10; // Too wealthy for this retailer's target
+          score += 5; // Above minimum
         }
       }
     }
@@ -1877,6 +1898,9 @@ function generateTopRecommendations(
   // Sort by score descending
   recommendations.sort((a, b) => b.score - a.score);
 
+  // Log top scores for debugging
+  console.log(`[Recommendations] Top 15 scores:`, recommendations.slice(0, 15).map(r => `${r.name}:${r.score}`).join(', '));
+
   // Deduplicate and limit variety (max 2 per category)
   const categoryCounts: Record<string, number> = {};
   const finalRecommendations: string[] = [];
@@ -1893,6 +1917,7 @@ function generateTopRecommendations(
     if (finalRecommendations.length >= 10) break;
   }
 
+  console.log(`[Recommendations] Final: ${finalRecommendations.join(', ')}`);
   return finalRecommendations;
 }
 
