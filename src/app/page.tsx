@@ -235,11 +235,14 @@ export default function HomePage() {
     const fetchNearbyBusinesses = async () => {
       if (!coordinates) return;
 
+      // Default to 1.5 mile radius (2414 meters) for good market coverage
+      const radiusMeters = 2414;
+
       try {
         const response = await fetch('/api/places', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ coordinates }),
+          body: JSON.stringify({ coordinates, radius: radiusMeters }),
         });
 
         if (response.ok) {

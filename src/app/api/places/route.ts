@@ -16,11 +16,14 @@ interface Business {
 export async function POST(request: Request) {
   try {
     const body: PlacesRequest = await request.json();
-    const { coordinates, radius } = body;
+    const { coordinates, radius: providedRadius } = body;
 
     if (!coordinates) {
       return NextResponse.json({ error: 'No coordinates provided' }, { status: 400 });
     }
+
+    // Default to 1 mile (1609 meters) if no radius provided
+    const radius = providedRadius || 1609;
 
     // Convert radius from meters to degrees (approximately)
     const radiusDeg = (radius / 1000) / 111;

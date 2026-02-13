@@ -279,16 +279,41 @@ async function fetchFDOTForRoad(lat: number, lng: number, roadName: string, exte
     const matchingRoadwayIds = new Set<string>();
 
     for (const seg of segments) {
-      // Strategy 1: Check if DESC_TO or DESC_FRM mentions the road
-      if (roadNamesMatch(seg.descTo, roadName) || roadNamesMatch(seg.descFrm, roadName)) {
+      // Strategy 1: Check if ROAD_NAME field matches (primary - this IS the road)
+      if (seg.roadName && roadNamesMatch(seg.roadName, roadName)) {
         matchingRoadwayIds.add(seg.roadway);
         continue;
       }
 
-      // Strategy 2: Check if ROAD_NAME field matches (if available)
-      if (seg.roadName && roadNamesMatch(seg.roadName, roadName)) {
-        matchingRoadwayIds.add(seg.roadway);
-        continue;
+      // Strategy 2: Check if ROUTE_ID contains the road name pattern
+      // ROUTE_ID often has format like "61000000" for SR-61 (Thomasville)
+      if (seg.routeId) {
+        const routeAliases = getRoadAliases(roadName);
+        for (const alias of routeAliases) {
+          // Match route numbers (e.g., "61" in routeId for Thomasville/SR-61)
+          const routeMatch = alias.match(/\d+/);
+          if (routeMatch && seg.routeId.startsWith(routeMatch[0])) {
+            matchingRoadwayIds.add(seg.roadway);
+            break;
+          }
+        }
+      }
+    }
+
+    // Strategy 3 (fallback): Only use DESC_TO/DESC_FRM if no ROAD_NAME matches found
+    // BUT only if the DESC field suggests this road IS the segment, not just a cross street
+    // This is less reliable since DESC_TO/DESC_FRM are typically cross-street names
+    if (matchingRoadwayIds.size === 0) {
+      for (const seg of segments) {
+        // Only match if BOTH desc fields mention the road (suggesting it's the main road)
+        // or if one desc field is the road and the other is a generic endpoint
+        const descToMatches = roadNamesMatch(seg.descTo, roadName);
+        const descFrmMatches = roadNamesMatch(seg.descFrm, roadName);
+
+        // If both mention the road, it's likely the road itself
+        if (descToMatches && descFrmMatches) {
+          matchingRoadwayIds.add(seg.roadway);
+        }
       }
     }
 
@@ -343,7 +368,7 @@ async function fetchAllFDOTRoads(lat: number, lng: number): Promise<RoadVPD[]> {
     if (!data.results || data.results.length === 0) return [];
 
     // Group segments by ROADWAY ID
-    const roadwayMap = new Map<string, { segments: FDOTSegment[], names: Set<string> }>();
+    const roadwayMap = new Map<string, { segments: FDOTSegment[], names: Set<string>, primaryName: string }>();
 
     for (const result of data.results) {
       const attrs = result.attributes;
@@ -351,7 +376,7 @@ async function fetchAllFDOTRoads(lat: number, lng: number): Promise<RoadVPD[]> {
         const roadway = attrs.ROADWAY;
 
         if (!roadwayMap.has(roadway)) {
-          roadwayMap.set(roadway, { segments: [], names: new Set() });
+          roadwayMap.set(roadway, { segments: [], names: new Set(), primaryName: '' });
         }
 
         const entry = roadwayMap.get(roadway)!;
@@ -363,7 +388,14 @@ async function fetchAllFDOTRoads(lat: number, lng: number): Promise<RoadVPD[]> {
           descFrm: attrs.DESC_FRM || '',
         });
 
-        // Collect road names from DESC_TO and DESC_FRM
+        // PRIORITY 1: Use ROAD_NAME or ROADNAME field (this IS the road's name)
+        const fdotRoadName = attrs.ROAD_NAME || attrs.ROADNAME || '';
+        if (fdotRoadName && fdotRoadName !== 'N/A' && !entry.primaryName) {
+          entry.primaryName = fdotRoadName;
+        }
+
+        // PRIORITY 2: Collect DESC_TO and DESC_FRM as fallback (these are cross-streets)
+        // Only use these if no ROAD_NAME is available
         if (attrs.DESC_TO && attrs.DESC_TO !== 'N/A') {
           entry.names.add(attrs.DESC_TO);
         }
@@ -376,7 +408,7 @@ async function fetchAllFDOTRoads(lat: number, lng: number): Promise<RoadVPD[]> {
     // Convert to RoadVPD array - get best segment for each ROADWAY
     const roads: RoadVPD[] = [];
 
-    for (const [roadway, { segments, names }] of roadwayMap.entries()) {
+    for (const [roadway, { segments, names, primaryName }] of roadwayMap.entries()) {
       // Find best segment (most recent, then highest AADT)
       let best: FDOTSegment | null = null;
       for (const seg of segments) {
@@ -386,26 +418,54 @@ async function fetchAllFDOTRoads(lat: number, lng: number): Promise<RoadVPD[]> {
       }
 
       if (best) {
-        // Determine road name from DESC_TO/DESC_FRM
-        // First look for actual road names (containing RD, ST, AVE, BLVD, etc.)
-        const roadNamePattern = /(?:^|\/)([\w\s]+(?:RD|ST|AVE|BLVD|DR|LN|WAY|PKWY|HWY|TRL|CT|CIR))(?:$|\/)/i;
-
         let roadName = '';
-        for (const name of names) {
-          // Try to extract actual road names from compound strings like "SR-61/THOMASVILLE RD"
-          const match = name.match(roadNamePattern);
-          if (match && match[1]) {
-            roadName = match[1].trim();
-            break;
+
+        // PRIORITY 1: Use the primary ROAD_NAME from FDOT (this is the actual road name)
+        if (primaryName) {
+          roadName = primaryName;
+          // Clean up - extract just the road name part if it's compound (e.g., "SR-61/THOMASVILLE RD")
+          if (primaryName.includes('/')) {
+            const roadNamePattern = /([\w\s]+(?:RD|ST|AVE|BLVD|DR|LN|WAY|PKWY|HWY|TRL|CT|CIR))/i;
+            const match = primaryName.match(roadNamePattern);
+            if (match && match[1]) {
+              roadName = match[1].trim();
+            }
           }
         }
 
-        // Fallback to the original logic
+        // PRIORITY 2: Try to derive from route ID patterns (less reliable)
+        if (!roadName && roadway) {
+          // Try to match known roads by their ROADWAY ID patterns
+          // Format is typically like "61000000" for SR-61
+          const routeNum = roadway.match(/^(\d+)/)?.[1];
+          if (routeNum) {
+            for (const [localName, aliases] of Object.entries(ROAD_ALIASES)) {
+              if (aliases.some(a => a.includes(routeNum))) {
+                roadName = localName.charAt(0).toUpperCase() + localName.slice(1) + ' Road';
+                break;
+              }
+            }
+          }
+        }
+
+        // PRIORITY 3: Fall back to DESC_TO/DESC_FRM (these are cross-streets, least reliable)
+        // Only use if we couldn't determine the road name otherwise
+        if (!roadName) {
+          const roadNamePattern = /(?:^|\/)([\w\s]+(?:RD|ST|AVE|BLVD|DR|LN|WAY|PKWY|HWY|TRL|CT|CIR))(?:$|\/)/i;
+          for (const name of names) {
+            const match = name.match(roadNamePattern);
+            if (match && match[1]) {
+              roadName = match[1].trim();
+              break;
+            }
+          }
+        }
+
+        // Last resort fallback
         if (!roadName) {
           roadName = Array.from(names).find(n => !n.includes('Bridge') && n.length > 3) ||
                      Array.from(names)[0] ||
                      `Road ${roadway}`;
-          // Clean up the name - remove route prefixes to get the street name
           roadName = roadName.replace(/^(CR-\d+\/|SR-\d+\/|US-\d+\/)/, '').trim();
         }
 
@@ -554,7 +614,8 @@ export async function POST(request: Request) {
         }
       }
 
-      // Only use highest VPD as fallback if no name match found
+      // Only add to matched roads if we found a verified match
+      // DO NOT use fallback that assigns wrong VPD to wrong road name
       if (matchedPropertyRoad) {
         matchedRoads.push({
           ...matchedPropertyRoad,
@@ -562,14 +623,8 @@ export async function POST(request: Request) {
         });
         matchedRoadwayIds.add(matchedPropertyRoad.roadwayId!);
       } else {
-        // Fallback: use highest VPD road but mark it as unverified
-        const mainRoad = allFDOTRoads[0];
-        matchedRoads.push({
-          ...mainRoad,
-          roadName: propertyOSMRoad?.name || propertyStreet,
-        });
-        matchedRoadwayIds.add(mainRoad.roadwayId!);
-        console.log(`[Traffic] WARNING: No name match for "${propertyStreet}", using highest VPD: ${mainRoad.vpd}`);
+        // No match found - log warning but don't add incorrect data
+        console.log(`[Traffic] No FDOT match found for property street "${propertyStreet}" - will not assign unverified VPD`);
       }
     }
 
@@ -594,14 +649,21 @@ export async function POST(request: Request) {
       }
     }
 
-    // Strategy 4: If still no property road matched, use the highest VPD segment
+    // Strategy 4: If still no roads matched, include nearby FDOT roads with their ORIGINAL names
+    // DO NOT relabel them with the property street name - keep accurate road identification
     if (matchedRoads.length === 0 && allFDOTRoads.length > 0) {
-      const topRoad = allFDOTRoads[0];
-      matchedRoads.push({
-        ...topRoad,
-        roadName: propertyStreet || topRoad.roadName,
-      });
-      console.log(`[Traffic] Fallback: using highest VPD road: ${topRoad.vpd} VPD`);
+      // Add nearby FDOT roads with their correct names (not the property street)
+      for (const fdotRoad of allFDOTRoads.slice(0, 3)) { // Include up to 3 nearby roads
+        if (!matchedRoadwayIds.has(fdotRoad.roadwayId!)) {
+          matchedRoads.push({
+            ...fdotRoad,
+            // Keep the FDOT road's actual name - don't mislabel it
+            roadName: fdotRoad.roadName,
+          });
+          matchedRoadwayIds.add(fdotRoad.roadwayId!);
+        }
+      }
+      console.log(`[Traffic] Added ${matchedRoads.length} nearby FDOT roads (no direct property match found)`);
     }
 
     console.log(`[Traffic] Final matched roads: ${matchedRoads.map(r => `${r.roadName}:${r.vpd}`).join(', ')}`);

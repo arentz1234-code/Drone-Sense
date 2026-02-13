@@ -78,17 +78,24 @@ async function fetchFDOTAtPoint(lat: number, lng: number, roadName?: string): Pr
       // Score based on road name match and recency
       let score = year; // Base score is year (more recent = better)
 
-      // If road name provided, check for match in DESC_TO, DESC_FRM, or ROADWAY
+      // If road name provided, check for match in FDOT fields
       if (roadName) {
         const normalizedSearch = roadName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const fdotRoadName = (attrs.ROAD_NAME || attrs.ROADNAME || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const descTo = (attrs.DESC_TO || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const descFrm = (attrs.DESC_FRM || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const roadway = (attrs.ROADWAY || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-        if (descTo.includes(normalizedSearch) || descFrm.includes(normalizedSearch) ||
-            normalizedSearch.includes(descTo) || normalizedSearch.includes(descFrm)) {
-          score += 1000; // Strong preference for name match
+        // PRIORITY 1: ROAD_NAME field is the actual road name - strongest match
+        if (fdotRoadName && (fdotRoadName.includes(normalizedSearch) || normalizedSearch.includes(fdotRoadName))) {
+          score += 2000; // Highest priority - this IS the road
         }
+        // PRIORITY 2: DESC_TO/DESC_FRM are cross-streets - weaker signal
+        // Only use if BOTH fields mention the road (suggests it's the main road, not just crossing)
+        else if ((descTo.includes(normalizedSearch) || normalizedSearch.includes(descTo)) &&
+                 (descFrm.includes(normalizedSearch) || normalizedSearch.includes(descFrm))) {
+          score += 1000; // Both endpoints mention this road - likely the main road
+        }
+        // Note: Single DESC_TO/DESC_FRM match no longer gives bonus (was causing wrong matching)
       }
 
       if (score > bestScore) {
