@@ -37,6 +37,12 @@ export interface AccessPoint {
   estimatedVpd?: number; // Estimated VPD based on road classification
 }
 
+// Top recommendation type (grouped by category)
+export interface TopRecommendation {
+  name: string;
+  category: string;
+}
+
 // Business suitability types
 export interface BusinessSuitability {
   category: string;
@@ -109,7 +115,7 @@ export interface AnalysisResult {
   keyFindings: string[];
   recommendations: string[];
   businessSuitability?: BusinessSuitability[];
-  topRecommendations?: string[];
+  topRecommendations?: TopRecommendation[];
   retailerMatches?: RetailerMatchResult;
   districtType?: string;
   districtDescription?: string;

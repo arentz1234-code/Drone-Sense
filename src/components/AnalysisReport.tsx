@@ -711,24 +711,71 @@ export default function AnalysisReport({
         </div>
       </div>
 
-      {/* Top Recommendations - Not In Area */}
+      {/* Top Recommendations - Organized by Asset Class */}
       {analysis.topRecommendations && analysis.topRecommendations.length > 0 && (
         <div className="mb-8">
           <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <svg className="w-5 h-5 text-[var(--accent-green)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            Top Recommendations (Not Currently in Area)
+            Top Recommendations by Asset Class
           </h3>
-          <div className="flex flex-wrap gap-2">
-            {analysis.topRecommendations.slice(0, 10).map((rec, index) => (
-              <span
-                key={index}
-                className="px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-full text-sm font-medium text-green-400"
-              >
-                {rec}
-              </span>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(() => {
+              // Group recommendations by category
+              const grouped: Record<string, string[]> = {};
+              for (const rec of analysis.topRecommendations) {
+                const category = typeof rec === 'string' ? 'General' : rec.category;
+                const name = typeof rec === 'string' ? rec : rec.name;
+                if (!grouped[category]) grouped[category] = [];
+                grouped[category].push(name);
+              }
+
+              // Color mapping for categories
+              const categoryColors: Record<string, string> = {
+                'Qsr — Burger / Chicken / Sandwich': 'bg-orange-500/20 border-orange-500/30 text-orange-400',
+                'Qsr — Mexican / Asian / Pizza / Other': 'bg-red-500/20 border-red-500/30 text-red-400',
+                'Qsr — Coffee / Bakery / Smoothie / Dessert': 'bg-amber-500/20 border-amber-500/30 text-amber-400',
+                'Casual / Full-Service Restaurant': 'bg-rose-500/20 border-rose-500/30 text-rose-400',
+                'Grocery / Supermarket': 'bg-green-500/20 border-green-500/30 text-green-400',
+                'Convenience Store / Fuel': 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400',
+                'Big Box / Warehouse Retail': 'bg-blue-500/20 border-blue-500/30 text-blue-400',
+                'Pharmacy / Medical / Dental / Wellness': 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400',
+                'Bank / Financial / Tax / Insurance': 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400',
+                'Fitness / Wellness / Spa': 'bg-purple-500/20 border-purple-500/30 text-purple-400',
+                'Auto Parts / Service / Car Wash / Dealership': 'bg-slate-500/20 border-slate-500/30 text-slate-400',
+                'Entertainment / Recreation': 'bg-pink-500/20 border-pink-500/30 text-pink-400',
+                'Hotel / Hospitality': 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400',
+                'Childcare / Education / Trade School': 'bg-teal-500/20 border-teal-500/30 text-teal-400',
+                'Dollar / Value / Thrift / Resale': 'bg-lime-500/20 border-lime-500/30 text-lime-400',
+                'Personal Services / Salon / Wireless / Shipping': 'bg-fuchsia-500/20 border-fuchsia-500/30 text-fuchsia-400',
+              };
+
+              const defaultColor = 'bg-[var(--accent-cyan)]/20 border-[var(--accent-cyan)]/30 text-[var(--accent-cyan)]';
+
+              return Object.entries(grouped).map(([category, names]) => {
+                const colorClass = categoryColors[category] || defaultColor;
+                const shortCategory = category.split(' / ')[0].replace('Qsr — ', '');
+
+                return (
+                  <div key={category} className={`p-3 rounded-lg border ${colorClass.split(' ').slice(0, 2).join(' ')}`}>
+                    <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${colorClass.split(' ')[2]}`}>
+                      {shortCategory}
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {names.map((name, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-1 bg-[var(--bg-primary)]/50 rounded text-sm font-medium text-[var(--text-primary)]"
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
       )}

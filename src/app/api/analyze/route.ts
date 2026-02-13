@@ -1706,6 +1706,11 @@ function calculateBusinessSuitability(
 
 // Generate top specific recommendations using RETAILER_REQUIREMENTS spreadsheet
 // Score-based matching against ALL address metrics from spreadsheet columns
+interface TopRecommendation {
+  name: string;
+  category: string;
+}
+
 function generateTopRecommendations(
   vpd: number,
   nearbyBusinesses: Business[],
@@ -1715,7 +1720,7 @@ function generateTopRecommendations(
   stateCode: string | null = null,
   isCornerLot: boolean = false,
   buildingSqFt: number | null = null
-): string[] {
+): TopRecommendation[] {
   const recommendations: Array<{ name: string; score: number; category: string }> = [];
 
   // Get actual metrics from the address
@@ -1981,23 +1986,23 @@ function generateTopRecommendations(
   // Log top scores for debugging
   console.log(`[Recommendations] Top 15 scores:`, recommendations.slice(0, 15).map(r => `${r.name}:${r.score}`).join(', '));
 
-  // Deduplicate and limit variety (max 2 per category)
+  // Deduplicate and limit variety (max 3 per category for better grouping display)
   const categoryCounts: Record<string, number> = {};
-  const finalRecommendations: string[] = [];
+  const finalRecommendations: TopRecommendation[] = [];
 
   for (const rec of recommendations) {
     const category = rec.category;
     categoryCounts[category] = (categoryCounts[category] || 0) + 1;
 
-    // Allow max 2 from same category for variety
-    if (categoryCounts[category] <= 2) {
-      finalRecommendations.push(rec.name);
+    // Allow max 3 from same category for variety
+    if (categoryCounts[category] <= 3) {
+      finalRecommendations.push({ name: rec.name, category: rec.category });
     }
 
-    if (finalRecommendations.length >= 10) break;
+    if (finalRecommendations.length >= 15) break;
   }
 
-  console.log(`[Recommendations] Final: ${finalRecommendations.join(', ')}`);
+  console.log(`[Recommendations] Final: ${finalRecommendations.map(r => r.name).join(', ')}`);
   return finalRecommendations;
 }
 
@@ -2032,7 +2037,7 @@ export async function POST(request: Request) {
     // Prepare traffic context
     let trafficContext = '\n\nNo traffic data available.';
     let businessSuitability: ReturnType<typeof calculateBusinessSuitability> = [];
-    let topRecommendations: string[] = [];
+    let topRecommendations: TopRecommendation[] = [];
 
     // Prepare demographics context
     let demographicsContext = '\n\nNo demographics data available.';
@@ -2082,7 +2087,7 @@ VPD Guidelines for Business Types:
 - Convenience Stores: 8,000-12,000+ VPD ideal
 - Banks/Pharmacies: 10,000-18,000+ VPD ideal
 
-TOP RECOMMENDED BUSINESSES (not already in area): ${topRecommendations.join(', ')}`;
+TOP RECOMMENDED BUSINESSES (not already in area): ${topRecommendations.map(r => r.name).join(', ')}`;
     }
 
     // Prepare image content for Gemini (if images provided)
@@ -2119,7 +2124,7 @@ Please provide a comprehensive site analysis in the following JSON format:
   "existingStructures": "<${hasImages ? 'any buildings, foundations, or structures visible in images' : 'Unable to assess without images'}>",
   "vegetation": "<${hasImages ? 'trees, landscaping, clearing needed based on images' : 'Unable to assess without images'}>",
   "lotSizeEstimate": "<${hasImages ? 'estimated lot size in acres (e.g., \"Approximately 0.75 acres\" or \"1.2 - 1.5 acres\")' : 'Unable to estimate without images'}>",
-  "businessRecommendation": "<CRITICAL: Only recommend specific businesses that DO NOT already exist in the nearby area. With ${trafficData?.estimatedVPD?.toLocaleString() || 'the estimated'} VPD, recommend specific brands like: ${topRecommendations.slice(0, 5).join(', ')}. DO NOT recommend: ${existingBusinessNames || 'N/A'}. Explain why your specific recommendations would work at this location.>",
+  "businessRecommendation": "<CRITICAL: Only recommend specific businesses that DO NOT already exist in the nearby area. With ${trafficData?.estimatedVPD?.toLocaleString() || 'the estimated'} VPD, recommend specific brands like: ${topRecommendations.slice(0, 5).map(r => r.name).join(', ')}. DO NOT recommend: ${existingBusinessNames || 'N/A'}. Explain why your specific recommendations would work at this location.>",
   "constructionPotential": "<detailed assessment of construction viability, challenges, and opportunities>",
   "keyFindings": ["<finding 1>", "<finding 2>", "<finding 3>", "<finding 4>", "<finding 5>"],
   "recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>", "<recommendation 4>", "<recommendation 5>"]
@@ -2285,7 +2290,7 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
 
   // Build recommendation excluding existing businesses
   let businessRec = '';
-  const topRecs = topRecommendations.slice(0, 5).join(', ');
+  const topRecs = topRecommendations.slice(0, 5).map(r => r.name).join(', ');
 
   if (vpd >= 25000) {
     businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this is a prime commercial location. Top recommendations not currently in the area: ${topRecs}. The high traffic volume supports major retail and drive-through concepts.`;
@@ -2317,7 +2322,7 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     recommendations: [
       'Conduct formal land survey to confirm exact boundaries and acreage',
       'Verify zoning compliance and permitted uses with local planning department',
-      `Consider: ${topRecommendations.slice(0, 3).join(', ')} based on traffic and market gap`,
+      `Consider: ${topRecommendations.slice(0, 3).map(r => r.name).join(', ')} based on traffic and market gap`,
       'Assess corner lot potential for gas station or drive-through concepts',
       'Obtain utility availability letters from local providers',
     ],

@@ -52,7 +52,71 @@ type SortField = 'score' | 'lotSize' | 'address' | 'vpd';
 type SortDirection = 'asc' | 'desc';
 type ViewMode = 'grid' | 'map' | 'compare';
 
-const ITEMS_PER_PAGE = 25;
+// Asset class categorization based on zoning codes
+type AssetClass = 'Retail' | 'Office' | 'Industrial' | 'Mixed-Use' | 'Vacant Land' | 'Hospitality' | 'Medical' | 'Multifamily' | 'Other';
+
+const ASSET_CLASS_CONFIG: Record<AssetClass, { color: string; icon: string; keywords: string[] }> = {
+  'Retail': {
+    color: 'text-emerald-400 bg-emerald-400/15 border-emerald-400/40',
+    icon: '🏪',
+    keywords: ['C-1', 'C-2', 'CG', 'CR', 'CBD', 'RETAIL', 'COMMERCIAL', 'CC', 'CN', 'CS', 'GC', 'NC'],
+  },
+  'Office': {
+    color: 'text-blue-400 bg-blue-400/15 border-blue-400/40',
+    icon: '🏢',
+    keywords: ['O-1', 'O-2', 'OP', 'OC', 'OFFICE', 'BP', 'BUSINESS PARK'],
+  },
+  'Industrial': {
+    color: 'text-orange-400 bg-orange-400/15 border-orange-400/40',
+    icon: '🏭',
+    keywords: ['I-1', 'I-2', 'IG', 'IL', 'IH', 'INDUSTRIAL', 'M-1', 'M-2', 'MANUFACTURING', 'WAREHOUSE'],
+  },
+  'Mixed-Use': {
+    color: 'text-purple-400 bg-purple-400/15 border-purple-400/40',
+    icon: '🏙️',
+    keywords: ['MU', 'MX', 'MIXED', 'PD', 'PUD', 'PLANNED', 'TOD', 'TND'],
+  },
+  'Vacant Land': {
+    color: 'text-yellow-400 bg-yellow-400/15 border-yellow-400/40',
+    icon: '🌿',
+    keywords: ['VL', 'VAC', 'VACANT', 'AG', 'AGRICULTURAL', 'RURAL', 'UNIMPROVED'],
+  },
+  'Hospitality': {
+    color: 'text-pink-400 bg-pink-400/15 border-pink-400/40',
+    icon: '🏨',
+    keywords: ['HOTEL', 'MOTEL', 'HOSPITALITY', 'RESORT', 'T-1', 'TOURIST'],
+  },
+  'Medical': {
+    color: 'text-red-400 bg-red-400/15 border-red-400/40',
+    icon: '🏥',
+    keywords: ['MEDICAL', 'HOSPITAL', 'HEALTH', 'CLINIC'],
+  },
+  'Multifamily': {
+    color: 'text-cyan-400 bg-cyan-400/15 border-cyan-400/40',
+    icon: '🏘️',
+    keywords: ['R-3', 'R-4', 'R-5', 'RM', 'RH', 'MULTIFAMILY', 'APARTMENT', 'MF', 'HDR'],
+  },
+  'Other': {
+    color: 'text-gray-400 bg-gray-400/15 border-gray-400/40',
+    icon: '📍',
+    keywords: [],
+  },
+};
+
+function getAssetClass(zoning?: string): AssetClass {
+  if (!zoning) return 'Other';
+  const upper = zoning.toUpperCase();
+
+  for (const [assetClass, config] of Object.entries(ASSET_CLASS_CONFIG)) {
+    if (assetClass === 'Other') continue;
+    for (const keyword of config.keywords) {
+      if (upper.includes(keyword)) {
+        return assetClass as AssetClass;
+      }
+    }
+  }
+  return 'Other';
+}
 
 export default function SearchPage() {
   // Filter state
@@ -76,7 +140,6 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>('score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
@@ -132,7 +195,7 @@ export default function SearchPage() {
     setError(null);
     setProgress(0);
     setResults(null);
-    setCurrentPage(1);
+    setCollapsedClasses(new Set());
 
     try {
       // Step 1: Get parcels within radius
@@ -256,13 +319,33 @@ export default function SearchPage() {
     });
   }, [filteredResults, sortField, sortDirection]);
 
-  // Paginate
-  const paginatedResults = sortedResults.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  // Group results by asset class
+  const groupedResults = useMemo(() => {
+    const groups: Record<AssetClass, typeof sortedResults> = {
+      'Retail': [], 'Office': [], 'Industrial': [], 'Mixed-Use': [],
+      'Vacant Land': [], 'Hospitality': [], 'Medical': [], 'Multifamily': [], 'Other': [],
+    };
+    for (const property of sortedResults) {
+      const assetClass = getAssetClass(property.zoning);
+      groups[assetClass].push(property);
+    }
+    // Return only non-empty groups, sorted by count descending
+    return Object.entries(groups)
+      .filter(([, items]) => items.length > 0)
+      .sort((a, b) => b[1].length - a[1].length) as [AssetClass, typeof sortedResults][];
+  }, [sortedResults]);
 
-  const totalPages = Math.ceil(sortedResults.length / ITEMS_PER_PAGE);
+  // Collapsed asset class state
+  const [collapsedClasses, setCollapsedClasses] = useState<Set<AssetClass>>(new Set());
+
+  const toggleAssetClass = useCallback((assetClass: AssetClass) => {
+    setCollapsedClasses(prev => {
+      const next = new Set(prev);
+      if (next.has(assetClass)) next.delete(assetClass);
+      else next.add(assetClass);
+      return next;
+    });
+  }, []);
 
   // Compare handlers
   const addToCompare = useCallback((property: QuickFeasibility) => {
@@ -725,150 +808,202 @@ export default function SearchPage() {
           )}
 
           {viewMode === 'grid' && (
-            <div className="terminal-card">
-              <div className="terminal-body">
-                {paginatedResults.length > 0 ? (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                      {paginatedResults.map((property) => {
-                        const isInCompare = compareList.some(p => p.parcelId === property.parcelId);
-                        const isFav = isFavorite(property.parcelId);
+            <div className="space-y-4">
+              {groupedResults.length > 0 ? (
+                <>
+                  {/* Asset Class Summary Bar */}
+                  <div className="terminal-card">
+                    <div className="terminal-body">
+                      <div className="flex flex-wrap gap-2">
+                        {groupedResults.map(([assetClass, items]) => {
+                          const config = ASSET_CLASS_CONFIG[assetClass];
+                          const isCollapsed = collapsedClasses.has(assetClass);
+                          return (
+                            <button
+                              key={assetClass}
+                              onClick={() => toggleAssetClass(assetClass)}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
+                                isCollapsed
+                                  ? 'bg-[var(--bg-tertiary)] border-[var(--border-color)] opacity-50'
+                                  : config.color
+                              }`}
+                            >
+                              <span>{config.icon}</span>
+                              <span className="font-medium">{assetClass}</span>
+                              <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
+                                isCollapsed ? 'bg-[var(--bg-secondary)]' : 'bg-black/20'
+                              }`}>
+                                {items.length}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
 
-                        return (
-                          <div
-                            key={property.parcelId}
-                            className={`p-4 bg-[var(--bg-tertiary)] rounded-lg border transition-colors ${
-                              isInCompare
-                                ? 'border-purple-500/50'
-                                : 'border-[var(--border-color)] hover:border-[var(--accent-cyan)]/50'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate" title={property.address}>
-                                  {property.address}
-                                </p>
-                                <p className="text-xs text-[var(--text-muted)]">ID: {property.parcelId}</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => toggleFavorite(property)}
-                                  className={`p-1 rounded transition-colors ${
-                                    isFav
-                                      ? 'text-red-400 hover:text-red-300'
-                                      : 'text-[var(--text-muted)] hover:text-red-400'
-                                  }`}
-                                  title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                                >
-                                  <svg className="w-5 h-5" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                                  </svg>
-                                </button>
-                                <div className={`px-2 py-1 rounded border text-sm font-bold ${getScoreColor(property.score)}`}>
-                                  {property.score.toFixed(1)}
-                                </div>
-                              </div>
-                            </div>
+                  {/* Asset Class Sections */}
+                  {groupedResults.map(([assetClass, items]) => {
+                    const config = ASSET_CLASS_CONFIG[assetClass];
+                    const isCollapsed = collapsedClasses.has(assetClass);
+                    const avgScore = items.reduce((sum, p) => sum + p.score, 0) / items.length;
+                    const topScore = items[0]?.score || 0;
 
-                            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                              <div>
-                                <span className="text-[var(--text-muted)]">Lot Size:</span>
-                                <p className="font-medium">{property.lotSizeAcres?.toFixed(2) || 'N/A'} acres</p>
-                              </div>
-                              <div>
-                                <span className="text-[var(--text-muted)]">Est. VPD:</span>
-                                <p className="font-medium">{property.estimatedVPD?.toLocaleString() || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <span className="text-[var(--text-muted)]">Zoning:</span>
-                                <p className="font-medium">{property.zoning || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <span className="text-[var(--text-muted)]">Nearby Businesses:</span>
-                                <p className="font-medium">{property.nearbyBusinesses ?? 'N/A'}</p>
-                              </div>
-                            </div>
-
-                            {/* Score Breakdown */}
-                            <div className="flex gap-1 mb-3">
-                              {[
-                                { label: 'Traffic', value: property.factors.trafficScore },
-                                { label: 'Business', value: property.factors.businessDensity },
-                                { label: 'Zoning', value: property.factors.zoningScore },
-                                { label: 'Access', value: property.factors.accessScore },
-                              ].map((factor) => (
-                                <div
-                                  key={factor.label}
-                                  className="flex-1 text-center p-1 bg-[var(--bg-secondary)] rounded"
-                                  title={`${factor.label}: ${factor.value.toFixed(1)}`}
-                                >
-                                  <div className="text-[8px] text-[var(--text-muted)] uppercase">{factor.label}</div>
-                                  <div className="text-xs font-medium">{factor.value.toFixed(1)}</div>
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Actions */}
-                            <div className="flex gap-2">
-                              <Link
-                                href={`/?lat=${property.coordinates.lat}&lng=${property.coordinates.lng}`}
-                                className="flex-1 text-center py-1.5 text-xs bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)] rounded hover:bg-[var(--accent-cyan)]/30 transition-colors"
-                              >
-                                View Analysis
-                              </Link>
-                              <button
-                                onClick={() => isInCompare ? removeFromCompare(property.parcelId) : addToCompare(property)}
-                                disabled={!isInCompare && compareList.length >= 4}
-                                className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                                  isInCompare
-                                    ? 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
-                                    : compareList.length >= 4
-                                    ? 'bg-[var(--bg-secondary)] text-[var(--text-muted)] cursor-not-allowed'
-                                    : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'
-                                }`}
-                                title={isInCompare ? 'Remove from compare' : compareList.length >= 4 ? 'Max 4 properties' : 'Add to compare'}
-                              >
-                                {isInCompare ? '- Compare' : '+ Compare'}
-                              </button>
+                    return (
+                      <div key={assetClass} className="terminal-card">
+                        {/* Asset Class Header */}
+                        <button
+                          onClick={() => toggleAssetClass(assetClass)}
+                          className="w-full terminal-body flex items-center justify-between cursor-pointer hover:bg-[var(--bg-tertiary)]/50 transition-colors rounded-t-lg"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">{config.icon}</span>
+                            <div className="text-left">
+                              <h3 className="text-lg font-bold">{assetClass}</h3>
+                              <p className="text-xs text-[var(--text-muted)]">
+                                {items.length} {items.length === 1 ? 'property' : 'properties'} &middot; Avg Score: {avgScore.toFixed(1)} &middot; Top: {topScore.toFixed(1)}
+                              </p>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`px-3 py-1 rounded-full border text-sm font-bold ${config.color}`}>
+                              {items.length}
+                            </span>
+                            <svg
+                              className={`w-5 h-5 text-[var(--text-muted)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </button>
 
-                    {/* Pagination */}
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                          disabled={currentPage === 1}
-                          className="px-3 py-1 bg-[var(--bg-tertiary)] rounded disabled:opacity-50"
-                        >
-                          Previous
-                        </button>
-                        <span className="text-sm text-[var(--text-muted)]">
-                          Page {currentPage} of {totalPages}
-                        </span>
-                        <button
-                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                          disabled={currentPage === totalPages}
-                          className="px-3 py-1 bg-[var(--bg-tertiary)] rounded disabled:opacity-50"
-                        >
-                          Next
-                        </button>
+                        {/* Properties Grid */}
+                        {!isCollapsed && (
+                          <div className="terminal-body border-t border-[var(--border-color)]">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {items.map((property) => {
+                                const isInCompare = compareList.some(p => p.parcelId === property.parcelId);
+                                const isFav = isFavorite(property.parcelId);
+
+                                return (
+                                  <div
+                                    key={property.parcelId}
+                                    className={`p-4 bg-[var(--bg-tertiary)] rounded-lg border transition-colors ${
+                                      isInCompare
+                                        ? 'border-purple-500/50'
+                                        : 'border-[var(--border-color)] hover:border-[var(--accent-cyan)]/50'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between mb-3">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-sm truncate" title={property.address}>
+                                          {property.address}
+                                        </p>
+                                        <p className="text-xs text-[var(--text-muted)]">ID: {property.parcelId}</p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => toggleFavorite(property)}
+                                          className={`p-1 rounded transition-colors ${
+                                            isFav
+                                              ? 'text-red-400 hover:text-red-300'
+                                              : 'text-[var(--text-muted)] hover:text-red-400'
+                                          }`}
+                                          title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                                        >
+                                          <svg className="w-5 h-5" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                          </svg>
+                                        </button>
+                                        <div className={`px-2 py-1 rounded border text-sm font-bold ${getScoreColor(property.score)}`}>
+                                          {property.score.toFixed(1)}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                                      <div>
+                                        <span className="text-[var(--text-muted)]">Lot Size:</span>
+                                        <p className="font-medium">{property.lotSizeAcres?.toFixed(2) || 'N/A'} acres</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[var(--text-muted)]">Est. VPD:</span>
+                                        <p className="font-medium">{property.estimatedVPD?.toLocaleString() || 'N/A'}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[var(--text-muted)]">Zoning:</span>
+                                        <p className="font-medium">{property.zoning || 'N/A'}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[var(--text-muted)]">Nearby Businesses:</span>
+                                        <p className="font-medium">{property.nearbyBusinesses ?? 'N/A'}</p>
+                                      </div>
+                                    </div>
+
+                                    {/* Score Breakdown */}
+                                    <div className="flex gap-1 mb-3">
+                                      {[
+                                        { label: 'Traffic', value: property.factors.trafficScore },
+                                        { label: 'Business', value: property.factors.businessDensity },
+                                        { label: 'Zoning', value: property.factors.zoningScore },
+                                        { label: 'Access', value: property.factors.accessScore },
+                                      ].map((factor) => (
+                                        <div
+                                          key={factor.label}
+                                          className="flex-1 text-center p-1 bg-[var(--bg-secondary)] rounded"
+                                          title={`${factor.label}: ${factor.value.toFixed(1)}`}
+                                        >
+                                          <div className="text-[8px] text-[var(--text-muted)] uppercase">{factor.label}</div>
+                                          <div className="text-xs font-medium">{factor.value.toFixed(1)}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex gap-2">
+                                      <Link
+                                        href={`/?lat=${property.coordinates.lat}&lng=${property.coordinates.lng}`}
+                                        className="flex-1 text-center py-1.5 text-xs bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)] rounded hover:bg-[var(--accent-cyan)]/30 transition-colors"
+                                      >
+                                        View Analysis
+                                      </Link>
+                                      <button
+                                        onClick={() => isInCompare ? removeFromCompare(property.parcelId) : addToCompare(property)}
+                                        disabled={!isInCompare && compareList.length >= 4}
+                                        className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                                          isInCompare
+                                            ? 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                                            : compareList.length >= 4
+                                            ? 'bg-[var(--bg-secondary)] text-[var(--text-muted)] cursor-not-allowed'
+                                            : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'
+                                        }`}
+                                        title={isInCompare ? 'Remove from compare' : compareList.length >= 4 ? 'Max 4 properties' : 'Add to compare'}
+                                      >
+                                        {isInCompare ? '- Compare' : '+ Compare'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-12 text-[var(--text-muted)]">
+                    );
+                  })}
+                </>
+              ) : (
+                <div className="terminal-card">
+                  <div className="terminal-body text-center py-12 text-[var(--text-muted)]">
                     <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <p>No properties found matching your criteria</p>
                     <p className="text-sm mt-2">Try adjusting your filters or increasing the search radius</p>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </>

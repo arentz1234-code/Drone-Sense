@@ -29,6 +29,7 @@ interface QuickFeasibility {
 interface BatchAnalyzeRequest {
   parcels: ParcelInput[];
   minScore?: number;
+  fastMode?: boolean; // Skip real API calls, use estimates only
 }
 
 interface CacheEntry {
@@ -40,8 +41,8 @@ interface CacheEntry {
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const analysisCache = new Map<string, CacheEntry>();
 
-const BATCH_SIZE = 5; // Concurrent API calls
-const BATCH_DELAY = 200; // ms between batches to avoid rate limits
+const BATCH_SIZE = 15; // Concurrent API calls
+const BATCH_DELAY = 25; // ms between batches
 
 // Generate cache key from coordinates
 function getCacheKey(lat: number, lng: number): string {
@@ -63,11 +64,12 @@ function cleanCache(): void {
 async function fetchFDOTVPD(lat: number, lng: number): Promise<{ vpd: number; roadType: string }> {
   try {
     // Use FDOT ArcGIS REST API to get AADT data
-    const radius = 0.003; // ~330 meters
+    // Use smaller radius (~100 meters) to get the nearest road, not distant highways
+    const radius = 0.001;
     const mapExtent = `${lng - radius},${lat - radius},${lng + radius},${lat + radius}`;
     const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
       `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
-      `layers=all:7&tolerance=75&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
+      `layers=all:7&tolerance=25&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
       `returnGeometry=false&f=json`;
 
     const response = await fetch(url, {
@@ -83,7 +85,8 @@ async function fetchFDOTVPD(lat: number, lng: number): Promise<{ vpd: number; ro
       return getEstimatedVPD(lat, lng);
     }
 
-    // Find the best segment (highest AADT, most recent year)
+    // Find the most recent AADT data (prioritize recency over highest value)
+    // This gets the actual road data, not necessarily the busiest nearby road
     let bestVPD = 0;
     let bestYear = 0;
     let roadType = 'Local Road';
@@ -94,7 +97,8 @@ async function fetchFDOTVPD(lat: number, lng: number): Promise<{ vpd: number; ro
         const aadt = Number(attrs.AADT);
         const year = Number(attrs.YEAR_) || 2024;
 
-        if (year > bestYear || (year === bestYear && aadt > bestVPD)) {
+        // Prioritize most recent year, then take first result (closest)
+        if (year > bestYear || (year === bestYear && bestVPD === 0)) {
           bestVPD = aadt;
           bestYear = year;
 
@@ -166,11 +170,8 @@ async function getEstimatedVPD(lat: number, lng: number): Promise<{ vpd: number;
       }
     }
 
-    // Add some variance to make estimates more realistic
-    const variance = maxVpd * 0.15;
-    const estimatedVpd = Math.round(maxVpd + (Math.random() - 0.5) * variance);
-
-    return { vpd: estimatedVpd, roadType: bestRoadType };
+    // Return consistent estimate based on road type (no random variance)
+    return { vpd: maxVpd, roadType: bestRoadType };
   } catch (error) {
     console.error('Error getting VPD estimate:', error);
     return { vpd: 10000, roadType: 'Unknown' };
@@ -201,8 +202,8 @@ async function fetchNearbyBusinessCount(lat: number, lng: number): Promise<numbe
     });
 
     if (!response.ok) {
-      // Return estimated count on API failure
-      return Math.floor(Math.random() * 15) + 5;
+      // Return consistent estimate on API failure
+      return 10;
     }
 
     const data = await response.json();
@@ -213,10 +214,10 @@ async function fetchNearbyBusinessCount(lat: number, lng: number): Promise<numbe
     }
 
     // Fallback: count elements if count query didn't work
-    return data.elements?.length || Math.floor(Math.random() * 15) + 5;
+    return data.elements?.length || 10;
   } catch (error) {
     console.error('Error getting business count:', error);
-    return Math.floor(Math.random() * 15) + 5;
+    return 10;
   }
 }
 
@@ -399,24 +400,83 @@ async function processParcelsWithConcurrency(
   return results;
 }
 
+// Fast analysis using only estimates (no API calls)
+function analyzeParcelFast(parcel: ParcelInput): QuickFeasibility {
+  const zoningScore = calculateZoningScore(parcel.zoning);
+
+  // Use consistent estimate based on zoning (no random values)
+  // Commercial areas typically have higher traffic
+  const vpdByZoning: Record<string, number> = {
+    'CBD': 25000, 'C-2': 20000, 'CG': 18000, 'CR': 15000, 'C-1': 12000,
+    'commercial': 15000, 'retail': 15000, 'PD': 12000, 'MU': 12000,
+    'mixed': 10000, 'I-1': 8000, 'I-2': 8000, 'industrial': 8000,
+    'VL': 5000, 'AG': 3000, 'residential': 5000,
+  };
+
+  let vpd = 10000; // default
+  if (parcel.zoning) {
+    const upperZoning = parcel.zoning.toUpperCase();
+    for (const [key, vpdValue] of Object.entries(vpdByZoning)) {
+      if (upperZoning.includes(key.toUpperCase())) {
+        vpd = vpdValue;
+        break;
+      }
+    }
+  }
+
+  // Estimate business count based on zoning
+  const businessCount = zoningScore >= 7 ? 15 : zoningScore >= 5 ? 10 : 5;
+
+  const trafficScore = calculateTrafficScore(vpd);
+  const businessDensityScore = calculateBusinessDensityScore(businessCount);
+  const accessScore = 6; // Default moderate access
+
+  const score = calculateOverallScore(trafficScore, businessDensityScore, zoningScore, accessScore);
+
+  return {
+    parcelId: parcel.parcelId,
+    address: parcel.address,
+    coordinates: parcel.coordinates,
+    lotSize: parcel.lotSize,
+    lotSizeAcres: parcel.lotSize ? parcel.lotSize / 43560 : undefined,
+    score,
+    factors: {
+      trafficScore,
+      businessDensity: businessDensityScore,
+      zoningScore,
+      accessScore,
+    },
+    zoning: parcel.zoning,
+    nearbyBusinesses: businessCount,
+    estimatedVPD: vpd,
+  };
+}
+
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
     const body: BatchAnalyzeRequest = await request.json();
-    const { parcels, minScore = 0 } = body;
+    const { parcels, minScore = 0, fastMode = false } = body;
 
     if (!parcels || !Array.isArray(parcels)) {
       return NextResponse.json({ error: 'Invalid parcels data' }, { status: 400 });
     }
 
     // Clean expired cache entries periodically
-    if (Math.random() < 0.1) { // 10% chance to clean on each request
+    if (Math.random() < 0.1) {
       cleanCache();
     }
 
-    // Process all parcels with concurrency limit
-    const allResults = await processParcelsWithConcurrency(parcels, BATCH_SIZE);
+    let allResults: QuickFeasibility[];
+
+    if (fastMode) {
+      // Only use fast mode if explicitly requested
+      allResults = parcels.map(p => analyzeParcelFast(p));
+    } else {
+      // Always use real FDOT/Overpass API calls for accurate data
+      allResults = await processParcelsWithConcurrency(parcels, BATCH_SIZE);
+    }
 
     // Filter by minimum score
     const filteredResults = allResults.filter(r => r.score >= minScore);
@@ -432,6 +492,7 @@ export async function POST(request: NextRequest) {
       matchingCount: filteredResults.length,
       searchTime,
       cacheSize: analysisCache.size,
+      usedFastMode: fastMode,
     });
   } catch (error) {
     console.error('Error in batch analysis:', error);
