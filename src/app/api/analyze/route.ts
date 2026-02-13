@@ -1979,6 +1979,27 @@ function generateTopRecommendations(
       score += 8; // Boost food/restaurant categories
     }
 
+    // === MAJOR BRAND BOOST ===
+    // Well-known national brands that users commonly want to see as recommendations
+    // Premium tier: iconic brands that are highly desirable tenants
+    const premiumBrands = [
+      "McDonald's", "Chick-fil-A", "Starbucks", "Raising Cane's",
+      "Costco", "Target", "Walmart", "Publix", "Whole Foods Market"
+    ];
+    // Major tier: well-known national chains
+    const majorBrands = [
+      "Wendy's", "Burger King", "Taco Bell", "Chipotle", "Panera Bread",
+      "Dunkin'", "Whataburger", "Wawa", "QuikTrip", "Buc-ee's",
+      "CVS Pharmacy", "Walgreens", "Home Depot", "Lowe's",
+      "Kroger", "Trader Joe's", "Aldi", "Planet Fitness", "LA Fitness",
+      "Marriott", "Hilton", "Hampton Inn"
+    ];
+    if (premiumBrands.includes(retailer.name)) {
+      score += 18; // Premium brands get bigger boost
+    } else if (majorBrands.includes(retailer.name)) {
+      score += 12; // Major brands get standard boost
+    }
+
     // === INVESTMENT LEVEL CONSIDERATION ===
     // Higher income areas can support higher investment concepts
     if (retailer.totalInvestmentMin && actualMedianIncome > 0) {
@@ -2006,7 +2027,7 @@ function generateTopRecommendations(
   // Log top scores for debugging
   console.log(`[Recommendations] Top 15 scores:`, recommendations.slice(0, 15).map(r => `${r.name}:${r.score}`).join(', '));
 
-  // Deduplicate and limit variety (max 4 per category for better grouping display)
+  // Deduplicate and limit variety (max 6 per category for better variety)
   const categoryCounts: Record<string, number> = {};
   const finalRecommendations: TopRecommendation[] = [];
 
@@ -2014,12 +2035,12 @@ function generateTopRecommendations(
     const category = rec.category;
     categoryCounts[category] = (categoryCounts[category] || 0) + 1;
 
-    // Allow max 4 from same category for variety
-    if (categoryCounts[category] <= 4) {
+    // Allow max 6 from same category for variety
+    if (categoryCounts[category] <= 6) {
       finalRecommendations.push({ name: rec.name, category: rec.category });
     }
 
-    if (finalRecommendations.length >= 25) break;
+    if (finalRecommendations.length >= 30) break; // Increased total limit
   }
 
   console.log(`[Recommendations] Final: ${finalRecommendations.map(r => r.name).join(', ')}`);
