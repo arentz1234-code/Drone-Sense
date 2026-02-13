@@ -1972,6 +1972,13 @@ function generateTopRecommendations(
     }
     // Corporate-only retailers are still valid, just no bonus
 
+    // === FOOD/RESTAURANT BOOST ===
+    // These are commonly desired tenant types, give slight priority
+    const foodCategories = ['qsr', 'restaurant', 'coffee', 'bakery', 'grocery'];
+    if (foodCategories.some(fc => retailer.category.toLowerCase().includes(fc))) {
+      score += 8; // Boost food/restaurant categories
+    }
+
     // === INVESTMENT LEVEL CONSIDERATION ===
     // Higher income areas can support higher investment concepts
     if (retailer.totalInvestmentMin && actualMedianIncome > 0) {
@@ -2012,7 +2019,7 @@ function generateTopRecommendations(
       finalRecommendations.push({ name: rec.name, category: rec.category });
     }
 
-    if (finalRecommendations.length >= 20) break;
+    if (finalRecommendations.length >= 25) break;
   }
 
   console.log(`[Recommendations] Final: ${finalRecommendations.map(r => r.name).join(', ')}`);
