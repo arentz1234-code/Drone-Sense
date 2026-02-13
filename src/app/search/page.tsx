@@ -27,15 +27,6 @@ const SearchMapSelector = dynamic(() => import('@/components/SearchMapSelector')
   ),
 });
 
-// Dynamically import TopResultsMap for top 10 preview
-const TopResultsMap = dynamic(() => import('@/components/TopResultsMap'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-[350px] bg-[var(--bg-tertiary)] rounded-lg flex items-center justify-center">
-      <div className="animate-pulse text-[var(--text-muted)]">Loading map...</div>
-    </div>
-  ),
-});
 
 interface SearchResults {
   totalParcels: number;
@@ -509,6 +500,7 @@ export default function SearchPage() {
               radiusMiles={filters.radiusMiles}
               onCenterChange={(center) => setFilters(prev => ({ ...prev, center }))}
               onRadiusChange={(radiusMiles) => setFilters(prev => ({ ...prev, radiusMiles }))}
+              results={sortedResults}
             />
           </div>
 
@@ -869,21 +861,6 @@ export default function SearchPage() {
               </div>
             </div>
           </div>
-
-          {/* Top 10 Results Map Preview */}
-          {sortedResults.length > 0 && (
-            <div className="terminal-card mb-4">
-              <div className="terminal-header">
-                <div className="terminal-dot red"></div>
-                <div className="terminal-dot yellow"></div>
-                <div className="terminal-dot green"></div>
-                <span className="terminal-title">top_properties.map</span>
-              </div>
-              <div className="terminal-body p-0 overflow-hidden rounded-b-lg">
-                <TopResultsMap results={sortedResults} maxResults={10} />
-              </div>
-            </div>
-          )}
 
           {/* View Content */}
           {viewMode === 'map' && (
