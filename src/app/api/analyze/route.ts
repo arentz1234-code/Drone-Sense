@@ -1786,7 +1786,7 @@ function generateTopRecommendations(
     let matchCount = 0;
     let totalChecks = 0;
 
-    // === VPD SCORING (0-30 points) ===
+    // === VPD SCORING (0-30 points) - More forgiving ===
     totalChecks++;
     if (actualVPD > 0) {
       if (actualVPD >= retailer.idealVPD) {
@@ -1795,32 +1795,45 @@ function generateTopRecommendations(
       } else if (actualVPD >= retailer.minVPD) {
         // Scale between min and ideal
         const vpdRatio = (actualVPD - retailer.minVPD) / (retailer.idealVPD - retailer.minVPD);
-        score += 15 + Math.round(vpdRatio * 15); // 15-30 points
+        score += 20 + Math.round(vpdRatio * 10); // 20-30 points
         matchCount++;
-      } else if (actualVPD >= retailer.minVPD * 0.7) {
-        // Close to minimum (within 70%)
-        score += 8;
-        matchCount += 0.5;
+      } else if (actualVPD >= retailer.minVPD * 0.6) {
+        // Close to minimum (within 60%) - still viable
+        const vpdRatio = actualVPD / retailer.minVPD;
+        score += Math.round(vpdRatio * 18); // 11-18 points
+        matchCount += 0.7;
+      } else if (actualVPD >= retailer.minVPD * 0.4) {
+        // Below minimum but not impossible
+        score += 5;
+        matchCount += 0.3;
       }
-      // Below 70% of min = 0 points
+      // Below 40% of min = 0 points
     }
 
-    // === POPULATION SCORING (0-20 points) ===
+    // === POPULATION SCORING (0-20 points) - More forgiving ===
     totalChecks++;
     if (actualPopulation > 0 && retailer.minPopulation) {
       if (actualPopulation >= retailer.minPopulation) {
         score += 20;
         matchCount++;
-      } else if (actualPopulation >= retailer.minPopulation * 0.7) {
-        // Close to minimum
+      } else if (actualPopulation >= retailer.minPopulation * 0.5) {
+        // Within 50% of minimum - still viable for many businesses
         const popRatio = actualPopulation / retailer.minPopulation;
         score += Math.round(popRatio * 20);
-        matchCount += 0.5;
+        matchCount += 0.6;
+      } else {
+        // Low population but give some credit
+        score += 5;
+        matchCount += 0.2;
       }
     } else if (!retailer.minPopulation) {
       // No population requirement = automatic pass
       score += 15;
       matchCount++;
+    } else if (actualPopulation === 0) {
+      // No population data - don't penalize
+      score += 10;
+      matchCount += 0.5;
     }
 
     // === INCOME SCORING - HARD FILTER ===
@@ -1970,7 +1983,7 @@ function generateTopRecommendations(
     }
 
     // Only include if score is positive and meets minimum threshold
-    const minScoreThreshold = 30; // Must have solid matches across multiple criteria
+    const minScoreThreshold = 15; // Lower threshold to include more viable options
     if (score >= minScoreThreshold) {
       recommendations.push({
         name: retailer.name,
@@ -1986,7 +1999,7 @@ function generateTopRecommendations(
   // Log top scores for debugging
   console.log(`[Recommendations] Top 15 scores:`, recommendations.slice(0, 15).map(r => `${r.name}:${r.score}`).join(', '));
 
-  // Deduplicate and limit variety (max 3 per category for better grouping display)
+  // Deduplicate and limit variety (max 4 per category for better grouping display)
   const categoryCounts: Record<string, number> = {};
   const finalRecommendations: TopRecommendation[] = [];
 
@@ -1994,12 +2007,12 @@ function generateTopRecommendations(
     const category = rec.category;
     categoryCounts[category] = (categoryCounts[category] || 0) + 1;
 
-    // Allow max 3 from same category for variety
-    if (categoryCounts[category] <= 3) {
+    // Allow max 4 from same category for variety
+    if (categoryCounts[category] <= 4) {
       finalRecommendations.push({ name: rec.name, category: rec.category });
     }
 
-    if (finalRecommendations.length >= 15) break;
+    if (finalRecommendations.length >= 20) break;
   }
 
   console.log(`[Recommendations] Final: ${finalRecommendations.map(r => r.name).join(', ')}`);
