@@ -1854,31 +1854,38 @@ function generateTopRecommendations(
           // Adjacent bracket - acceptable with small penalty
           score += 5;
           matchCount += 0.3;
+        } else if (minDistance === 2) {
+          // 2 brackets away - penalty but still show
+          score -= 5;
+          matchCount += 0.1;
         } else {
-          // 2+ brackets away - HARD SKIP
-          // Dollar Tree (low/moderate/middle) should NOT show in "high" income areas
-          // Whole Foods (upper-middle/high) should NOT show in "low" income areas
-          continue;
+          // 3+ brackets away - larger penalty
+          score -= 15;
         }
       }
 
-      // Additional max income enforcement
+      // Additional max income enforcement - penalty instead of skip
       if (retailer.maxMedianIncome && actualMedianIncome > 0) {
-        if (actualMedianIncome > retailer.maxMedianIncome * 1.2) {
-          continue; // 20%+ above max = SKIP
+        if (actualMedianIncome > retailer.maxMedianIncome * 1.5) {
+          score -= 15; // Way above max
+        } else if (actualMedianIncome > retailer.maxMedianIncome * 1.2) {
+          score -= 10; // Above max
         } else if (actualMedianIncome > retailer.maxMedianIncome) {
-          score -= 10;
+          score -= 5;
         } else {
           score += 5;
         }
       }
 
       if (retailer.minMedianIncome && actualMedianIncome > 0) {
-        if (actualMedianIncome < retailer.minMedianIncome * 0.7) {
-          // Income is 30%+ below retailer's min target - SKIP this retailer entirely
-          continue;
+        if (actualMedianIncome < retailer.minMedianIncome * 0.5) {
+          // Income is 50%+ below retailer's min - penalty but don't skip
+          score -= 20;
+        } else if (actualMedianIncome < retailer.minMedianIncome * 0.7) {
+          // Income is 30-50% below min
+          score -= 10;
         } else if (actualMedianIncome < retailer.minMedianIncome) {
-          score -= 15; // Below min but within 30%
+          score -= 5; // Below min but within 30%
         } else {
           score += 5; // Above minimum
         }
