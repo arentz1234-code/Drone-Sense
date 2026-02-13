@@ -722,59 +722,80 @@ export default function AnalysisReport({
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {(() => {
-              // Group recommendations by category
-              const grouped: Record<string, string[]> = {};
-              for (const rec of analysis.topRecommendations) {
-                const category = typeof rec === 'string' ? 'General' : rec.category;
-                const name = typeof rec === 'string' ? rec : rec.name;
-                if (!grouped[category]) grouped[category] = [];
-                grouped[category].push(name);
-              }
-
-              // Color mapping for categories
-              const categoryColors: Record<string, string> = {
-                'Qsr — Burger / Chicken / Sandwich': 'bg-orange-500/20 border-orange-500/30 text-orange-400',
-                'Qsr — Mexican / Asian / Pizza / Other': 'bg-red-500/20 border-red-500/30 text-red-400',
-                'Qsr — Coffee / Bakery / Smoothie / Dessert': 'bg-amber-500/20 border-amber-500/30 text-amber-400',
-                'Casual / Full-Service Restaurant': 'bg-rose-500/20 border-rose-500/30 text-rose-400',
-                'Grocery / Supermarket': 'bg-green-500/20 border-green-500/30 text-green-400',
-                'Convenience Store / Fuel': 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400',
-                'Big Box / Warehouse Retail': 'bg-blue-500/20 border-blue-500/30 text-blue-400',
-                'Pharmacy / Medical / Dental / Wellness': 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400',
-                'Bank / Financial / Tax / Insurance': 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400',
-                'Fitness / Wellness / Spa': 'bg-purple-500/20 border-purple-500/30 text-purple-400',
-                'Auto Parts / Service / Car Wash / Dealership': 'bg-slate-500/20 border-slate-500/30 text-slate-400',
-                'Entertainment / Recreation': 'bg-pink-500/20 border-pink-500/30 text-pink-400',
-                'Hotel / Hospitality': 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400',
-                'Childcare / Education / Trade School': 'bg-teal-500/20 border-teal-500/30 text-teal-400',
-                'Dollar / Value / Thrift / Resale': 'bg-lime-500/20 border-lime-500/30 text-lime-400',
-                'Personal Services / Salon / Wireless / Shipping': 'bg-fuchsia-500/20 border-fuchsia-500/30 text-fuchsia-400',
+              // Map detailed categories to main asset classes
+              const getAssetClass = (category: string): string => {
+                const cat = category.toLowerCase();
+                if (cat.includes('qsr') || cat.includes('restaurant') || cat.includes('casual') || cat.includes('coffee') || cat.includes('bakery')) return 'Restaurant';
+                if (cat.includes('grocery') || cat.includes('supermarket')) return 'Grocery';
+                if (cat.includes('big box') || cat.includes('warehouse retail') || cat.includes('department') || cat.includes('apparel') || cat.includes('dollar') || cat.includes('specialty retail') || cat.includes('pet') || cat.includes('sporting')) return 'Retail';
+                if (cat.includes('convenience') || cat.includes('fuel')) return 'Convenience';
+                if (cat.includes('office') || cat.includes('coworking')) return 'Office';
+                if (cat.includes('industrial') || cat.includes('warehouse') || cat.includes('distribution') || cat.includes('logistics')) return 'Industrial';
+                if (cat.includes('hotel') || cat.includes('hospitality')) return 'Hospitality';
+                if (cat.includes('medical') || cat.includes('dental') || cat.includes('pharmacy') || cat.includes('wellness') || cat.includes('fitness')) return 'Medical/Fitness';
+                if (cat.includes('bank') || cat.includes('financial') || cat.includes('insurance')) return 'Financial';
+                if (cat.includes('auto') || cat.includes('car wash') || cat.includes('dealership')) return 'Automotive';
+                if (cat.includes('childcare') || cat.includes('education')) return 'Education';
+                if (cat.includes('multi-family') || cat.includes('senior') || cat.includes('student')) return 'Multi-Family';
+                if (cat.includes('entertainment') || cat.includes('recreation')) return 'Entertainment';
+                return 'Other';
               };
 
-              const defaultColor = 'bg-[var(--accent-cyan)]/20 border-[var(--accent-cyan)]/30 text-[var(--accent-cyan)]';
+              // Group recommendations by asset class
+              const grouped: Record<string, string[]> = {};
+              for (const rec of analysis.topRecommendations) {
+                const detailedCategory = typeof rec === 'string' ? 'Other' : rec.category;
+                const assetClass = getAssetClass(detailedCategory);
+                const name = typeof rec === 'string' ? rec : rec.name;
+                if (!grouped[assetClass]) grouped[assetClass] = [];
+                grouped[assetClass].push(name);
+              }
 
-              return Object.entries(grouped).map(([category, names]) => {
-                const colorClass = categoryColors[category] || defaultColor;
-                const shortCategory = category.split(' / ')[0].replace('Qsr — ', '');
+              // Color mapping for asset classes
+              const assetClassColors: Record<string, string> = {
+                'Restaurant': 'bg-orange-500/20 border-orange-500/30 text-orange-400',
+                'Retail': 'bg-blue-500/20 border-blue-500/30 text-blue-400',
+                'Grocery': 'bg-green-500/20 border-green-500/30 text-green-400',
+                'Convenience': 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400',
+                'Office': 'bg-slate-500/20 border-slate-500/30 text-slate-400',
+                'Industrial': 'bg-zinc-500/20 border-zinc-500/30 text-zinc-400',
+                'Hospitality': 'bg-purple-500/20 border-purple-500/30 text-purple-400',
+                'Medical/Fitness': 'bg-cyan-500/20 border-cyan-500/30 text-cyan-400',
+                'Financial': 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400',
+                'Automotive': 'bg-red-500/20 border-red-500/30 text-red-400',
+                'Education': 'bg-teal-500/20 border-teal-500/30 text-teal-400',
+                'Multi-Family': 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400',
+                'Entertainment': 'bg-pink-500/20 border-pink-500/30 text-pink-400',
+                'Other': 'bg-gray-500/20 border-gray-500/30 text-gray-400',
+              };
 
-                return (
-                  <div key={category} className={`p-3 rounded-lg border ${colorClass.split(' ').slice(0, 2).join(' ')}`}>
-                    <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${colorClass.split(' ')[2]}`}>
-                      {shortCategory}
-                    </h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {names.map((name, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-1 bg-[var(--bg-primary)]/50 rounded text-sm font-medium text-[var(--text-primary)]"
-                        >
-                          {name}
-                        </span>
-                      ))}
+              // Order for display
+              const assetClassOrder = ['Retail', 'Restaurant', 'Grocery', 'Convenience', 'Medical/Fitness', 'Office', 'Industrial', 'Hospitality', 'Financial', 'Automotive', 'Education', 'Entertainment', 'Multi-Family', 'Other'];
+
+              return assetClassOrder
+                .filter(ac => grouped[ac] && grouped[ac].length > 0)
+                .map((assetClass) => {
+                  const colorClass = assetClassColors[assetClass];
+                  const names = grouped[assetClass];
+
+                  return (
+                    <div key={assetClass} className={`p-3 rounded-lg border ${colorClass.split(' ').slice(0, 2).join(' ')}`}>
+                      <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${colorClass.split(' ')[2]}`}>
+                        {assetClass}
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {names.map((name, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-1 bg-[var(--bg-primary)]/50 rounded text-sm font-medium text-[var(--text-primary)]"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
-              });
+                  );
+                });
             })()}
           </div>
         </div>
