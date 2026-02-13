@@ -1818,7 +1818,8 @@ function generateTopRecommendations(
       matchCount++;
     }
 
-    // === INCOME SCORING (0-25 points, with strict penalties for mismatches) ===
+    // === INCOME SCORING - HARD FILTER ===
+    // If income bracket is 2+ away from target, SKIP the retailer entirely
     totalChecks++;
     if (retailer.incomePreference && retailer.incomePreference.length > 0) {
       const incomeOrder = ['low', 'moderate', 'middle', 'upper-middle', 'high'];
@@ -1831,7 +1832,7 @@ function generateTopRecommendations(
         score += 25;
         matchCount++;
       } else {
-        // Check distance from nearest preferred income bracket
+        // Calculate distance from nearest preferred income bracket
         let minDistance = 5;
         for (const pref of retailer.incomePreference) {
           const prefIndex = incomeOrder.indexOf(pref);
@@ -1839,27 +1840,25 @@ function generateTopRecommendations(
         }
 
         if (minDistance === 1) {
-          // Adjacent bracket - partial match
-          score += 10;
-          matchCount += 0.5;
-        } else if (minDistance === 2) {
-          // 2 brackets away - small penalty
-          score -= 10;
+          // Adjacent bracket - acceptable with small penalty
+          score += 5;
+          matchCount += 0.3;
         } else {
-          // 3+ brackets away - large penalty (e.g., low-income retailer in high-income area)
-          score -= 25;
+          // 2+ brackets away - HARD SKIP
+          // Dollar Tree (low/moderate/middle) should NOT show in "high" income areas
+          // Whole Foods (upper-middle/high) should NOT show in "low" income areas
+          continue;
         }
       }
 
-      // STRICT enforcement of income ranges
+      // Additional max income enforcement
       if (retailer.maxMedianIncome && actualMedianIncome > 0) {
-        if (actualMedianIncome > retailer.maxMedianIncome * 1.3) {
-          // Income is 30%+ above retailer's max target - SKIP this retailer entirely
-          continue;
+        if (actualMedianIncome > retailer.maxMedianIncome * 1.2) {
+          continue; // 20%+ above max = SKIP
         } else if (actualMedianIncome > retailer.maxMedianIncome) {
-          score -= 15; // Above max but within 30%
+          score -= 10;
         } else {
-          score += 5; // Within target range
+          score += 5;
         }
       }
 
