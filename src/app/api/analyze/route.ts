@@ -1704,7 +1704,8 @@ function calculateBusinessSuitability(
   return suitability.sort((a, b) => b.suitabilityScore - a.suitabilityScore);
 }
 
-// Generate top specific recommendations excluding existing businesses
+// Generate top specific recommendations using RETAILER_REQUIREMENTS spreadsheet
+// Score-based matching against actual address metrics (VPD, population, income, lot size)
 function generateTopRecommendations(
   vpd: number,
   nearbyBusinesses: Business[],
@@ -1712,8 +1713,18 @@ function generateTopRecommendations(
   lotSizeAcres: number | null = null,
   districtInfo: DistrictInfo | null = null
 ): string[] {
-  const recommendations: Array<{ name: string; score: number; reason: string }> = [];
-  const incomeLevel = demographics?.incomeLevel || 'middle';
+  const recommendations: Array<{ name: string; score: number; category: string }> = [];
+
+  // Get actual metrics from the address
+  const actualVPD = vpd || 0;
+  const actualPopulation = demographics?.population || 0;
+  const actualMedianIncome = demographics?.medianHouseholdIncome || 0;
+  const actualIncomeLevel = demographics?.incomeLevel || 'middle';
+
+  // Get list of existing business names (normalized for comparison)
+  const existingNames = nearbyBusinesses.map(b =>
+    b.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+  );
 
   // If historic downtown, add downtown-specific recommendations first
   if (districtInfo?.type === 'historic_downtown') {
@@ -1724,152 +1735,165 @@ function generateTopRecommendations(
       ...DOWNTOWN_BUSINESSES.entertainment
     ];
     const availableDowntown = filterExistingBusinesses(allDowntownOptions, nearbyBusinesses);
-    for (const business of availableDowntown.slice(0, 10)) {
+    for (const business of availableDowntown.slice(0, 5)) {
       recommendations.push({
         name: business,
-        score: 12, // High score for downtown-appropriate businesses
-        reason: 'Ideal for historic downtown district'
+        score: 100, // High score for downtown-appropriate businesses
+        category: 'Downtown'
       });
     }
   }
 
-  for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
-    // Skip categories inappropriate for this district
-    if (districtInfo?.inappropriateCategories.includes(key)) {
-      continue;
-    }
-
-    // Check if VPD supports this category
-    if (vpd < threshold.min * 0.7) continue;
-
-    // Check if lot size supports this category (if lot size is known)
-    if (lotSizeAcres !== null && threshold.lotSize && lotSizeAcres < threshold.lotSize.min) {
-      // Lot is too small for this category - skip it
-      continue;
-    }
-
-    const availableExamples = filterExistingBusinesses(threshold.examples, nearbyBusinesses);
-
-    let categoryScore = 0;
-    if (vpd >= threshold.ideal) categoryScore = 10;
-    else if (vpd >= threshold.min) categoryScore = 7;
-    else categoryScore = 4;
-
-    // Boost score if demographics match
-    const incomeMatches = (threshold.incomePreference as readonly string[]).includes(incomeLevel);
-    if (incomeMatches) {
-      categoryScore += 3;
-    } else {
-      categoryScore -= 2;
-    }
-
-    // Calculate lot size fit score
-    if (lotSizeAcres !== null && threshold.lotSize) {
-      const idealMax = threshold.lotSize.ideal * 1.5;
-      const workableMax = threshold.lotSize.ideal * 3;
-
-      if (lotSizeAcres >= threshold.lotSize.min && lotSizeAcres <= idealMax) {
-        // Optimal fit - lot is right-sized
-        categoryScore += 3;
-      } else if (lotSizeAcres > idealMax && lotSizeAcres <= workableMax) {
-        // Workable but larger than ideal
-        categoryScore += 1;
-      } else if (lotSizeAcres > workableMax) {
-        // Lot way too large for this concept - underutilized
-        categoryScore -= 2;
-      }
-    }
-
-    for (const example of availableExamples.slice(0, 3)) {
-      recommendations.push({
-        name: example,
-        score: categoryScore,
-        reason: `VPD supports ${key.replace(/([A-Z])/g, ' $1').toLowerCase()} concept`
-      });
-    }
-  }
-
-  // Also add preferred businesses from demographics (but filter by lot size)
-  if (demographics?.consumerProfile?.preferredBusinesses) {
-    const demoPreferred = filterExistingBusinesses(
-      demographics.consumerProfile.preferredBusinesses,
-      nearbyBusinesses
+  // Score each retailer from the spreadsheet against actual metrics
+  for (const retailer of RETAILER_REQUIREMENTS) {
+    // Check if this retailer already exists nearby
+    const retailerNormalized = retailer.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const alreadyExists = existingNames.some(existing =>
+      existing.includes(retailerNormalized) || retailerNormalized.includes(existing)
     );
-    for (const business of demoPreferred.slice(0, 5)) {
-      // Check if not already in recommendations
-      if (!recommendations.some(r => r.name.toLowerCase() === business.toLowerCase())) {
-        // Check if lot size can accommodate and calculate fit score
-        let canFit = true;
-        let fitScore = 12; // Base score for demographic matches
+    if (alreadyExists) continue;
 
-        if (lotSizeAcres !== null) {
-          const businessLower = business.toLowerCase();
+    // Skip inappropriate categories for district type
+    if (districtInfo?.inappropriateCategories.some(cat =>
+      retailer.category.toLowerCase().includes(cat.toLowerCase())
+    )) {
+      continue;
+    }
 
-          // Big box stores: min 8 acres, ideal 12 acres
-          const bigBoxNames = ['walmart', 'target', 'costco', 'home depot', 'lowes', 'best buy', 'kohls'];
-          if (bigBoxNames.some(b => businessLower.includes(b))) {
-            if (lotSizeAcres < 8) {
-              canFit = false;
-            } else {
-              const idealMax = 12 * 1.5; // 18 acres
-              const workableMax = 12 * 3; // 36 acres
-              if (lotSizeAcres <= idealMax) fitScore += 3;
-              else if (lotSizeAcres <= workableMax) fitScore += 1;
-              else fitScore -= 2;
-            }
-          }
-          // Premium retail: min 1.5 acres, ideal 2.5 acres
-          else if (['tj maxx', 'ross', 'marshalls', 'homegoods', 'whole foods', 'trader joe'].some(b => businessLower.includes(b))) {
-            if (lotSizeAcres < 1.5) {
-              canFit = false;
-            } else {
-              const idealMax = 2.5 * 1.5; // 3.75 acres
-              const workableMax = 2.5 * 3; // 7.5 acres
-              if (lotSizeAcres <= idealMax) fitScore += 3;
-              else if (lotSizeAcres <= workableMax) fitScore += 1;
-              else fitScore -= 2;
-            }
-          }
-          // Fitness centers: min 1 acre, ideal 1.5 acres
-          else if (['planet fitness', 'la fitness', 'lifetime', 'crunch', 'gold'].some(b => businessLower.includes(b))) {
-            if (lotSizeAcres < 1.0) {
-              canFit = false;
-            } else {
-              const idealMax = 1.5 * 1.5; // 2.25 acres
-              const workableMax = 1.5 * 3; // 4.5 acres
-              if (lotSizeAcres <= idealMax) fitScore += 3;
-              else if (lotSizeAcres <= workableMax) fitScore += 1;
-              else fitScore -= 2;
-            }
-          }
-          // Small format (QSR, coffee, banks): min 0.2 acres, ideal 0.4 acres
-          else if (['dunkin', 'starbucks', 'mcdonald', 'chick-fil-a', 'wendy', 'taco bell', 'bank', 'credit union', '7-eleven', 'wawa'].some(b => businessLower.includes(b))) {
-            if (lotSizeAcres < 0.2) {
-              canFit = false;
-            } else {
-              const idealMax = 0.4 * 1.5; // 0.6 acres
-              const workableMax = 0.4 * 3; // 1.2 acres
-              if (lotSizeAcres <= idealMax) fitScore += 3;
-              else if (lotSizeAcres <= workableMax) fitScore += 1;
-              else fitScore -= 2;
-            }
-          }
+    let score = 0;
+    let matchCount = 0;
+    let totalChecks = 0;
+
+    // === VPD SCORING (0-30 points) ===
+    totalChecks++;
+    if (actualVPD > 0) {
+      if (actualVPD >= retailer.idealVPD) {
+        score += 30; // Exceeds ideal traffic
+        matchCount++;
+      } else if (actualVPD >= retailer.minVPD) {
+        // Scale between min and ideal
+        const vpdRatio = (actualVPD - retailer.minVPD) / (retailer.idealVPD - retailer.minVPD);
+        score += 15 + Math.round(vpdRatio * 15); // 15-30 points
+        matchCount++;
+      } else if (actualVPD >= retailer.minVPD * 0.7) {
+        // Close to minimum (within 70%)
+        score += 8;
+        matchCount += 0.5;
+      }
+      // Below 70% of min = 0 points
+    }
+
+    // === POPULATION SCORING (0-20 points) ===
+    totalChecks++;
+    if (actualPopulation > 0 && retailer.minPopulation) {
+      if (actualPopulation >= retailer.minPopulation) {
+        score += 20;
+        matchCount++;
+      } else if (actualPopulation >= retailer.minPopulation * 0.7) {
+        // Close to minimum
+        const popRatio = actualPopulation / retailer.minPopulation;
+        score += Math.round(popRatio * 20);
+        matchCount += 0.5;
+      }
+    } else if (!retailer.minPopulation) {
+      // No population requirement = automatic pass
+      score += 15;
+      matchCount++;
+    }
+
+    // === INCOME SCORING (0-25 points) ===
+    totalChecks++;
+    if (retailer.incomePreference && retailer.incomePreference.length > 0) {
+      // Check if actual income level matches retailer's preference
+      const incomeMatches = retailer.incomePreference.includes(actualIncomeLevel as typeof retailer.incomePreference[number]);
+      if (incomeMatches) {
+        score += 25;
+        matchCount++;
+      } else {
+        // Check if income is in adjacent bracket (partial match)
+        const incomeOrder = ['low', 'moderate', 'middle', 'upper-middle', 'high'];
+        const actualIndex = incomeOrder.indexOf(actualIncomeLevel);
+        const hasAdjacentMatch = retailer.incomePreference.some(pref => {
+          const prefIndex = incomeOrder.indexOf(pref);
+          return Math.abs(prefIndex - actualIndex) === 1;
+        });
+        if (hasAdjacentMatch) {
+          score += 12;
+          matchCount += 0.5;
         }
+      }
 
-        if (canFit) {
-          recommendations.push({
-            name: business,
-            score: fitScore,
-            reason: `Matches ${demographics.consumerProfile.type} consumer profile`
-          });
+      // Bonus/penalty for specific income ranges if defined
+      if (retailer.minMedianIncome && actualMedianIncome > 0) {
+        if (actualMedianIncome >= retailer.minMedianIncome) {
+          score += 5;
+        } else {
+          score -= 5;
+        }
+      }
+      if (retailer.maxMedianIncome && actualMedianIncome > 0) {
+        if (actualMedianIncome <= retailer.maxMedianIncome) {
+          score += 5;
+        } else {
+          score -= 10; // Too wealthy for this retailer's target
         }
       }
     }
+
+    // === LOT SIZE SCORING (0-15 points) ===
+    if (lotSizeAcres !== null && lotSizeAcres > 0) {
+      totalChecks++;
+      if (lotSizeAcres >= retailer.minLotSize && lotSizeAcres <= retailer.maxLotSize * 2) {
+        if (lotSizeAcres <= retailer.maxLotSize) {
+          score += 15; // Perfect fit
+          matchCount++;
+        } else {
+          score += 8; // Slightly oversized but workable
+          matchCount += 0.5;
+        }
+      } else if (lotSizeAcres < retailer.minLotSize) {
+        // Lot too small - significant penalty
+        score -= 10;
+      }
+      // Very oversized lots get no bonus but no penalty
+    }
+
+    // === BONUS: Franchise availability (0-5 points) ===
+    if (retailer.franchiseAvailable && !retailer.corporateOnly) {
+      score += 5; // Easier to develop
+    }
+
+    // Only include if score is positive and meets minimum threshold
+    const minScoreThreshold = 25; // Must have at least some matches
+    if (score >= minScoreThreshold) {
+      recommendations.push({
+        name: retailer.name,
+        score: score,
+        category: retailer.category
+      });
+    }
   }
 
-  // Sort by score and return top recommendations
+  // Sort by score descending
   recommendations.sort((a, b) => b.score - a.score);
-  return recommendations.slice(0, 10).map(r => r.name);
+
+  // Deduplicate and limit variety (max 2 per category)
+  const categoryCounts: Record<string, number> = {};
+  const finalRecommendations: string[] = [];
+
+  for (const rec of recommendations) {
+    const category = rec.category;
+    categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+
+    // Allow max 2 from same category for variety
+    if (categoryCounts[category] <= 2) {
+      finalRecommendations.push(rec.name);
+    }
+
+    if (finalRecommendations.length >= 10) break;
+  }
+
+  return finalRecommendations;
 }
 
 export async function POST(request: Request) {
