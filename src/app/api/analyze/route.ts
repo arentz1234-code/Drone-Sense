@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { RETAILER_REQUIREMENTS, RetailerRequirements, getRegionFromState } from '@/data/retailerRequirements';
+import { RETAILER_REQUIREMENTS, RetailerRequirements, getRegionFromState, US_REGIONS } from '@/data/retailerRequirements';
 import {
   ALL_BUSINESSES,
   getBusinessesThatFitLot,
@@ -1705,13 +1705,16 @@ function calculateBusinessSuitability(
 }
 
 // Generate top specific recommendations using RETAILER_REQUIREMENTS spreadsheet
-// Score-based matching against actual address metrics (VPD, population, income, lot size)
+// Score-based matching against ALL address metrics from spreadsheet columns
 function generateTopRecommendations(
   vpd: number,
   nearbyBusinesses: Business[],
   demographics: DemographicsInfo | null,
   lotSizeAcres: number | null = null,
-  districtInfo: DistrictInfo | null = null
+  districtInfo: DistrictInfo | null = null,
+  stateCode: string | null = null,
+  isCornerLot: boolean = false,
+  buildingSqFt: number | null = null
 ): string[] {
   const recommendations: Array<{ name: string; score: number; category: string }> = [];
 
@@ -1721,8 +1724,19 @@ function generateTopRecommendations(
   const actualMedianIncome = demographics?.medianHouseholdIncome || 0;
   const actualIncomeLevel = demographics?.incomeLevel || 'middle';
 
+  // Determine region from state code
+  let addressRegion: string | null = null;
+  if (stateCode) {
+    for (const [region, states] of Object.entries(US_REGIONS)) {
+      if (states.includes(stateCode) || states.includes('ALL')) {
+        addressRegion = region;
+        break;
+      }
+    }
+  }
+
   // Debug logging
-  console.log(`[Recommendations] Input metrics: VPD=${actualVPD}, Pop=${actualPopulation}, Income=$${actualMedianIncome}, Level=${actualIncomeLevel}`);
+  console.log(`[Recommendations] Input metrics: VPD=${actualVPD}, Pop=${actualPopulation}, Income=$${actualMedianIncome}, Level=${actualIncomeLevel}, State=${stateCode}, Region=${addressRegion}, LotSize=${lotSizeAcres}, Corner=${isCornerLot}`);
 
   // Get list of existing business names (normalized for comparison)
   const existingNames = nearbyBusinesses.map(b =>
@@ -1879,13 +1893,80 @@ function generateTopRecommendations(
       // Very oversized lots get no bonus but no penalty
     }
 
-    // === BONUS: Franchise availability (0-5 points) ===
+    // === EXPANSION STATUS SCORING (0-10 points) ===
+    if (retailer.activelyExpanding) {
+      score += 10; // Actively growing = more likely to consider new sites
+    } else {
+      score -= 5; // Not expanding = less likely to take new sites
+    }
+
+    // === EXPANSION REGION CHECK (0-15 points or SKIP) ===
+    if (addressRegion && retailer.expansionRegions && retailer.expansionRegions.length > 0) {
+      const expandingInRegion = retailer.expansionRegions.includes('National') ||
+        retailer.expansionRegions.includes(addressRegion) ||
+        (stateCode && retailer.expansionRegions.includes(stateCode));
+
+      if (expandingInRegion) {
+        score += 15; // Target region for expansion
+      } else if (retailer.activelyExpanding) {
+        score -= 10; // Expanding but not in this region
+      }
+    }
+
+    // === DRIVE-THRU REQUIREMENT CHECK ===
+    if (retailer.driveThruRequired) {
+      // Drive-thru typically needs at least 0.5 acres for proper stacking lanes
+      if (lotSizeAcres !== null && lotSizeAcres < 0.4) {
+        continue; // Lot too small for drive-thru - SKIP this retailer
+      }
+      // Small lots get penalty even if they might fit
+      if (lotSizeAcres !== null && lotSizeAcres < 0.6) {
+        score -= 5; // Tight fit for drive-thru
+      }
+    }
+
+    // === CORNER LOT PREFERENCE (0-8 points) ===
+    if (retailer.cornerLotPreferred) {
+      if (isCornerLot) {
+        score += 8; // Perfect - retailer wants corner, site is corner
+      } else {
+        score -= 3; // Retailer prefers corner but this isn't one
+      }
+    }
+
+    // === BUILDING SIZE CHECK ===
+    if (buildingSqFt !== null && buildingSqFt > 0) {
+      if (retailer.minSqFt && buildingSqFt < retailer.minSqFt * 0.8) {
+        continue; // Building too small - SKIP
+      }
+      if (retailer.maxSqFt && buildingSqFt > retailer.maxSqFt * 1.5) {
+        score -= 5; // Building much larger than needed
+      }
+      if (retailer.minSqFt && retailer.maxSqFt) {
+        if (buildingSqFt >= retailer.minSqFt && buildingSqFt <= retailer.maxSqFt) {
+          score += 10; // Perfect building size fit
+        }
+      }
+    }
+
+    // === FRANCHISE/CORPORATE SCORING (0-5 points) ===
     if (retailer.franchiseAvailable && !retailer.corporateOnly) {
-      score += 5; // Easier to develop
+      score += 5; // Easier to develop - franchise option available
+    }
+    // Corporate-only retailers are still valid, just no bonus
+
+    // === INVESTMENT LEVEL CONSIDERATION ===
+    // Higher income areas can support higher investment concepts
+    if (retailer.totalInvestmentMin && actualMedianIncome > 0) {
+      if (retailer.totalInvestmentMin > 2000000 && actualIncomeLevel === 'high') {
+        score += 5; // Premium concept matches premium area
+      } else if (retailer.totalInvestmentMin > 2000000 && (actualIncomeLevel === 'low' || actualIncomeLevel === 'moderate')) {
+        score -= 5; // Premium concept in budget area - mismatch
+      }
     }
 
     // Only include if score is positive and meets minimum threshold
-    const minScoreThreshold = 25; // Must have at least some matches
+    const minScoreThreshold = 30; // Must have solid matches across multiple criteria
     if (score >= minScoreThreshold) {
       recommendations.push({
         name: retailer.name,
@@ -1977,9 +2058,16 @@ INCOME-BASED TARGETING:
 - HIGH income ($125k+): Premium dining, boutique fitness, luxury retail`;
     }
 
+    // Extract state code early for recommendations
+    let prelimStateCode: string | null = null;
+    const prelimStateMatch = address.match(/\b([A-Z]{2})\s*\d{5}/);
+    if (prelimStateMatch) {
+      prelimStateCode = prelimStateMatch[1];
+    }
+
     if (trafficData) {
       // Initial recommendations for the prompt (will be recalculated with lot size after AI response)
-      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData, null);
+      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData, null, null, prelimStateCode);
 
       trafficContext = `\n\nTraffic Data:
 - Estimated VPD (Vehicles Per Day): ${trafficData.estimatedVPD.toLocaleString()}
@@ -2091,6 +2179,20 @@ Return ONLY valid JSON, no markdown or explanation.`;
     analysis.districtDescription = districtInfo.description;
 
     // Recalculate business suitability with lot size and district context
+    // Extract state code from address FIRST (needed for recommendations)
+    let stateCode: string | null = null;
+    const stateMatch = address.match(/\b([A-Z]{2})\s*\d{5}/);
+    if (stateMatch) {
+      stateCode = stateMatch[1];
+    }
+
+    // Determine if corner lot from AI analysis or parcel data
+    const isCornerLot = analysis.siteCharacteristics?.toLowerCase().includes('corner') || false;
+
+    // Get building size if available from analysis
+    const buildingSqFt = analysis.estimatedLotSize ?
+      Math.round(analysis.estimatedLotSize * 43560 * 0.25) : null; // Assume 25% coverage
+
     if (trafficData) {
       businessSuitability = calculateBusinessSuitability(
         trafficData.estimatedVPD,
@@ -2104,7 +2206,10 @@ Return ONLY valid JSON, no markdown or explanation.`;
         nearbyBusinesses,
         demographicsData,
         lotSizeAcres,
-        districtInfo
+        districtInfo,
+        stateCode,
+        isCornerLot,
+        buildingSqFt
       );
 
       // Add downtown-specific recommendations if in historic downtown
@@ -2126,14 +2231,6 @@ Return ONLY valid JSON, no markdown or explanation.`;
     analysis.feasibilityScore = feasibilityScore;
     // Override viabilityScore with our calculated score
     analysis.viabilityScore = feasibilityScore.overall;
-
-    // Calculate retailer expansion matches
-    // Extract state code from address (simple extraction - last two chars before zip)
-    let stateCode: string | null = null;
-    const stateMatch = address.match(/\b([A-Z]{2})\s*\d{5}/);
-    if (stateMatch) {
-      stateCode = stateMatch[1];
-    }
 
     const retailerMatches = calculateRetailerMatches(
       lotSizeAcres,
@@ -2165,16 +2262,17 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
 function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = 1.35, address: string = '', environmentalRisk: EnvironmentalRiskInfo | null = null, marketComps: MarketCompInfo[] | null = null) {
   const vpd = trafficData?.estimatedVPD || 15000;
-  const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
-  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
-  const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps);
 
-  // Extract state code from address
+  // Extract state code from address FIRST
   let stateCode: string | null = null;
   const stateMatch = address.match(/\b([A-Z]{2})\s*\d{5}/);
   if (stateMatch) {
     stateCode = stateMatch[1];
   }
+
+  const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
+  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres, null, stateCode);
+  const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps);
 
   const retailerMatches = calculateRetailerMatches(
     lotSizeAcres,
