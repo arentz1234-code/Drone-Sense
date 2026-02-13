@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useSearchFavorites, QuickFeasibility } from '@/hooks/useSearchFavorites';
@@ -148,6 +148,69 @@ export default function SearchPage() {
 
   // Favorites hook
   const { favorites, isFavorite, toggleFavorite } = useSearchFavorites();
+
+  // Load persisted results from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const savedResults = sessionStorage.getItem('batchSearchResults');
+      const savedFilters = sessionStorage.getItem('batchSearchFilters');
+      const savedCompareList = sessionStorage.getItem('batchSearchCompareList');
+
+      if (savedResults) {
+        setResults(JSON.parse(savedResults));
+      }
+      if (savedFilters) {
+        setFilters(JSON.parse(savedFilters));
+      }
+      if (savedCompareList) {
+        setCompareList(JSON.parse(savedCompareList));
+      }
+    } catch (e) {
+      console.error('Error loading saved search results:', e);
+    }
+  }, []);
+
+  // Save results to sessionStorage when they change
+  useEffect(() => {
+    if (results) {
+      sessionStorage.setItem('batchSearchResults', JSON.stringify(results));
+    }
+  }, [results]);
+
+  // Save filters to sessionStorage when they change
+  useEffect(() => {
+    if (filters.center) {
+      sessionStorage.setItem('batchSearchFilters', JSON.stringify(filters));
+    }
+  }, [filters]);
+
+  // Save compare list to sessionStorage when it changes
+  useEffect(() => {
+    sessionStorage.setItem('batchSearchCompareList', JSON.stringify(compareList));
+  }, [compareList]);
+
+  // Reset search function
+  const resetSearch = useCallback(() => {
+    setResults(null);
+    setFilters({
+      center: null,
+      radiusMiles: 1,
+      minScore: 5,
+      propertyType: 'all',
+      minAcres: null,
+      maxAcres: null,
+      zoningTypes: [],
+      minRoadFrontage: null,
+      cornerLotOnly: false,
+      businessType: null,
+    });
+    setCompareList([]);
+    setError(null);
+    setCollapsedClasses(new Set());
+    sessionStorage.removeItem('batchSearchResults');
+    sessionStorage.removeItem('batchSearchFilters');
+    sessionStorage.removeItem('batchSearchCompareList');
+  }, []);
 
   // Update filters when business type changes
   const handleBusinessTypeChange = useCallback((businessType: string | null) => {
@@ -490,11 +553,11 @@ export default function SearchPage() {
             </div>
 
             {/* Search Button */}
-            <div className="flex items-end">
+            <div className="flex items-end gap-2">
               <button
                 onClick={handleSearch}
                 disabled={loading || !filters.center}
-                className="w-full btn-primary flex items-center justify-center gap-2"
+                className="flex-1 btn-primary flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -513,6 +576,19 @@ export default function SearchPage() {
                   </>
                 )}
               </button>
+              {results && (
+                <button
+                  onClick={resetSearch}
+                  disabled={loading}
+                  className="btn-secondary flex items-center justify-center gap-2 px-4"
+                  title="Clear results and start new search"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Reset
+                </button>
+              )}
             </div>
           </div>
 
