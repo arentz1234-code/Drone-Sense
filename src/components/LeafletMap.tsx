@@ -169,10 +169,12 @@ function HeatmapLayer({
 function MapEventHandler({
   onBoundsChange,
   onMapClick,
+  onZoomChange,
   interactiveMode,
 }: {
   onBoundsChange?: (bounds: MapBounds) => void;
   onMapClick?: (coords: { lat: number; lng: number }) => void;
+  onZoomChange?: (zoom: number) => void;
   interactiveMode?: boolean;
 }) {
   const map = useMap();
@@ -189,6 +191,7 @@ function MapEventHandler({
       });
     },
     zoomend: () => {
+      onZoomChange?.(map.getZoom());
       if (!onBoundsChange) return;
       const bounds = map.getBounds();
       onBoundsChange({
@@ -315,6 +318,7 @@ export default function LeafletMap({
 }: LeafletMapProps) {
   const [pinIcon, setPinIcon] = useState<Icon | DivIcon | null>(null);
   const [accessPointIcon, setAccessPointIcon] = useState<DivIcon | null>(null);
+  const [currentZoom, setCurrentZoom] = useState<number>(18);
 
   // Create pin icon on client side only
   useEffect(() => {
@@ -425,6 +429,7 @@ export default function LeafletMap({
       <MapEventHandler
         onBoundsChange={onBoundsChange}
         onMapClick={onMapClick}
+        onZoomChange={setCurrentZoom}
         interactiveMode={interactiveMode}
       />
       <MapRecenter coordinates={coordinates} />
@@ -487,8 +492,8 @@ export default function LeafletMap({
               },
             }}
           >
-            {/* Owner name label - always visible */}
-            {ownerLabel && (
+            {/* Owner name label - only visible at max zoom (19+) */}
+            {ownerLabel && currentZoom >= 19 && (
               <Tooltip
                 permanent
                 direction="center"
