@@ -49,32 +49,63 @@ export async function POST(request: Request) {
   const mapillaryToken = process.env.MAPILLARY_ACCESS_TOKEN;
   if (mapillaryToken) {
     try {
-      // Search within ~500m radius for street-level imagery (0.005 degrees each direction)
-      // Max allowed is 0.01 sq degrees (0.1 x 0.1), we use 0.01 x 0.01 = 0.0001 sq degrees
-      const bbox = `${coordinates.lng - 0.005},${coordinates.lat - 0.005},${coordinates.lng + 0.005},${coordinates.lat + 0.005}`;
-      const mapillaryUrl = `https://graph.mapillary.com/images?fields=id,thumb_1024_url,captured_at,compass_angle&bbox=${bbox}&limit=1`;
+      // Start with a small radius (~50m) and expand if needed
+      // This ensures we get imagery actually near the address, not from a distant street
+      const searchRadii = [0.0005, 0.001, 0.002, 0.003]; // ~50m, ~100m, ~200m, ~300m
 
-      const response = await fetch(mapillaryUrl, {
-        headers: {
-          'Authorization': `OAuth ${mapillaryToken}`,
-        },
-      });
+      let foundImage = null;
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.data && data.data.length > 0) {
-          const image = data.data[0];
-          if (image.thumb_1024_url) {
-            photos.push({
-              url: image.thumb_1024_url,
-              label: 'Street View',
-              type: 'mapillary',
-              available: true,
-            });
+      for (const radius of searchRadii) {
+        const bbox = `${coordinates.lng - radius},${coordinates.lat - radius},${coordinates.lng + radius},${coordinates.lat + radius}`;
+        // Request multiple images so we can find the closest one
+        const mapillaryUrl = `https://graph.mapillary.com/images?fields=id,thumb_1024_url,captured_at,compass_angle,geometry&bbox=${bbox}&limit=10`;
+
+        const response = await fetch(mapillaryUrl, {
+          headers: {
+            'Authorization': `OAuth ${mapillaryToken}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.data && data.data.length > 0) {
+            // Find the closest image by calculating distance
+            let closestImage = null;
+            let closestDistance = Infinity;
+
+            for (const image of data.data) {
+              if (image.thumb_1024_url && image.geometry?.coordinates) {
+                const [imgLng, imgLat] = image.geometry.coordinates;
+                // Simple distance calculation (good enough for small distances)
+                const distance = Math.sqrt(
+                  Math.pow(imgLat - coordinates.lat, 2) +
+                  Math.pow(imgLng - coordinates.lng, 2)
+                );
+                if (distance < closestDistance) {
+                  closestDistance = distance;
+                  closestImage = image;
+                }
+              }
+            }
+
+            if (closestImage) {
+              foundImage = closestImage;
+              break; // Found a close image, stop searching
+            }
           }
+        } else {
+          console.log('Mapillary API error:', response.status, await response.text());
+          break;
         }
-      } else {
-        console.log('Mapillary API error:', response.status, await response.text());
+      }
+
+      if (foundImage) {
+        photos.push({
+          url: foundImage.thumb_1024_url,
+          label: 'Street View',
+          type: 'mapillary',
+          available: true,
+        });
       }
     } catch (e) {
       console.error('Mapillary fetch error:', e);
