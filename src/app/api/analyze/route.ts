@@ -1768,13 +1768,6 @@ function generateTopRecommendations(
 
   // Score each retailer from the spreadsheet against actual metrics
   for (const retailer of RETAILER_REQUIREMENTS) {
-    // Check if this retailer already exists nearby
-    const retailerNormalized = retailer.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const alreadyExists = existingNames.some(existing =>
-      existing.includes(retailerNormalized) || retailerNormalized.includes(existing)
-    );
-    if (alreadyExists) continue;
-
     // Skip inappropriate categories for district type
     if (districtInfo?.inappropriateCategories.some(cat =>
       retailer.category.toLowerCase().includes(cat.toLowerCase())
