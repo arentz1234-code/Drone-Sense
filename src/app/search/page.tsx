@@ -296,13 +296,14 @@ export default function SearchPage() {
         return;
       }
 
-      // Step 2: Batch analyze parcels
+      // Step 2: Batch analyze parcels with demographics from search center
       const analyzeResponse = await fetch('/api/search/batch-analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           parcels: parcelsData.parcels,
           minScore: filters.minScore,
+          searchCenter: filters.center, // Pass center for area demographics
         }),
       });
 
@@ -1019,21 +1020,24 @@ export default function SearchPage() {
                                       </div>
                                     </div>
 
-                                    {/* Score Breakdown */}
-                                    <div className="flex gap-1 mb-3">
+                                    {/* Score Breakdown - 7 factors */}
+                                    <div className="grid grid-cols-7 gap-0.5 mb-3">
                                       {[
-                                        { label: 'Traffic', value: property.factors.trafficScore },
-                                        { label: 'Business', value: property.factors.businessDensity },
-                                        { label: 'Zoning', value: property.factors.zoningScore },
-                                        { label: 'Access', value: property.factors.accessScore },
+                                        { label: 'VPD', value: property.factors.trafficScore, title: 'Traffic/VPD Score' },
+                                        { label: 'Demo', value: property.factors.demographicsScore ?? 5, title: 'Demographics Score' },
+                                        { label: 'Biz', value: property.factors.businessDensity, title: 'Business Density' },
+                                        { label: 'Zone', value: property.factors.zoningScore, title: 'Zoning Score' },
+                                        { label: 'Road', value: property.factors.accessScore, title: 'Road Access Score' },
+                                        { label: 'Lot', value: property.factors.lotSizeScore ?? 5, title: 'Lot Size Score' },
+                                        { label: 'Env', value: property.factors.environmentalScore ?? 7, title: 'Environmental Score' },
                                       ].map((factor) => (
                                         <div
                                           key={factor.label}
-                                          className="flex-1 text-center p-1 bg-[var(--bg-secondary)] rounded"
-                                          title={`${factor.label}: ${factor.value.toFixed(1)}`}
+                                          className="text-center p-1 bg-[var(--bg-secondary)] rounded"
+                                          title={`${factor.title}: ${factor.value.toFixed(1)}/10`}
                                         >
-                                          <div className="text-[8px] text-[var(--text-muted)] uppercase">{factor.label}</div>
-                                          <div className="text-xs font-medium">{factor.value.toFixed(1)}</div>
+                                          <div className="text-[7px] text-[var(--text-muted)] uppercase leading-tight">{factor.label}</div>
+                                          <div className="text-[10px] font-bold">{factor.value.toFixed(0)}</div>
                                         </div>
                                       ))}
                                     </div>

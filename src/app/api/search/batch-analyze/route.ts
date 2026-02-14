@@ -20,16 +20,30 @@ interface QuickFeasibility {
     businessDensity: number;
     zoningScore: number;
     accessScore: number;
+    demographicsScore: number;
+    lotSizeScore: number;
+    environmentalScore: number;
   };
   zoning?: string;
   nearbyBusinesses?: number;
   estimatedVPD?: number;
+  medianIncome?: number;
+  population?: number;
 }
 
 interface BatchAnalyzeRequest {
   parcels: ParcelInput[];
   minScore?: number;
   fastMode?: boolean; // Skip real API calls, use estimates only
+  searchCenter?: { lat: number; lng: number }; // Center of search area for demographics
+}
+
+interface DemographicsData {
+  population: number;
+  medianHouseholdIncome: number;
+  employmentRate: number;
+  isCollegeTown?: boolean;
+  collegeEnrollmentPercent?: number;
 }
 
 interface CacheEntry {
@@ -262,6 +276,140 @@ function calculateAccessScore(roadType: string): number {
   return accessScores[roadType] || 5;
 }
 
+// Fetch demographics for search area (called once per search)
+async function fetchAreaDemographics(lat: number, lng: number): Promise<DemographicsData | null> {
+  try {
+    // Use FCC API to get census tract
+    const fccUrl = `https://geo.fcc.gov/api/census/area?lat=${lat}&lon=${lng}&format=json`;
+    const fccResponse = await fetch(fccUrl);
+
+    if (!fccResponse.ok) return null;
+
+    const fccData = await fccResponse.json();
+    const fips = fccData.results?.[0]?.block_fips;
+
+    if (!fips) return null;
+
+    // Extract state and county FIPS
+    const stateFips = fips.substring(0, 2);
+    const countyFips = fips.substring(2, 5);
+    const tractFips = fips.substring(5, 11);
+
+    // Fetch ACS 5-year data
+    const censusUrl = `https://api.census.gov/data/2022/acs/acs5?get=B01003_001E,B19013_001E,B23025_002E,B23025_005E,B14001_002E,B01001_001E&for=tract:${tractFips}&in=state:${stateFips}&in=county:${countyFips}`;
+
+    const censusResponse = await fetch(censusUrl);
+    if (!censusResponse.ok) return null;
+
+    const censusData = await censusResponse.json();
+    if (!censusData || censusData.length < 2) return null;
+
+    const values = censusData[1];
+    const population = parseInt(values[0]) || 0;
+    const medianIncome = parseInt(values[1]) || 50000;
+    const laborForce = parseInt(values[2]) || 1;
+    const unemployed = parseInt(values[3]) || 0;
+    const collegeEnrolled = parseInt(values[4]) || 0;
+    const totalPop = parseInt(values[5]) || population;
+
+    const employmentRate = laborForce > 0 ? Math.round(((laborForce - unemployed) / laborForce) * 100) : 90;
+    const collegePercent = totalPop > 0 ? Math.round((collegeEnrolled / totalPop) * 100) : 0;
+    const isCollegeTown = collegePercent >= 15;
+
+    return {
+      population,
+      medianHouseholdIncome: medianIncome,
+      employmentRate,
+      isCollegeTown,
+      collegeEnrollmentPercent: collegePercent,
+    };
+  } catch (error) {
+    console.error('Error fetching demographics:', error);
+    return null;
+  }
+}
+
+// Calculate demographics score (matching main analysis logic)
+function calculateDemographicsScore(demographics: DemographicsData | null): { score: number; detail: string } {
+  if (!demographics) {
+    return { score: 5, detail: 'Demographics data unavailable' };
+  }
+
+  const { medianHouseholdIncome: income, employmentRate, population, isCollegeTown, collegeEnrollmentPercent } = demographics;
+
+  let incomeScore = 5;
+  if (isCollegeTown) {
+    // College towns have hidden spending power
+    if ((collegeEnrollmentPercent || 0) >= 25) incomeScore = 8;
+    else if ((collegeEnrollmentPercent || 0) >= 15) incomeScore = 7.5;
+    else incomeScore = 7;
+  } else {
+    if (income >= 85000) incomeScore = 9;
+    else if (income >= 65000) incomeScore = 8;
+    else if (income >= 50000) incomeScore = 7;
+    else if (income >= 35000) incomeScore = 5;
+    else incomeScore = 4;
+  }
+
+  const employmentBonus = isCollegeTown ? 0.5 : (employmentRate >= 95 ? 1 : employmentRate >= 90 ? 0.5 : 0);
+  const populationBonus = population >= 5000 ? 1 : population >= 2000 ? 0.5 : 0;
+
+  const score = Math.min(10, Math.round(incomeScore + employmentBonus + populationBonus));
+
+  const detail = isCollegeTown
+    ? `College Town (${collegeEnrollmentPercent}% students) - $${income.toLocaleString()} income`
+    : `$${income.toLocaleString()} median income, ${population.toLocaleString()} pop`;
+
+  return { score, detail };
+}
+
+// Calculate lot size score
+function calculateLotSizeScore(lotSizeSqFt: number | undefined): { score: number; detail: string } {
+  if (!lotSizeSqFt) {
+    return { score: 5, detail: 'Lot size unknown' };
+  }
+
+  const acres = lotSizeSqFt / 43560;
+
+  // Commercial sweet spot is 0.5 to 5 acres
+  if (acres >= 1 && acres <= 3) {
+    return { score: 10, detail: `Ideal size: ${acres.toFixed(2)} acres` };
+  } else if (acres >= 0.5 && acres <= 5) {
+    return { score: 9, detail: `Great size: ${acres.toFixed(2)} acres` };
+  } else if (acres >= 0.25 && acres <= 10) {
+    return { score: 7, detail: `Workable size: ${acres.toFixed(2)} acres` };
+  } else if (acres < 0.25) {
+    return { score: 4, detail: `Small lot: ${acres.toFixed(2)} acres - limited options` };
+  } else {
+    return { score: 6, detail: `Large lot: ${acres.toFixed(2)} acres - may need subdivision` };
+  }
+}
+
+// Simple flood zone check based on elevation (rough estimate)
+async function checkFloodRisk(lat: number, lng: number): Promise<{ score: number; inFloodZone: boolean }> {
+  try {
+    // Use Open-Elevation API for quick check
+    const response = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`);
+    if (!response.ok) return { score: 7, inFloodZone: false };
+
+    const data = await response.json();
+    const elevation = data.results?.[0]?.elevation;
+
+    if (elevation === undefined) return { score: 7, inFloodZone: false };
+
+    // Very rough heuristic: low elevation in Florida = higher flood risk
+    if (elevation < 5) {
+      return { score: 4, inFloodZone: true };
+    } else if (elevation < 15) {
+      return { score: 6, inFloodZone: false };
+    } else {
+      return { score: 8, inFloodZone: false };
+    }
+  } catch {
+    return { score: 7, inFloodZone: false };
+  }
+}
+
 function calculateTrafficScore(vpd: number): number {
   if (vpd >= 30000) return 10;
   if (vpd >= 20000) return 9;
@@ -284,26 +432,39 @@ function calculateOverallScore(
   trafficScore: number,
   businessDensityScore: number,
   zoningScore: number,
-  accessScore: number
+  accessScore: number,
+  demographicsScore: number = 5,
+  lotSizeScore: number = 5,
+  environmentalScore: number = 7
 ): number {
-  // Weighted average
+  // Weighted average matching the main analysis
+  // Traffic + Demographics are most important for commercial viability
   const weights = {
-    traffic: 0.35,
-    business: 0.25,
-    zoning: 0.25,
-    access: 0.15,
+    traffic: 0.25,
+    demographics: 0.20,
+    business: 0.15,
+    zoning: 0.15,
+    access: 0.10,
+    lotSize: 0.10,
+    environmental: 0.05,
   };
 
   const overallScore =
     trafficScore * weights.traffic +
+    demographicsScore * weights.demographics +
     businessDensityScore * weights.business +
     zoningScore * weights.zoning +
-    accessScore * weights.access;
+    accessScore * weights.access +
+    lotSizeScore * weights.lotSize +
+    environmentalScore * weights.environmental;
 
   return Math.round(overallScore * 10) / 10;
 }
 
-async function analyzeParcel(parcel: ParcelInput): Promise<QuickFeasibility> {
+async function analyzeParcel(
+  parcel: ParcelInput,
+  areaDemographics: DemographicsData | null
+): Promise<QuickFeasibility> {
   const cacheKey = getCacheKey(parcel.coordinates.lat, parcel.coordinates.lng);
 
   // Check cache first
@@ -326,17 +487,25 @@ async function analyzeParcel(parcel: ParcelInput): Promise<QuickFeasibility> {
     fetchNearbyBusinessCount(parcel.coordinates.lat, parcel.coordinates.lng),
   ]);
 
-  // Calculate scores
+  // Calculate all scores
   const zoningScore = calculateZoningScore(parcel.zoning);
   const accessScore = calculateAccessScore(traffic.roadType);
   const trafficScore = calculateTrafficScore(traffic.vpd);
   const businessDensityScore = calculateBusinessDensityScore(businessCount);
+  const demographicsResult = calculateDemographicsScore(areaDemographics);
+  const lotSizeResult = calculateLotSizeScore(parcel.lotSize);
+
+  // Use default environmental score (fetching per-parcel would be too slow)
+  const environmentalScore = 7;
 
   const score = calculateOverallScore(
     trafficScore,
     businessDensityScore,
     zoningScore,
-    accessScore
+    accessScore,
+    demographicsResult.score,
+    lotSizeResult.score,
+    environmentalScore
   );
 
   const result: QuickFeasibility = {
@@ -351,10 +520,15 @@ async function analyzeParcel(parcel: ParcelInput): Promise<QuickFeasibility> {
       businessDensity: businessDensityScore,
       zoningScore,
       accessScore,
+      demographicsScore: demographicsResult.score,
+      lotSizeScore: lotSizeResult.score,
+      environmentalScore,
     },
     zoning: parcel.zoning,
     nearbyBusinesses: businessCount,
     estimatedVPD: traffic.vpd,
+    medianIncome: areaDemographics?.medianHouseholdIncome,
+    population: areaDemographics?.population,
   };
 
   // Cache the result
@@ -369,7 +543,8 @@ async function analyzeParcel(parcel: ParcelInput): Promise<QuickFeasibility> {
 // Process parcels with concurrency limit
 async function processParcelsWithConcurrency(
   parcels: ParcelInput[],
-  concurrencyLimit: number
+  concurrencyLimit: number,
+  areaDemographics: DemographicsData | null
 ): Promise<QuickFeasibility[]> {
   const results: QuickFeasibility[] = [];
 
@@ -379,7 +554,7 @@ async function processParcelsWithConcurrency(
 
     // Process batch in parallel
     const batchResults = await Promise.allSettled(
-      batch.map(parcel => analyzeParcel(parcel))
+      batch.map(parcel => analyzeParcel(parcel, areaDemographics))
     );
 
     // Collect successful results
@@ -401,7 +576,7 @@ async function processParcelsWithConcurrency(
 }
 
 // Fast analysis using only estimates (no API calls)
-function analyzeParcelFast(parcel: ParcelInput): QuickFeasibility {
+function analyzeParcelFast(parcel: ParcelInput, areaDemographics: DemographicsData | null): QuickFeasibility {
   const zoningScore = calculateZoningScore(parcel.zoning);
 
   // Use consistent estimate based on zoning (no random values)
@@ -430,8 +605,19 @@ function analyzeParcelFast(parcel: ParcelInput): QuickFeasibility {
   const trafficScore = calculateTrafficScore(vpd);
   const businessDensityScore = calculateBusinessDensityScore(businessCount);
   const accessScore = 6; // Default moderate access
+  const demographicsResult = calculateDemographicsScore(areaDemographics);
+  const lotSizeResult = calculateLotSizeScore(parcel.lotSize);
+  const environmentalScore = 7;
 
-  const score = calculateOverallScore(trafficScore, businessDensityScore, zoningScore, accessScore);
+  const score = calculateOverallScore(
+    trafficScore,
+    businessDensityScore,
+    zoningScore,
+    accessScore,
+    demographicsResult.score,
+    lotSizeResult.score,
+    environmentalScore
+  );
 
   return {
     parcelId: parcel.parcelId,
@@ -445,10 +631,15 @@ function analyzeParcelFast(parcel: ParcelInput): QuickFeasibility {
       businessDensity: businessDensityScore,
       zoningScore,
       accessScore,
+      demographicsScore: demographicsResult.score,
+      lotSizeScore: lotSizeResult.score,
+      environmentalScore,
     },
     zoning: parcel.zoning,
     nearbyBusinesses: businessCount,
     estimatedVPD: vpd,
+    medianIncome: areaDemographics?.medianHouseholdIncome,
+    population: areaDemographics?.population,
   };
 }
 
@@ -457,7 +648,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: BatchAnalyzeRequest = await request.json();
-    const { parcels, minScore = 0, fastMode = false } = body;
+    const { parcels, minScore = 0, fastMode = false, searchCenter } = body;
 
     if (!parcels || !Array.isArray(parcels)) {
       return NextResponse.json({ error: 'Invalid parcels data' }, { status: 400 });
@@ -468,14 +659,28 @@ export async function POST(request: NextRequest) {
       cleanCache();
     }
 
+    // Fetch demographics for search area (once for all parcels)
+    // Use search center if provided, otherwise use center of first parcel
+    const demographicsCenter = searchCenter || parcels[0]?.coordinates;
+    let areaDemographics: DemographicsData | null = null;
+
+    if (demographicsCenter) {
+      try {
+        areaDemographics = await fetchAreaDemographics(demographicsCenter.lat, demographicsCenter.lng);
+        console.log(`[BatchAnalyze] Demographics fetched: $${areaDemographics?.medianHouseholdIncome?.toLocaleString() || 'N/A'} income, ${areaDemographics?.population?.toLocaleString() || 'N/A'} pop`);
+      } catch (e) {
+        console.error('Failed to fetch demographics:', e);
+      }
+    }
+
     let allResults: QuickFeasibility[];
 
     if (fastMode) {
       // Only use fast mode if explicitly requested
-      allResults = parcels.map(p => analyzeParcelFast(p));
+      allResults = parcels.map(p => analyzeParcelFast(p, areaDemographics));
     } else {
       // Always use real FDOT/Overpass API calls for accurate data
-      allResults = await processParcelsWithConcurrency(parcels, BATCH_SIZE);
+      allResults = await processParcelsWithConcurrency(parcels, BATCH_SIZE, areaDemographics);
     }
 
     // Filter by minimum score
@@ -493,6 +698,11 @@ export async function POST(request: NextRequest) {
       searchTime,
       cacheSize: analysisCache.size,
       usedFastMode: fastMode,
+      demographics: areaDemographics ? {
+        medianIncome: areaDemographics.medianHouseholdIncome,
+        population: areaDemographics.population,
+        isCollegeTown: areaDemographics.isCollegeTown,
+      } : null,
     });
   } catch (error) {
     console.error('Error in batch analysis:', error);

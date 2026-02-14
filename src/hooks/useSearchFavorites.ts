@@ -13,10 +13,15 @@ export interface QuickFeasibility {
     businessDensity: number;
     zoningScore: number;
     accessScore: number;
+    demographicsScore?: number;
+    lotSizeScore?: number;
+    environmentalScore?: number;
   };
   zoning?: string;
   nearbyBusinesses?: number;
   estimatedVPD?: number;
+  medianIncome?: number;
+  population?: number;
 }
 
 const STORAGE_KEY = 'drone-sense-search-favorites';
