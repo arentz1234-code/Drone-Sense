@@ -43,8 +43,17 @@ function getScoreColor(score: number): string {
 // Get border color (darker version)
 function getScoreBorderColor(score: number): string {
   if (score >= 8) return '#16A34A'; // green-600
-  if (score >= 5) return '#CA8A04'; // yellow-600
+  if (score >= 6) return '#0891b2'; // cyan-600
+  if (score >= 4) return '#CA8A04'; // yellow-600
   return '#DC2626'; // red-600
+}
+
+// Get score label for accessibility
+function getScoreLabel(score: number): { label: string; icon: string } {
+  if (score >= 8) return { label: 'Excellent', icon: '✓' };
+  if (score >= 6) return { label: 'Good', icon: '○' };
+  if (score >= 4) return { label: 'Fair', icon: '△' };
+  return { label: 'Poor', icon: '✕' };
 }
 
 // Component to fit map bounds to results
@@ -160,9 +169,10 @@ export default function MapResults({
                       {property.address}
                     </p>
                     <span
-                      className="px-2 py-0.5 rounded text-white text-xs font-bold whitespace-nowrap"
+                      className="px-2 py-0.5 rounded text-white text-xs font-bold whitespace-nowrap flex items-center gap-1"
                       style={{ backgroundColor: getScoreColor(property.score) }}
                     >
+                      <span aria-hidden="true">{getScoreLabel(property.score).icon}</span>
                       {property.score.toFixed(1)}
                     </span>
                   </div>
@@ -244,15 +254,23 @@ export default function MapResults({
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#22C55E' }} />
-            <span className="text-xs text-[var(--text-secondary)]">High (8+)</span>
+            <span className="text-xs text-[var(--text-secondary)]" aria-hidden="true">✓</span>
+            <span className="text-xs text-[var(--text-secondary)]">Excellent (8+)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#06b6d4' }} />
+            <span className="text-xs text-[var(--text-secondary)]" aria-hidden="true">○</span>
+            <span className="text-xs text-[var(--text-secondary)]">Good (6-8)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#EAB308' }} />
-            <span className="text-xs text-[var(--text-secondary)]">Medium (5-8)</span>
+            <span className="text-xs text-[var(--text-secondary)]" aria-hidden="true">△</span>
+            <span className="text-xs text-[var(--text-secondary)]">Fair (4-6)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#EF4444' }} />
-            <span className="text-xs text-[var(--text-secondary)]">Low (&lt;5)</span>
+            <span className="text-xs text-[var(--text-secondary)]" aria-hidden="true">✕</span>
+            <span className="text-xs text-[var(--text-secondary)]">Poor (&lt;4)</span>
           </div>
         </div>
       </div>

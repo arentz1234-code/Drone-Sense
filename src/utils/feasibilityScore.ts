@@ -350,3 +350,14 @@ export function getRatingColor(rating: string): string {
     default: return 'var(--text-muted)';
   }
 }
+
+/**
+ * Get score label and icon for WCAG accessibility
+ * Returns label (Poor/Fair/Good/Excellent) and icon symbol
+ */
+export function getScoreLabelAndIcon(score: number): { label: string; icon: string } {
+  if (score >= 8) return { label: 'Excellent', icon: '✓' };
+  if (score >= 6) return { label: 'Good', icon: '○' };
+  if (score >= 4) return { label: 'Fair', icon: '△' };
+  return { label: 'Poor', icon: '✕' };
+}

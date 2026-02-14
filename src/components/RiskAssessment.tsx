@@ -42,6 +42,15 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
     }
   };
 
+  // Get icon for risk level for WCAG accessibility
+  const getRiskIcon = (risk: 'low' | 'medium' | 'high') => {
+    switch (risk) {
+      case 'low': return '✓';
+      case 'medium': return '△';
+      case 'high': return '✕';
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Overall Risk Score */}
@@ -90,6 +99,7 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
               <DataSourceTooltip source={DATA_SOURCES.fema}>Flood Zone</DataSourceTooltip>
             </h4>
             <span className={getRiskIndicatorClass(environmentalRisk.floodZone.risk)}>
+              <span aria-hidden="true">{getRiskIcon(environmentalRisk.floodZone.risk)}</span>{' '}
               {environmentalRisk.floodZone.risk.toUpperCase()}
             </span>
           </div>
@@ -112,6 +122,7 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
               <DataSourceTooltip source={DATA_SOURCES.fws}>Wetlands</DataSourceTooltip>
             </h4>
             <span className={getRiskIndicatorClass(environmentalRisk.wetlands.present ? 'medium' : 'low')}>
+              <span aria-hidden="true">{getRiskIcon(environmentalRisk.wetlands.present ? 'medium' : 'low')}</span>{' '}
               {environmentalRisk.wetlands.present ? 'PRESENT' : 'NONE'}
             </span>
           </div>
@@ -144,6 +155,7 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
               <DataSourceTooltip source={DATA_SOURCES.epa}>Brownfields</DataSourceTooltip>
             </h4>
             <span className={getRiskIndicatorClass(environmentalRisk.brownfields.present ? 'medium' : 'low')}>
+              <span aria-hidden="true">{getRiskIcon(environmentalRisk.brownfields.present ? 'medium' : 'low')}</span>{' '}
               {environmentalRisk.brownfields.count > 0 ? `${environmentalRisk.brownfields.count} SITES` : 'NONE'}
             </span>
           </div>
@@ -172,6 +184,7 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
               <DataSourceTooltip source={DATA_SOURCES.epa}>Superfund Sites</DataSourceTooltip>
             </h4>
             <span className={getRiskIndicatorClass(environmentalRisk.superfund.present ? 'high' : 'low')}>
+              <span aria-hidden="true">{getRiskIcon(environmentalRisk.superfund.present ? 'high' : 'low')}</span>{' '}
               {environmentalRisk.superfund.count > 0 ? `${environmentalRisk.superfund.count} SITES` : 'NONE'}
             </span>
           </div>

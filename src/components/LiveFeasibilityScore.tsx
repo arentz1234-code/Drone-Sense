@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, AccessPoint } from '@/types';
-import { calculateFeasibilityScore, getScoreColor, getRatingColor } from '@/utils/feasibilityScore';
+import { calculateFeasibilityScore, getScoreColor, getRatingColor, getScoreLabelAndIcon } from '@/utils/feasibilityScore';
 
 interface LiveFeasibilityScoreProps {
   trafficData: TrafficInfo | null;
@@ -116,13 +116,14 @@ export default function LiveFeasibilityScore({
       {/* Rating Badge */}
       <div className="flex items-center gap-2 mb-4">
         <span
-          className="px-3 py-1 rounded-full text-sm font-medium"
+          className="px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1"
           style={{
             backgroundColor: `${getRatingColor(feasibilityScore.rating)}20`,
             color: getRatingColor(feasibilityScore.rating),
             border: `1px solid ${getRatingColor(feasibilityScore.rating)}40`
           }}
         >
+          <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.overall).icon}</span>
           {feasibilityScore.rating}
         </span>
         <span className="text-xs text-[var(--text-muted)]">

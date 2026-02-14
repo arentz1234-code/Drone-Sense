@@ -822,6 +822,54 @@ body {
   }
 }
 
+/* Mobile Map Controls - prevent overlap */
+@media (max-width: 768px) {
+  /* Move Leaflet zoom controls to top-right and add spacing */
+  .leaflet-control-zoom {
+    margin-top: 10px !important;
+    margin-right: 10px !important;
+  }
+
+  /* Ensure custom map overlays don't overlap with mobile nav */
+  .leaflet-bottom {
+    bottom: 80px !important;
+  }
+
+  /* Floating legend and control positioning */
+  .leaflet-bottom.leaflet-left,
+  .leaflet-bottom.leaflet-right {
+    bottom: 80px !important;
+  }
+
+  /* Custom map control buttons - better mobile spacing */
+  .map-control-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+
+  /* Map overlay panels - constrain to avoid bottom nav */
+  .map-overlay-panel {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+  }
+
+  /* Map legend - make it collapsible on mobile */
+  .map-legend-mobile {
+    max-width: 150px;
+  }
+
+  /* Z-index management for map controls */
+  .leaflet-control-container {
+    z-index: 800;
+  }
+
+  /* Ensure popups appear above controls */
+  .leaflet-popup {
+    z-index: 900 !important;
+  }
+}
+
 /* Landscape phone adjustments */
 @media (max-height: 500px) and (orientation: landscape) {
   .terminal-body {
@@ -852,5 +900,109 @@ body {
 
   main {
     padding-bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Floating Action Button Menu for Mobile Map Controls */
+.fab-menu {
+  position: absolute;
+  bottom: 100px;
+  right: 16px;
+  z-index: 1000;
+}
+
+.fab-toggle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  color: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.fab-toggle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.fab-toggle.open {
+  transform: rotate(45deg);
+}
+
+.fab-actions {
+  position: absolute;
+  bottom: 70px;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
+}
+
+.fab-actions.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.fab-action {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.fab-action:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-cyan);
+}
+
+.fab-action.active {
+  background: var(--accent-cyan);
+  color: white;
+  border-color: var(--accent-cyan);
+}
+
+/* Hide FAB on desktop */
+@media (min-width: 769px) {
+  .fab-menu {
+    display: none;
+  }
+}
+
+/* Show FAB only on mobile */
+@media (max-width: 768px) {
+  .map-controls-desktop {
+    display: none;
+  }
+}
+
+/* Address autocomplete dropdown mobile styles */
+.address-dropdown-mobile {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 768px) {
+  .address-dropdown-mobile {
+    max-height: 40vh !important;
+    overflow-y: auto !important;
   }
 }

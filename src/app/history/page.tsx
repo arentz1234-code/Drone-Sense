@@ -2,11 +2,9 @@
 
 import { useSearchHistory, SearchHistoryItem } from '@/hooks/useSearchHistory';
 import Link from 'next/link';
-import { useState } from 'react';
 
 export default function HistoryPage() {
   const { searchHistory, isLoading, deleteHistoryItem, clearHistory } = useSearchHistory();
-  const [confirmClear, setConfirmClear] = useState(false);
 
   const formatDate = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -30,16 +28,14 @@ export default function HistoryPage() {
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
-    deleteHistoryItem(id);
+    if (window.confirm('Are you sure you want to delete this search? This cannot be undone.')) {
+      deleteHistoryItem(id);
+    }
   };
 
   const handleClearAll = () => {
-    if (confirmClear) {
+    if (window.confirm('Are you sure you want to delete all search history? This cannot be undone.')) {
       clearHistory();
-      setConfirmClear(false);
-    } else {
-      setConfirmClear(true);
-      setTimeout(() => setConfirmClear(false), 3000);
     }
   };
 
@@ -73,13 +69,9 @@ export default function HistoryPage() {
           {searchHistory.length > 0 && (
             <button
               onClick={handleClearAll}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                confirmClear
-                  ? 'bg-red-500 text-white hover:bg-red-600'
-                  : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border-color)]'
-              }`}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--accent-red)] border border-[var(--border-color)] hover:border-[var(--accent-red)]"
             >
-              {confirmClear ? 'Click again to confirm' : 'Clear All'}
+              Clear All History
             </button>
           )}
         </div>

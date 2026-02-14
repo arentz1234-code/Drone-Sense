@@ -33,14 +33,24 @@ interface SearchMapSelectorProps {
 // Get color based on score
 function getScoreColor(score: number): string {
   if (score >= 8) return '#22C55E'; // green
-  if (score >= 5) return '#EAB308'; // yellow
+  if (score >= 6) return '#06b6d4'; // cyan
+  if (score >= 4) return '#EAB308'; // yellow
   return '#EF4444'; // red
 }
 
 function getScoreDarkColor(score: number): string {
   if (score >= 8) return '#16A34A';
-  if (score >= 5) return '#CA8A04';
+  if (score >= 6) return '#0891b2';
+  if (score >= 4) return '#CA8A04';
   return '#DC2626';
+}
+
+// Get score label for accessibility
+function getScoreLabel(score: number): { label: string; icon: string } {
+  if (score >= 8) return { label: 'Excellent', icon: '✓' };
+  if (score >= 6) return { label: 'Good', icon: '○' };
+  if (score >= 4) return { label: 'Fair', icon: '△' };
+  return { label: 'Poor', icon: '✕' };
 }
 
 // Create custom score pin icon
@@ -251,7 +261,7 @@ export default function SearchMapSelector({
           </div>
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
             <span style="padding: 4px 10px; border-radius: 12px; background: ${getScoreColor(property.score)}; color: white; font-size: 12px; font-weight: 700;">
-              ${property.score.toFixed(1)} Score
+              ${getScoreLabel(property.score).icon} ${property.score.toFixed(1)} - ${getScoreLabel(property.score).label}
             </span>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 11px; margin-bottom: 10px; background: #f5f5f5; padding: 8px; border-radius: 6px;">

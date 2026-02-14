@@ -56,7 +56,7 @@ export default function AddressInput({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Geocoding failed');
+        throw new Error(data.error || 'Address not found');
       }
 
       setCoordinates({
@@ -65,7 +65,10 @@ export default function AddressInput({
       });
     } catch (error) {
       console.error('Geocoding error:', error);
-      alert(error instanceof Error ? error.message : 'Failed to locate address. Please try again.');
+      const errorMessage = error instanceof Error && error.message === 'Address not found'
+        ? "We couldn't find that address. Try including the city and state (e.g., '123 Main St, Tallahassee, FL') or drop a pin on the map instead."
+        : "We couldn't locate that address. Check your connection and try again, or drop a pin on the map instead.";
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -123,7 +126,12 @@ export default function AddressInput({
               {showDropdown && recentSearches.length > 0 && (
                 <div
                   ref={dropdownRef}
-                  className="absolute top-full left-0 right-0 mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-lg z-50 overflow-hidden"
+                  className="absolute top-full left-0 right-0 mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-lg z-50 overflow-hidden address-dropdown-mobile"
+                  style={{
+                    maxHeight: 'min(40vh, 300px)',
+                    overflowY: 'auto',
+                    WebkitOverflowScrolling: 'touch',
+                  }}
                 >
                   <div className="p-2 border-b border-[var(--border-color)] flex items-center justify-between">
                     <span className="text-xs text-[var(--text-muted)] uppercase tracking-wide">
@@ -132,8 +140,10 @@ export default function AddressInput({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        clearHistory();
-                        setShowDropdown(false);
+                        if (window.confirm('Are you sure you want to delete all search history? This cannot be undone.')) {
+                          clearHistory();
+                          setShowDropdown(false);
+                        }
                       }}
                       className="text-xs text-[var(--text-muted)] hover:text-[var(--accent-red)] transition-colors"
                     >

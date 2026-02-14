@@ -63,6 +63,69 @@ const RecommendationsPanel = dynamic(() => import('@/components/RecommendationsP
   ssr: false
 });
 
+// Inline retry error banner component
+function RetryBanner({
+  message,
+  onRetry,
+  isRetrying = false,
+}: {
+  message: string;
+  onRetry: () => void;
+  isRetrying?: boolean;
+}) {
+  return (
+    <div
+      className="p-4 rounded-lg border flex items-center justify-between gap-4"
+      style={{
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        borderColor: 'rgba(249, 115, 22, 0.3)',
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <svg
+          className="w-5 h-5 flex-shrink-0"
+          style={{ color: 'var(--accent-orange)' }}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+          />
+        </svg>
+        <span className="text-sm" style={{ color: 'var(--accent-orange)' }}>
+          {message}
+        </span>
+      </div>
+      <button
+        onClick={onRetry}
+        disabled={isRetrying}
+        className="btn-secondary flex items-center gap-2 text-sm"
+        style={{ minWidth: '80px' }}
+      >
+        {isRetrying ? (
+          <>
+            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            Retrying...
+          </>
+        ) : (
+          <>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Retry
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg> },
@@ -89,6 +152,23 @@ export default function HomePage() {
   const [retailerMatches, setRetailerMatches] = useState<RetailerMatchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Error tracking for individual data sources with retry capability
+  const [dataErrors, setDataErrors] = useState<{
+    demographics: string | null;
+    environmental: string | null;
+    marketComps: string | null;
+    businesses: string | null;
+    traffic: string | null;
+    retailerMatches: string | null;
+  }>({
+    demographics: null,
+    environmental: null,
+    marketComps: null,
+    businesses: null,
+    traffic: null,
+    retailerMatches: null,
+  });
 
   const { addToHistory, updateHistoryItem } = useSearchHistory();
   const currentHistoryIdRef = useRef<string | null>(null);
@@ -155,131 +235,156 @@ export default function HomePage() {
   }, [address]);
 
   // Fetch extended demographics when coordinates change
-  useEffect(() => {
-    const fetchExtendedDemographics = async () => {
-      if (!coordinates) return;
+  const fetchExtendedDemographics = useCallback(async () => {
+    if (!coordinates) return;
 
-      try {
-        const response = await fetch('/api/demographics-extended', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lat: coordinates.lat,
-            lng: coordinates.lng,
-            radii: [1, 3, 5]
-          }),
-        });
+    setDataErrors(prev => ({ ...prev, demographics: null }));
 
-        if (response.ok) {
-          const data = await response.json();
-          setDemographicsData(prev => prev ? { ...prev, ...data } : data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch extended demographics:', err);
+    try {
+      const response = await fetch('/api/demographics-extended', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat: coordinates.lat,
+          lng: coordinates.lng,
+          radii: [1, 3, 5]
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDemographicsData(prev => prev ? { ...prev, ...data } : data);
+      } else {
+        setDataErrors(prev => ({ ...prev, demographics: 'Failed to load demographics data. Check your connection and try again.' }));
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch extended demographics:', err);
+      setDataErrors(prev => ({ ...prev, demographics: 'Failed to load demographics data. Check your connection and try again.' }));
+    }
+  }, [coordinates]);
 
+  useEffect(() => {
     fetchExtendedDemographics();
-  }, [coordinates?.lat, coordinates?.lng]);
+  }, [fetchExtendedDemographics]);
 
   // Fetch environmental risk when coordinates change
-  useEffect(() => {
-    const fetchEnvironmentalRisk = async () => {
-      if (!coordinates) return;
+  const fetchEnvironmentalRisk = useCallback(async () => {
+    if (!coordinates) return;
 
-      try {
-        const response = await fetch('/api/environmental', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lat: coordinates.lat, lng: coordinates.lng }),
-        });
+    setDataErrors(prev => ({ ...prev, environmental: null }));
 
-        if (response.ok) {
-          const data = await response.json();
-          setEnvironmentalRisk(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch environmental risk:', err);
+    try {
+      const response = await fetch('/api/environmental', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: coordinates.lat, lng: coordinates.lng }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setEnvironmentalRisk(data);
+      } else {
+        setDataErrors(prev => ({ ...prev, environmental: 'Failed to load environmental risk data. Check your connection and try again.' }));
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch environmental risk:', err);
+      setDataErrors(prev => ({ ...prev, environmental: 'Failed to load environmental risk data. Check your connection and try again.' }));
+    }
+  }, [coordinates]);
 
+  useEffect(() => {
     fetchEnvironmentalRisk();
-  }, [coordinates?.lat, coordinates?.lng]);
+  }, [fetchEnvironmentalRisk]);
 
   // Fetch market comps when coordinates change
-  useEffect(() => {
-    const fetchMarketComps = async () => {
-      if (!coordinates) return;
+  const fetchMarketComps = useCallback(async () => {
+    if (!coordinates) return;
 
-      try {
-        const response = await fetch('/api/market-comps', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lat: coordinates.lat, lng: coordinates.lng }),
-        });
+    setDataErrors(prev => ({ ...prev, marketComps: null }));
 
-        if (response.ok) {
-          const data = await response.json();
-          setMarketComps(data.comps || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch market comps:', err);
+    try {
+      const response = await fetch('/api/market-comps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: coordinates.lat, lng: coordinates.lng }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMarketComps(data.comps || []);
+      } else {
+        setDataErrors(prev => ({ ...prev, marketComps: 'Failed to load market comparables. Check your connection and try again.' }));
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch market comps:', err);
+      setDataErrors(prev => ({ ...prev, marketComps: 'Failed to load market comparables. Check your connection and try again.' }));
+    }
+  }, [coordinates]);
 
+  useEffect(() => {
     fetchMarketComps();
-  }, [coordinates?.lat, coordinates?.lng]);
+  }, [fetchMarketComps]);
 
   // Fetch nearby businesses when coordinates change
-  useEffect(() => {
-    const fetchNearbyBusinesses = async () => {
-      if (!coordinates) return;
+  const fetchNearbyBusinesses = useCallback(async () => {
+    if (!coordinates) return;
 
-      // Default to 1.5 mile radius (2414 meters) for good market coverage
-      const radiusMeters = 2414;
+    setDataErrors(prev => ({ ...prev, businesses: null }));
 
-      try {
-        const response = await fetch('/api/places', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ coordinates, radius: radiusMeters }),
-        });
+    // Default to 1.5 mile radius (2414 meters) for good market coverage
+    const radiusMeters = 2414;
 
-        if (response.ok) {
-          const data = await response.json();
-          setBusinesses(data.businesses || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch nearby businesses:', err);
+    try {
+      const response = await fetch('/api/places', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coordinates, radius: radiusMeters }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBusinesses(data.businesses || []);
+      } else {
+        setDataErrors(prev => ({ ...prev, businesses: 'Failed to load nearby businesses. Check your connection and try again.' }));
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch nearby businesses:', err);
+      setDataErrors(prev => ({ ...prev, businesses: 'Failed to load nearby businesses. Check your connection and try again.' }));
+    }
+  }, [coordinates]);
 
+  useEffect(() => {
     fetchNearbyBusinesses();
-  }, [coordinates?.lat, coordinates?.lng]);
+  }, [fetchNearbyBusinesses]);
 
   // Fetch traffic data when coordinates change
-  useEffect(() => {
-    const fetchTrafficData = async () => {
-      if (!coordinates) return;
+  const fetchTrafficData = useCallback(async () => {
+    if (!coordinates) return;
 
-      try {
-        const response = await fetch('/api/traffic', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ coordinates, address }),
-        });
+    setDataErrors(prev => ({ ...prev, traffic: null }));
 
-        if (response.ok) {
-          const data = await response.json();
-          setTrafficData(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch traffic data:', err);
+    try {
+      const response = await fetch('/api/traffic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coordinates, address }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTrafficData(data);
+      } else {
+        setDataErrors(prev => ({ ...prev, traffic: 'Failed to load traffic data. Check your connection and try again.' }));
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch traffic data:', err);
+      setDataErrors(prev => ({ ...prev, traffic: 'Failed to load traffic data. Check your connection and try again.' }));
+    }
+  }, [coordinates, address]);
 
+  useEffect(() => {
     fetchTrafficData();
-  }, [coordinates?.lat, coordinates?.lng, address]);
+  }, [fetchTrafficData]);
 
   // Fetch retailer matches when we have sufficient data
   useEffect(() => {
@@ -402,7 +507,8 @@ export default function HomePage() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Analysis failed');
+        const reason = data.error || 'Unknown error';
+        throw new Error(`Analysis failed: ${reason}. Check your connection and try again.`);
       }
 
       const result = await response.json();
@@ -669,7 +775,12 @@ export default function HomePage() {
                 <span className="terminal-title">demographics.module</span>
               </div>
               <div className="terminal-body">
-                {demographicsData ? (
+                {dataErrors.demographics ? (
+                  <RetryBanner
+                    message={dataErrors.demographics}
+                    onRetry={fetchExtendedDemographics}
+                  />
+                ) : demographicsData ? (
                   <DemographicsCharts demographics={demographicsData} />
                 ) : (
                   <div className="text-center py-8 text-[var(--text-muted)]">Loading demographics...</div>
@@ -686,7 +797,12 @@ export default function HomePage() {
                 <span className="terminal-title">traffic.module</span>
               </div>
               <div className="terminal-body">
-                {trafficData ? (
+                {dataErrors.traffic ? (
+                  <RetryBanner
+                    message={dataErrors.traffic}
+                    onRetry={fetchTrafficData}
+                  />
+                ) : trafficData ? (
                   <TrafficCharts trafficData={trafficData} accessPoints={accessPoints} />
                 ) : (
                   <div className="text-center py-8 text-[var(--text-muted)]">Loading traffic data...</div>
@@ -703,7 +819,14 @@ export default function HomePage() {
                 <span className="terminal-title">risk.module</span>
               </div>
               <div className="terminal-body">
-                <RiskAssessment coordinates={coordinates} environmentalRisk={environmentalRisk} />
+                {dataErrors.environmental ? (
+                  <RetryBanner
+                    message={dataErrors.environmental}
+                    onRetry={fetchEnvironmentalRisk}
+                  />
+                ) : (
+                  <RiskAssessment coordinates={coordinates} environmentalRisk={environmentalRisk} />
+                )}
               </div>
             </div>
           </div>
@@ -732,10 +855,17 @@ export default function HomePage() {
           </div>
           <div className="terminal-body">
             {coordinates ? (
-              <MarketComps
-                coordinates={coordinates}
-                comps={marketComps}
-              />
+              dataErrors.marketComps ? (
+                <RetryBanner
+                  message={dataErrors.marketComps}
+                  onRetry={fetchMarketComps}
+                />
+              ) : (
+                <MarketComps
+                  coordinates={coordinates}
+                  comps={marketComps}
+                />
+              )
             ) : (
               <div className="text-center py-12 text-[var(--text-muted)]">
                 <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">

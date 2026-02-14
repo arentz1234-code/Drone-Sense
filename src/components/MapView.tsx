@@ -213,7 +213,7 @@ export default function MapView({
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.message || 'Failed to fetch parcel data');
+        setError("Couldn't load parcel boundaries for this location. You can click the map to manually select your site area.");
         setParcelData(null);
         onParcelDataChange?.(null);
         onParcelSelect?.(null);
@@ -245,7 +245,8 @@ export default function MapView({
         }
       }
     } catch (err) {
-      setError('Failed to fetch parcel data');
+      console.error('Parcel fetch error:', err);
+      setError("Couldn't load parcel boundaries for this location. You can click the map to manually select your site area.");
       setParcelData(null);
     } finally {
       setLoading(false);

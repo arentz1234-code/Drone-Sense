@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore, AccessPoint } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
-import { calculateFeasibilityScore } from '@/utils/feasibilityScore';
+import { calculateFeasibilityScore, getScoreLabelAndIcon } from '@/utils/feasibilityScore';
 
 interface AnalysisReportProps {
   analysis: AnalysisResult;
@@ -193,7 +193,10 @@ export default function AnalysisReport({
           <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${getScoreColor(viabilityScore)} flex items-center justify-center`}>
             <span className="text-4xl font-bold text-white">{viabilityScore.toFixed(1)}</span>
           </div>
-          <p className="text-sm mt-2 font-medium">{feasibilityScore?.rating || getScoreLabel(viabilityScore)}</p>
+          <p className="text-sm mt-2 font-medium flex items-center justify-center gap-1">
+            <span aria-hidden="true">{getScoreLabelAndIcon(viabilityScore).icon}</span>
+            <span>{feasibilityScore?.rating || getScoreLabel(viabilityScore)}</span>
+          </p>
           <p className="text-xs text-[var(--text-muted)]">
             <DataSourceTooltip source={DATA_SOURCES.feasibilityCalc}>Feasibility Score</DataSourceTooltip>
           </p>
@@ -228,7 +231,10 @@ export default function AnalysisReport({
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-cyan)]">Traffic</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.traffic.split(' - ')[0]}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.trafficScore).icon}</span>
+                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.trafficScore).label}
+              </p>
             </div>
 
             {/* Demographics Score */}
@@ -249,7 +255,10 @@ export default function AnalysisReport({
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-green)]">Demographics</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.demographics.split(' - ')[0]}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.demographicsScore).icon}</span>
+                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.demographicsScore).label}
+              </p>
             </div>
 
             {/* Competition Score */}
@@ -270,7 +279,10 @@ export default function AnalysisReport({
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-orange)]">Competition</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.competition.split(' - ')[0]}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.competitionScore).icon}</span>
+                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.competitionScore).label}
+              </p>
             </div>
 
             {/* Access Score */}
@@ -291,7 +303,10 @@ export default function AnalysisReport({
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-blue)]">Access</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.access.split(' - ')[0]}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.accessScore).icon}</span>
+                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.accessScore).label}
+              </p>
             </div>
 
             {/* Environmental Score */}
@@ -312,7 +327,10 @@ export default function AnalysisReport({
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-purple)]">Environmental</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.environmental?.split(' - ')[0] || 'N/A'}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.environmentalScore).icon}</span>
+                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.environmentalScore).label}
+              </p>
             </div>
 
             {/* Market Score */}
@@ -333,7 +351,10 @@ export default function AnalysisReport({
                 </span>
               </div>
               <p className="text-xs font-medium text-[var(--accent-red)]">Market</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">{feasibilityScore.details.market?.split(' - ')[0] || 'N/A'}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.marketScore).icon}</span>
+                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.marketScore).label}
+              </p>
             </div>
           </div>
 
