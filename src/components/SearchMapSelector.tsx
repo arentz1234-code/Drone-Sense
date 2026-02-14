@@ -260,7 +260,7 @@ export default function SearchMapSelector({
             <div><span style="color: #666;">Zoning:</span> <strong style="color: #111;">${property.zoning || 'N/A'}</strong></div>
             <div><span style="color: #666;">Businesses:</span> <strong style="color: #111;">${property.nearbyBusinesses ?? 'N/A'}</strong></div>
           </div>
-          <a href="/?lat=${property.coordinates.lat}&lng=${property.coordinates.lng}"
+          <a href="/?lat=${property.coordinates.lat}&lng=${property.coordinates.lng}&address=${encodeURIComponent(property.address)}"
              style="display: block; text-align: center; padding: 8px 12px; background: #0891b2; color: white; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 600;">
             View Full Analysis
           </a>

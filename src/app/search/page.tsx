@@ -1045,7 +1045,7 @@ export default function SearchPage() {
                                     {/* Actions */}
                                     <div className="flex gap-2">
                                       <Link
-                                        href={`/?lat=${property.coordinates.lat}&lng=${property.coordinates.lng}`}
+                                        href={`/?lat=${property.coordinates.lat}&lng=${property.coordinates.lng}&address=${encodeURIComponent(property.address)}`}
                                         className="flex-1 text-center py-1.5 text-xs bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)] rounded hover:bg-[var(--accent-cyan)]/30 transition-colors"
                                       >
                                         View Analysis
