@@ -397,9 +397,9 @@ export default function SearchMapSelector({
       </div>
 
       {/* Radius Selection */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <span className="text-sm text-[var(--text-muted)]">Search Radius:</span>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {RADIUS_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -413,6 +413,25 @@ export default function SearchMapSelector({
               {option.label}
             </button>
           ))}
+        </div>
+        {/* Custom radius input */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-[var(--text-muted)]">Custom:</span>
+          <input
+            type="number"
+            min="0.1"
+            max="10"
+            step="0.1"
+            value={radiusMiles}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val) && val >= 0.1 && val <= 10) {
+                onRadiusChange(val);
+              }
+            }}
+            className="w-20 px-2 py-1.5 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-center text-sm"
+          />
+          <span className="text-sm text-[var(--text-muted)]">mi</span>
         </div>
       </div>
 

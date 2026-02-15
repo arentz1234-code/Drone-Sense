@@ -915,6 +915,8 @@ export default function HomePage() {
                 <PDFReportGenerator
                   propertyData={getCurrentPropertyData()}
                   address={address}
+                  selectedParcel={selectedParcel}
+                  accessPoints={accessPoints}
                 />
               </div>
             </div>

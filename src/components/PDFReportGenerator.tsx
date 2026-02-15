@@ -1,17 +1,24 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { PropertyData } from '@/types';
+import { SelectedParcel } from '@/components/MapView';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 interface PDFReportGeneratorProps {
   propertyData: PropertyData;
   address: string;
-  mapRef?: React.RefObject<HTMLDivElement | null>;
+  selectedParcel?: SelectedParcel | null;
+  accessPoints?: Array<{ roadName: string; vpd?: number; vpdSource?: string }>;
 }
 
-export default function PDFReportGenerator({ propertyData, address, mapRef }: PDFReportGeneratorProps) {
+export default function PDFReportGenerator({
+  propertyData,
+  address,
+  selectedParcel,
+  accessPoints = []
+}: PDFReportGeneratorProps) {
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState('');
@@ -24,7 +31,7 @@ export default function PDFReportGenerator({ propertyData, address, mapRef }: PD
 
     setGenerating(true);
     setProgress(5);
-    setCurrentStep('Initializing PDF...');
+    setCurrentStep('Initializing report...');
 
     try {
       const doc = new jsPDF({
@@ -38,9 +45,19 @@ export default function PDFReportGenerator({ propertyData, address, mapRef }: PD
       const margin = 15;
       let yPos = margin;
 
-      // Helper function to add a new page if needed
-      const checkNewPage = (requiredSpace: number = 20) => {
-        if (yPos + requiredSpace > pageHeight - margin) {
+      // Colors
+      const primaryColor: [number, number, number] = [0, 180, 180]; // Cyan
+      const accentGreen: [number, number, number] = [34, 197, 94];
+      const accentYellow: [number, number, number] = [234, 179, 8];
+      const accentRed: [number, number, number] = [239, 68, 68];
+      const darkBg: [number, number, number] = [17, 24, 39];
+      const cardBg: [number, number, number] = [31, 41, 55];
+      const textWhite: [number, number, number] = [255, 255, 255];
+      const textMuted: [number, number, number] = [156, 163, 175];
+
+      // Helper: check if new page needed
+      const checkNewPage = (requiredSpace: number = 30) => {
+        if (yPos + requiredSpace > pageHeight - 20) {
           doc.addPage();
           yPos = margin;
           return true;
@@ -48,436 +65,679 @@ export default function PDFReportGenerator({ propertyData, address, mapRef }: PD
         return false;
       };
 
-      // Colors
-      const primaryColor: [number, number, number] = [0, 200, 150]; // Cyan-green
-      const darkBg: [number, number, number] = [15, 15, 25];
-      const textColor: [number, number, number] = [240, 240, 240];
-      const mutedColor: [number, number, number] = [150, 150, 160];
+      // Helper: draw score bar
+      const drawScoreBar = (x: number, y: number, width: number, score: number, maxScore: number = 10) => {
+        const barHeight = 4;
+        const fillWidth = (score / maxScore) * width;
+        const color = score >= 7 ? accentGreen : score >= 4 ? accentYellow : accentRed;
+
+        doc.setFillColor(50, 50, 60);
+        doc.roundedRect(x, y, width, barHeight, 1, 1, 'F');
+        doc.setFillColor(...color);
+        doc.roundedRect(x, y, fillWidth, barHeight, 1, 1, 'F');
+      };
+
+      // Helper: section header
+      const addSectionHeader = (title: string, icon?: string) => {
+        checkNewPage(25);
+        doc.setFillColor(...cardBg);
+        doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 10, 2, 2, 'F');
+        doc.setTextColor(...primaryColor);
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(title.toUpperCase(), margin + 5, yPos + 7);
+        yPos += 15;
+      };
 
       setProgress(10);
-      setCurrentStep('Creating header...');
+      setCurrentStep('Creating cover page...');
 
-      // Header Section
+      // ========== COVER PAGE ==========
+      // Background
       doc.setFillColor(...darkBg);
-      doc.rect(0, 0, pageWidth, 40, 'F');
+      doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-      doc.setTextColor(...primaryColor);
-      doc.setFontSize(24);
+      // Logo area
+      doc.setFillColor(...primaryColor);
+      doc.rect(0, 0, pageWidth, 8, 'F');
+
+      // Title
+      doc.setTextColor(...textWhite);
+      doc.setFontSize(32);
       doc.setFont('helvetica', 'bold');
-      doc.text('DRONE SENSE', margin, 20);
+      doc.text('DRONE SENSE', pageWidth / 2, 50, { align: 'center' });
 
-      doc.setFontSize(12);
-      doc.setTextColor(...textColor);
-      doc.text('Commercial Site Analysis Report', margin, 28);
+      doc.setFontSize(14);
+      doc.setTextColor(...textMuted);
+      doc.text('Commercial Site Analysis Report', pageWidth / 2, 62, { align: 'center' });
 
-      doc.setFontSize(9);
-      doc.setTextColor(...mutedColor);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth - margin, 20, { align: 'right' });
+      // Property address box
+      doc.setFillColor(...cardBg);
+      doc.roundedRect(margin, 85, pageWidth - 2 * margin, 35, 3, 3, 'F');
 
-      yPos = 50;
+      doc.setTextColor(...textMuted);
+      doc.setFontSize(10);
+      doc.text('SUBJECT PROPERTY', margin + 5, 95);
 
-      setProgress(20);
-      setCurrentStep('Adding property details...');
-
-      // Property Details Box
-      doc.setFillColor(25, 25, 40);
-      doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 25, 3, 3, 'F');
-
-      doc.setTextColor(...textColor);
-      doc.setFontSize(11);
+      doc.setTextColor(...textWhite);
+      doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('Property Address:', margin + 5, yPos + 8);
-      doc.setFont('helvetica', 'normal');
-      doc.text(address || 'Not specified', margin + 45, yPos + 8);
+      const addressLines = doc.splitTextToSize(address || 'Address Not Specified', pageWidth - 2 * margin - 10);
+      doc.text(addressLines, margin + 5, 105);
 
       if (propertyData.coordinates) {
-        doc.setFont('helvetica', 'bold');
-        doc.text('Coordinates:', margin + 5, yPos + 16);
-        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(...textMuted);
         doc.text(
-          `${propertyData.coordinates.lat.toFixed(6)}, ${propertyData.coordinates.lng.toFixed(6)}`,
-          margin + 35,
-          yPos + 16
+          `Coordinates: ${propertyData.coordinates.lat.toFixed(6)}, ${propertyData.coordinates.lng.toFixed(6)}`,
+          margin + 5,
+          115
         );
       }
 
-      yPos += 35;
-
-      setProgress(30);
-      setCurrentStep('Adding feasibility score...');
-
-      // Feasibility Score Section
+      // Feasibility Score - Big Display
       const { analysis } = propertyData;
       const score = analysis?.viabilityScore || 0;
       const scoreLabel = getScoreLabel(score);
       const scoreColor = getScoreColor(score);
 
-      doc.setFillColor(25, 25, 40);
-      doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 45, 3, 3, 'F');
+      doc.setFillColor(...cardBg);
+      doc.roundedRect(margin, 135, pageWidth - 2 * margin, 55, 3, 3, 'F');
+
+      doc.setTextColor(...textMuted);
+      doc.setFontSize(10);
+      doc.text('OVERALL FEASIBILITY SCORE', pageWidth / 2, 148, { align: 'center' });
+
+      // Large score circle
+      doc.setFillColor(...scoreColor);
+      doc.circle(pageWidth / 2, 170, 18, 'F');
+      doc.setTextColor(...textWhite);
+      doc.setFontSize(24);
+      doc.setFont('helvetica', 'bold');
+      doc.text(score.toFixed(1), pageWidth / 2, 175, { align: 'center' });
+
+      doc.setFontSize(12);
+      doc.text(scoreLabel, pageWidth / 2, 195, { align: 'center' });
+
+      // Report metadata
+      doc.setFillColor(...cardBg);
+      doc.roundedRect(margin, 205, pageWidth - 2 * margin, 25, 3, 3, 'F');
+
+      doc.setFontSize(9);
+      doc.setTextColor(...textMuted);
+      doc.text('Report Generated:', margin + 5, 215);
+      doc.setTextColor(...textWhite);
+      doc.text(new Date().toLocaleString(), margin + 40, 215);
+
+      doc.setTextColor(...textMuted);
+      doc.text('Analysis Type:', margin + 5, 223);
+      doc.setTextColor(...textWhite);
+      doc.text('Comprehensive Site Analysis', margin + 35, 223);
+
+      // Footer disclaimer
+      doc.setFontSize(8);
+      doc.setTextColor(...textMuted);
+      const disclaimer = 'This report is for informational purposes only. All data should be verified through official sources before making investment decisions.';
+      const disclaimerLines = doc.splitTextToSize(disclaimer, pageWidth - 2 * margin);
+      doc.text(disclaimerLines, pageWidth / 2, pageHeight - 25, { align: 'center' });
 
       doc.setTextColor(...primaryColor);
-      doc.setFontSize(14);
+      doc.text('www.dronesense.ai', pageWidth / 2, pageHeight - 15, { align: 'center' });
+
+      setProgress(20);
+      setCurrentStep('Adding executive summary...');
+
+      // ========== PAGE 2: EXECUTIVE SUMMARY ==========
+      doc.addPage();
+      yPos = margin;
+
+      // Page header
+      doc.setFillColor(...darkBg);
+      doc.rect(0, 0, pageWidth, 12, 'F');
+      doc.setTextColor(...primaryColor);
+      doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      doc.text('FEASIBILITY SCORE', margin + 5, yPos + 10);
+      doc.text('DRONE SENSE | Site Analysis Report', margin, 8);
+      doc.setTextColor(...textMuted);
+      doc.text(address.substring(0, 50) + (address.length > 50 ? '...' : ''), pageWidth - margin, 8, { align: 'right' });
 
-      // Score circle
-      const circleX = margin + 25;
-      const circleY = yPos + 30;
-      doc.setFillColor(...scoreColor);
-      doc.circle(circleX, circleY, 12, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text(score.toFixed(1), circleX, circleY + 2, { align: 'center' });
+      yPos = 20;
 
-      doc.setTextColor(...textColor);
-      doc.setFontSize(12);
-      doc.text(scoreLabel, circleX + 20, circleY + 2);
+      addSectionHeader('Executive Summary');
 
-      // Breakdown scores
+      // Score breakdown
+      doc.setFillColor(...cardBg);
+      doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 50, 3, 3, 'F');
+
       if (analysis?.feasibilityScore?.breakdown) {
         const breakdown = analysis.feasibilityScore.breakdown;
-        const breakdownX = margin + 80;
-        doc.setFontSize(9);
-        doc.setTextColor(...mutedColor);
+        const barWidth = 60;
+        const startX = margin + 60;
 
-        const breakdownItems = [
-          ['Traffic', breakdown.trafficScore],
-          ['Demographics', breakdown.demographicsScore],
-          ['Competition', breakdown.competitionScore],
-          ['Access', breakdown.accessScore],
+        const scores = [
+          { label: 'Traffic & Visibility', value: breakdown.trafficScore },
+          { label: 'Demographics', value: breakdown.demographicsScore },
+          { label: 'Competition Analysis', value: breakdown.competitionScore },
+          { label: 'Site Access', value: breakdown.accessScore },
         ];
 
-        breakdownItems.forEach((item, idx) => {
-          const bx = breakdownX + (idx % 2) * 50;
-          const by = yPos + 15 + Math.floor(idx / 2) * 12;
-          doc.text(`${item[0]}: `, bx, by);
-          doc.setTextColor(...getScoreColor(item[1] as number));
-          doc.text(`${(item[1] as number).toFixed(1)}/10`, bx + 25, by);
-          doc.setTextColor(...mutedColor);
+        scores.forEach((item, idx) => {
+          const itemY = yPos + 10 + idx * 10;
+          doc.setFontSize(9);
+          doc.setTextColor(...textWhite);
+          doc.text(item.label + ':', margin + 5, itemY + 3);
+          drawScoreBar(startX, itemY, barWidth, item.value);
+          doc.setTextColor(...textMuted);
+          doc.text(`${item.value.toFixed(1)}/10`, startX + barWidth + 5, itemY + 3);
         });
       }
 
-      yPos += 55;
+      yPos += 60;
 
-      setProgress(40);
-      setCurrentStep('Adding traffic data...');
+      // Key findings
+      if (analysis?.keyFindings && analysis.keyFindings.length > 0) {
+        doc.setTextColor(...primaryColor);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Key Findings', margin, yPos);
+        yPos += 6;
 
-      // Traffic Analysis Table
-      checkNewPage(50);
-      doc.setTextColor(...primaryColor);
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('TRAFFIC ANALYSIS', margin, yPos);
+        doc.setTextColor(...textWhite);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        analysis.keyFindings.slice(0, 5).forEach((finding, idx) => {
+          checkNewPage(12);
+          doc.setTextColor(...accentGreen);
+          doc.text('•', margin + 3, yPos);
+          doc.setTextColor(...textWhite);
+          const lines = doc.splitTextToSize(finding, pageWidth - 2 * margin - 10);
+          doc.text(lines, margin + 8, yPos);
+          yPos += lines.length * 4 + 3;
+        });
+      }
+
       yPos += 5;
 
-      if (propertyData.trafficData) {
-        const trafficData = propertyData.trafficData;
+      // Business recommendation
+      if (analysis?.businessRecommendation) {
+        doc.setFillColor(0, 100, 100, 0.3);
+        doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 25, 2, 2, 'F');
+        doc.setDrawColor(...primaryColor);
+        doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 25, 2, 2, 'S');
+
+        doc.setTextColor(...primaryColor);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text('AI RECOMMENDATION', margin + 5, yPos + 6);
+
+        doc.setTextColor(...textWhite);
+        doc.setFont('helvetica', 'normal');
+        const recLines = doc.splitTextToSize(analysis.businessRecommendation, pageWidth - 2 * margin - 10);
+        doc.text(recLines.slice(0, 3), margin + 5, yPos + 13);
+        yPos += 30;
+      }
+
+      setProgress(35);
+      setCurrentStep('Adding property details...');
+
+      // ========== PROPERTY DETAILS ==========
+      addSectionHeader('Property Details');
+
+      const parcelInfo = selectedParcel?.parcelInfo;
+      const propertyDetails: [string, string][] = [];
+
+      if (parcelInfo?.apn) propertyDetails.push(['Parcel Number (APN)', parcelInfo.apn]);
+      if (parcelInfo?.owner) propertyDetails.push(['Owner', parcelInfo.owner]);
+      if (parcelInfo?.acres) propertyDetails.push(['Lot Size', `${parcelInfo.acres.toFixed(2)} acres (${(parcelInfo.acres * 43560).toLocaleString()} sq ft)`]);
+      if (parcelInfo?.zoning) propertyDetails.push(['Zoning', parcelInfo.zoning]);
+      if (parcelInfo?.landUse) propertyDetails.push(['Land Use', parcelInfo.landUse]);
+      if (analysis?.terrain) propertyDetails.push(['Terrain', analysis.terrain]);
+      if (analysis?.accessibility) propertyDetails.push(['Accessibility', analysis.accessibility]);
+
+      if (propertyDetails.length > 0) {
         autoTable(doc, {
           startY: yPos,
           margin: { left: margin, right: margin },
-          head: [['Metric', 'Value']],
-          body: [
-            ['Estimated VPD', `${trafficData.estimatedVPD?.toLocaleString() || 'N/A'} vehicles/day`],
-            ['VPD Range', trafficData.vpdRange || 'N/A'],
-            ['Road Type', trafficData.roadType || 'N/A'],
-            ['Traffic Level', trafficData.trafficLevel || 'N/A'],
-            ['Congestion', `${trafficData.congestionPercent || 0}%`],
-          ],
+          head: [['Property Characteristic', 'Value']],
+          body: propertyDetails,
           styles: {
-            fillColor: [25, 25, 40],
-            textColor: [240, 240, 240],
+            fillColor: cardBg,
+            textColor: textWhite,
             fontSize: 9,
+            cellPadding: 4,
           },
           headStyles: {
-            fillColor: [0, 150, 120],
-            textColor: [255, 255, 255],
+            fillColor: [0, 120, 120],
+            textColor: textWhite,
             fontStyle: 'bold',
           },
           alternateRowStyles: {
-            fillColor: [35, 35, 55],
+            fillColor: [40, 50, 65],
           },
         });
         yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
-      } else {
-        doc.setTextColor(...mutedColor);
-        doc.setFontSize(10);
-        doc.text('Traffic data not available', margin, yPos + 8);
-        yPos += 15;
       }
 
-      setProgress(50);
+      setProgress(45);
+      setCurrentStep('Adding traffic analysis...');
+
+      // ========== TRAFFIC ANALYSIS ==========
+      addSectionHeader('Traffic Analysis');
+
+      if (propertyData.trafficData) {
+        const traffic = propertyData.trafficData;
+
+        // VPD highlight box
+        doc.setFillColor(...cardBg);
+        doc.roundedRect(margin, yPos, 70, 30, 3, 3, 'F');
+        doc.setTextColor(...textMuted);
+        doc.setFontSize(8);
+        doc.text('ESTIMATED DAILY TRAFFIC', margin + 5, yPos + 8);
+        doc.setTextColor(...accentGreen);
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.text((traffic.estimatedVPD?.toLocaleString() || 'N/A'), margin + 5, yPos + 22);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text('VPD', margin + 50, yPos + 22);
+
+        // Traffic details
+        doc.setFillColor(...cardBg);
+        doc.roundedRect(margin + 75, yPos, pageWidth - 2 * margin - 75, 30, 3, 3, 'F');
+
+        doc.setFontSize(9);
+        doc.setTextColor(...textMuted);
+        doc.text('Road Type:', margin + 80, yPos + 10);
+        doc.setTextColor(...textWhite);
+        doc.text(traffic.roadType || 'N/A', margin + 105, yPos + 10);
+
+        doc.setTextColor(...textMuted);
+        doc.text('Traffic Level:', margin + 80, yPos + 18);
+        doc.setTextColor(...textWhite);
+        doc.text(traffic.trafficLevel || 'N/A', margin + 110, yPos + 18);
+
+        doc.setTextColor(...textMuted);
+        doc.text('VPD Range:', margin + 80, yPos + 26);
+        doc.setTextColor(...textWhite);
+        doc.text(traffic.vpdRange || 'N/A', margin + 105, yPos + 26);
+
+        yPos += 38;
+
+        // Access points
+        if (accessPoints && accessPoints.length > 0) {
+          doc.setTextColor(...primaryColor);
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Road Access Points', margin, yPos);
+          yPos += 5;
+
+          autoTable(doc, {
+            startY: yPos,
+            margin: { left: margin, right: margin },
+            head: [['Road Name', 'Traffic (VPD)', 'Data Source']],
+            body: accessPoints.slice(0, 6).map(ap => [
+              ap.roadName,
+              ap.vpd?.toLocaleString() || 'N/A',
+              ap.vpdSource === 'fdot' ? 'FDOT Official' : 'Estimated',
+            ]),
+            styles: {
+              fillColor: cardBg,
+              textColor: textWhite,
+              fontSize: 9,
+            },
+            headStyles: {
+              fillColor: [0, 120, 120],
+              textColor: textWhite,
+              fontStyle: 'bold',
+            },
+            alternateRowStyles: {
+              fillColor: [40, 50, 65],
+            },
+          });
+          yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+        }
+      }
+
+      setProgress(55);
       setCurrentStep('Adding demographics...');
 
-      // Demographics Section
+      // ========== DEMOGRAPHICS ==========
       checkNewPage(60);
-      doc.setTextColor(...primaryColor);
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('DEMOGRAPHICS ANALYSIS', margin, yPos);
-      yPos += 5;
+      addSectionHeader('Demographics Analysis');
 
       if (propertyData.demographicsData) {
         const demo = propertyData.demographicsData;
-        const demoBody: (string | number)[][] = [
-          ['Population', demo.population?.toLocaleString() || 'N/A'],
-          ['Median Household Income', `$${demo.medianHouseholdIncome?.toLocaleString() || 'N/A'}`],
-          ['College Town', demo.isCollegeTown ? 'Yes' : 'No'],
+
+        // Key metrics row
+        const metricWidth = (pageWidth - 2 * margin - 10) / 3;
+
+        const metrics = [
+          { label: 'Population', value: demo.population?.toLocaleString() || 'N/A', sub: '1-mile radius' },
+          { label: 'Median Income', value: `$${demo.medianHouseholdIncome?.toLocaleString() || 'N/A'}`, sub: 'Household' },
+          { label: 'Market Type', value: demo.isCollegeTown ? 'College Town' : 'Standard', sub: demo.isCollegeTown ? 'Student population present' : '' },
         ];
 
-        if (demo.multiRadius) {
-          demoBody.push(
-            ['Population (1 Mile)', demo.multiRadius.oneMile?.population?.toLocaleString() || 'N/A'],
-            ['Population (3 Miles)', demo.multiRadius.threeMile?.population?.toLocaleString() || 'N/A'],
-            ['Population (5 Miles)', demo.multiRadius.fiveMile?.population?.toLocaleString() || 'N/A']
-          );
-        }
+        metrics.forEach((m, idx) => {
+          const x = margin + idx * (metricWidth + 5);
+          doc.setFillColor(...cardBg);
+          doc.roundedRect(x, yPos, metricWidth, 28, 2, 2, 'F');
 
-        autoTable(doc, {
-          startY: yPos,
-          margin: { left: margin, right: margin },
-          head: [['Metric', 'Value']],
-          body: demoBody,
-          styles: {
-            fillColor: [25, 25, 40],
-            textColor: [240, 240, 240],
-            fontSize: 9,
-          },
-          headStyles: {
-            fillColor: [0, 150, 120],
-            textColor: [255, 255, 255],
-            fontStyle: 'bold',
-          },
-          alternateRowStyles: {
-            fillColor: [35, 35, 55],
-          },
+          doc.setTextColor(...textMuted);
+          doc.setFontSize(8);
+          doc.text(m.label.toUpperCase(), x + 5, yPos + 8);
+
+          doc.setTextColor(...textWhite);
+          doc.setFontSize(14);
+          doc.setFont('helvetica', 'bold');
+          doc.text(m.value, x + 5, yPos + 18);
+
+          if (m.sub) {
+            doc.setTextColor(...textMuted);
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.text(m.sub, x + 5, yPos + 24);
+          }
         });
-        yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+
+        yPos += 35;
+
+        // Multi-radius population
+        if (demo.multiRadius) {
+          doc.setTextColor(...primaryColor);
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Population by Radius', margin, yPos);
+          yPos += 5;
+
+          autoTable(doc, {
+            startY: yPos,
+            margin: { left: margin, right: margin },
+            head: [['Radius', 'Population', 'Households', 'Density']],
+            body: [
+              ['1 Mile', demo.multiRadius.oneMile?.population?.toLocaleString() || 'N/A',
+               demo.multiRadius.oneMile?.households?.toLocaleString() || 'N/A',
+               demo.multiRadius.oneMile ? `${Math.round(demo.multiRadius.oneMile.population / 3.14).toLocaleString()}/sq mi` : '-'],
+              ['3 Miles', demo.multiRadius.threeMile?.population?.toLocaleString() || 'N/A',
+               demo.multiRadius.threeMile?.households?.toLocaleString() || 'N/A',
+               demo.multiRadius.threeMile ? `${Math.round(demo.multiRadius.threeMile.population / 28.27).toLocaleString()}/sq mi` : '-'],
+              ['5 Miles', demo.multiRadius.fiveMile?.population?.toLocaleString() || 'N/A',
+               demo.multiRadius.fiveMile?.households?.toLocaleString() || 'N/A',
+               demo.multiRadius.fiveMile ? `${Math.round(demo.multiRadius.fiveMile.population / 78.54).toLocaleString()}/sq mi` : '-'],
+            ],
+            styles: {
+              fillColor: cardBg,
+              textColor: textWhite,
+              fontSize: 9,
+            },
+            headStyles: {
+              fillColor: [0, 120, 120],
+              textColor: textWhite,
+              fontStyle: 'bold',
+            },
+            alternateRowStyles: {
+              fillColor: [40, 50, 65],
+            },
+          });
+          yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+        }
       }
 
-      setProgress(60);
-      setCurrentStep('Adding nearby businesses...');
+      setProgress(65);
+      setCurrentStep('Adding market analysis...');
 
-      // Nearby Businesses
-      checkNewPage(50);
-      doc.setTextColor(...primaryColor);
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('NEARBY BUSINESSES', margin, yPos);
-      yPos += 5;
+      // ========== MARKET ANALYSIS ==========
+      checkNewPage(60);
+      addSectionHeader('Competitive Landscape');
 
       if (propertyData.businesses && propertyData.businesses.length > 0) {
+        // Business count by category
+        const typeCount = propertyData.businesses.reduce((acc, b) => {
+          acc[b.type] = (acc[b.type] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+
+        const sortedTypes = Object.entries(typeCount).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+        doc.setFillColor(...cardBg);
+        doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 35, 2, 2, 'F');
+
+        doc.setTextColor(...textMuted);
+        doc.setFontSize(8);
+        doc.text('TOTAL NEARBY BUSINESSES', margin + 5, yPos + 8);
+        doc.setTextColor(...accentGreen);
+        doc.setFontSize(24);
+        doc.setFont('helvetica', 'bold');
+        doc.text(propertyData.businesses.length.toString(), margin + 5, yPos + 22);
+
+        // Category breakdown
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        let catX = margin + 50;
+        sortedTypes.forEach(([type, count], idx) => {
+          if (idx < 3) {
+            doc.setTextColor(...textMuted);
+            doc.text(type + ':', catX, yPos + 10 + idx * 8);
+            doc.setTextColor(...textWhite);
+            doc.text(count.toString(), catX + 40, yPos + 10 + idx * 8);
+          } else if (idx < 6) {
+            doc.setTextColor(...textMuted);
+            doc.text(type + ':', catX + 70, yPos + 10 + (idx - 3) * 8);
+            doc.setTextColor(...textWhite);
+            doc.text(count.toString(), catX + 110, yPos + 10 + (idx - 3) * 8);
+          }
+        });
+
+        yPos += 42;
+
+        // Nearest competitors
+        doc.setTextColor(...primaryColor);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Nearest Competitors', margin, yPos);
+        yPos += 5;
+
         autoTable(doc, {
           startY: yPos,
           margin: { left: margin, right: margin },
-          head: [['Business Name', 'Type', 'Distance']],
-          body: propertyData.businesses.slice(0, 10).map(b => [
-            b.name,
-            b.type,
-            b.distance,
-          ]),
+          head: [['Business Name', 'Category', 'Distance']],
+          body: propertyData.businesses.slice(0, 8).map(b => [b.name, b.type, b.distance]),
           styles: {
-            fillColor: [25, 25, 40],
-            textColor: [240, 240, 240],
+            fillColor: cardBg,
+            textColor: textWhite,
             fontSize: 9,
           },
           headStyles: {
-            fillColor: [0, 150, 120],
-            textColor: [255, 255, 255],
+            fillColor: [0, 120, 120],
+            textColor: textWhite,
             fontStyle: 'bold',
           },
           alternateRowStyles: {
-            fillColor: [35, 35, 55],
+            fillColor: [40, 50, 65],
           },
         });
         yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
       }
 
-      setProgress(70);
-      setCurrentStep('Adding environmental risk...');
+      setProgress(75);
+      setCurrentStep('Adding environmental assessment...');
 
-      // Environmental Risk Assessment
+      // ========== ENVIRONMENTAL RISK ==========
       checkNewPage(60);
-      doc.setTextColor(...primaryColor);
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('ENVIRONMENTAL RISK ASSESSMENT', margin, yPos);
-      yPos += 5;
+      addSectionHeader('Environmental Risk Assessment');
 
       if (propertyData.environmentalRisk) {
         const env = propertyData.environmentalRisk;
         const riskScore = env.overallRiskScore;
-        const riskLevel = riskScore >= 70 ? 'Low Risk' : riskScore >= 40 ? 'Moderate Risk' : 'High Risk';
+        const riskColor = riskScore >= 70 ? accentGreen : riskScore >= 40 ? accentYellow : accentRed;
+        const riskLabel = riskScore >= 70 ? 'Low Risk' : riskScore >= 40 ? 'Moderate Risk' : 'High Risk';
 
+        // Risk score box
+        doc.setFillColor(...cardBg);
+        doc.roundedRect(margin, yPos, 50, 28, 2, 2, 'F');
+        doc.setTextColor(...textMuted);
+        doc.setFontSize(8);
+        doc.text('RISK SCORE', margin + 5, yPos + 8);
+        doc.setTextColor(...riskColor);
+        doc.setFontSize(20);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${riskScore}`, margin + 5, yPos + 20);
+        doc.setFontSize(10);
+        doc.text('/100', margin + 25, yPos + 20);
+        doc.setFontSize(8);
+        doc.text(riskLabel, margin + 5, yPos + 26);
+
+        yPos += 35;
+
+        // Risk categories
         autoTable(doc, {
           startY: yPos,
           margin: { left: margin, right: margin },
-          head: [['Category', 'Status', 'Details']],
+          head: [['Risk Category', 'Status', 'Details']],
           body: [
-            ['Overall Risk Score', `${riskScore}/100 (${riskLevel})`, ''],
-            ['Flood Zone', env.floodZone.zone, `${env.floodZone.risk} risk - ${env.floodZone.description}`],
-            ['Wetlands', env.wetlands.present ? 'Present' : 'None', env.wetlands.present ? 'Within 500m' : 'No wetlands detected'],
-            ['Brownfields', env.brownfields.present ? `${env.brownfields.count} site(s)` : 'None', env.brownfields.present ? 'Within 1 mile' : 'No brownfields detected'],
-            ['Superfund Sites', env.superfund.present ? `${env.superfund.count} site(s)` : 'None', env.superfund.present ? 'Nearby' : 'No superfund sites detected'],
+            ['Flood Zone', `${env.floodZone.zone} (${env.floodZone.risk.toUpperCase()})`, env.floodZone.description],
+            ['Wetlands', env.wetlands.present ? 'PRESENT' : 'None', env.wetlands.present ? 'Within 500m of property' : 'No wetlands detected'],
+            ['Brownfields', env.brownfields.present ? `${env.brownfields.count} site(s)` : 'None', env.brownfields.present ? 'Within 1 mile' : 'No contaminated sites'],
+            ['Superfund Sites', env.superfund.present ? `${env.superfund.count} site(s)` : 'None', env.superfund.present ? 'Requires review' : 'No superfund sites nearby'],
           ],
           styles: {
-            fillColor: [25, 25, 40],
-            textColor: [240, 240, 240],
+            fillColor: cardBg,
+            textColor: textWhite,
             fontSize: 9,
           },
           headStyles: {
-            fillColor: [0, 150, 120],
-            textColor: [255, 255, 255],
+            fillColor: [0, 120, 120],
+            textColor: textWhite,
             fontStyle: 'bold',
           },
           alternateRowStyles: {
-            fillColor: [35, 35, 55],
+            fillColor: [40, 50, 65],
           },
           columnStyles: {
             2: { cellWidth: 60 },
           },
         });
         yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+
+        // Risk factors
+        if (env.riskFactors && env.riskFactors.length > 0) {
+          doc.setFillColor(100, 50, 50);
+          doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 5 + env.riskFactors.length * 5, 2, 2, 'F');
+          doc.setTextColor(255, 200, 200);
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.text('Risk Factors Identified:', margin + 5, yPos + 5);
+          doc.setFont('helvetica', 'normal');
+          env.riskFactors.forEach((factor, idx) => {
+            doc.text(`• ${factor}`, margin + 5, yPos + 10 + idx * 5);
+          });
+          yPos += 10 + env.riskFactors.length * 5;
+        }
       }
 
-      setProgress(80);
-      setCurrentStep('Adding recommendations...');
-
-      // AI Recommendations
-      checkNewPage(50);
-      doc.setTextColor(...primaryColor);
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text('AI RECOMMENDATIONS', margin, yPos);
-      yPos += 8;
-
-      if (analysis?.businessRecommendation) {
-        doc.setFillColor(25, 25, 40);
-        doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 20, 3, 3, 'F');
-        doc.setTextColor(...textColor);
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        const lines = doc.splitTextToSize(analysis.businessRecommendation, pageWidth - 2 * margin - 10);
-        doc.text(lines, margin + 5, yPos + 8);
-        yPos += Math.max(20, lines.length * 5 + 10);
-      }
-
-      // Key Findings
-      if (analysis?.keyFindings && analysis.keyFindings.length > 0) {
-        checkNewPage(40);
-        yPos += 5;
-        doc.setTextColor(...primaryColor);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Key Findings:', margin, yPos);
-        yPos += 6;
-
-        doc.setTextColor(...textColor);
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        analysis.keyFindings.forEach((finding, idx) => {
-          checkNewPage(10);
-          const findingLines = doc.splitTextToSize(`${idx + 1}. ${finding}`, pageWidth - 2 * margin - 5);
-          doc.text(findingLines, margin + 3, yPos);
-          yPos += findingLines.length * 4 + 2;
-        });
-      }
-
-      // Recommendations List
-      if (analysis?.recommendations && analysis.recommendations.length > 0) {
-        checkNewPage(40);
-        yPos += 5;
-        doc.setTextColor(...primaryColor);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Recommendations:', margin, yPos);
-        yPos += 6;
-
-        doc.setTextColor(...textColor);
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        analysis.recommendations.forEach((rec, idx) => {
-          checkNewPage(10);
-          const recLines = doc.splitTextToSize(`${idx + 1}. ${rec}`, pageWidth - 2 * margin - 5);
-          doc.text(recLines, margin + 3, yPos);
-          yPos += recLines.length * 4 + 2;
-        });
-      }
-
-      setProgress(90);
+      setProgress(85);
       setCurrentStep('Adding retailer matches...');
 
-      // Retailer Matches
+      // ========== RETAILER MATCHES ==========
       if (analysis?.retailerMatches?.matches && analysis.retailerMatches.matches.length > 0) {
-        checkNewPage(50);
-        doc.setTextColor(...primaryColor);
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('RETAILER MATCHES', margin, yPos);
-        yPos += 5;
+        checkNewPage(60);
+        addSectionHeader('Recommended Retailers');
+
+        doc.setTextColor(...textMuted);
+        doc.setFontSize(9);
+        doc.text(`Based on site characteristics, ${analysis.retailerMatches.totalMatches} potential retailer matches were identified.`, margin, yPos);
+        yPos += 8;
 
         autoTable(doc, {
           startY: yPos,
           margin: { left: margin, right: margin },
-          head: [['Retailer', 'Category', 'Match Score', 'Investment']],
-          body: analysis.retailerMatches.matches.slice(0, 8).map(r => [
+          head: [['Retailer', 'Category', 'Match', 'Est. Investment', 'Status']],
+          body: analysis.retailerMatches.matches.slice(0, 10).map(r => [
             r.name,
             r.category,
             `${r.matchScore}%`,
             r.totalInvestment || 'N/A',
+            r.activelyExpanding ? 'Expanding' : 'Standard',
           ]),
           styles: {
-            fillColor: [25, 25, 40],
-            textColor: [240, 240, 240],
+            fillColor: cardBg,
+            textColor: textWhite,
             fontSize: 9,
           },
           headStyles: {
-            fillColor: [0, 150, 120],
-            textColor: [255, 255, 255],
+            fillColor: [0, 120, 120],
+            textColor: textWhite,
             fontStyle: 'bold',
           },
           alternateRowStyles: {
-            fillColor: [35, 35, 55],
+            fillColor: [40, 50, 65],
           },
         });
         yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
       }
 
-      setProgress(95);
-      setCurrentStep('Finalizing document...');
+      setProgress(92);
+      setCurrentStep('Adding recommendations...');
 
-      // Footer on each page
+      // ========== RECOMMENDATIONS ==========
+      checkNewPage(50);
+      addSectionHeader('Recommendations & Next Steps');
+
+      if (analysis?.recommendations && analysis.recommendations.length > 0) {
+        analysis.recommendations.forEach((rec, idx) => {
+          checkNewPage(15);
+          doc.setFillColor(...cardBg);
+          doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 12, 2, 2, 'F');
+
+          doc.setFillColor(...primaryColor);
+          doc.circle(margin + 8, yPos + 6, 4, 'F');
+          doc.setTextColor(...textWhite);
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.text((idx + 1).toString(), margin + 8, yPos + 7, { align: 'center' });
+
+          doc.setFont('helvetica', 'normal');
+          const recLines = doc.splitTextToSize(rec, pageWidth - 2 * margin - 25);
+          doc.text(recLines[0], margin + 16, yPos + 7);
+          yPos += 15;
+        });
+      }
+
+      setProgress(98);
+      setCurrentStep('Adding page numbers...');
+
+      // ========== FOOTER ON ALL PAGES ==========
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFillColor(...darkBg);
-        doc.rect(0, pageHeight - 15, pageWidth, 15, 'F');
-        doc.setTextColor(...mutedColor);
-        doc.setFontSize(8);
-        doc.text(
-          'This report is for informational purposes only. Verify all data through official sources.',
-          pageWidth / 2,
-          pageHeight - 8,
-          { align: 'center' }
-        );
-        doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
-        doc.text('DRONE SENSE', margin, pageHeight - 8);
+        doc.rect(0, pageHeight - 12, pageWidth, 12, 'F');
+        doc.setDrawColor(...primaryColor);
+        doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+
+        doc.setTextColor(...textMuted);
+        doc.setFontSize(7);
+        doc.text('Confidential - For authorized use only', margin, pageHeight - 5);
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
+        doc.setTextColor(...primaryColor);
+        doc.text('DRONE SENSE', pageWidth / 2, pageHeight - 5, { align: 'center' });
       }
 
       setProgress(100);
       setCurrentStep('Complete!');
 
-      // Download the PDF
-      doc.save(`drone-sense-report-${new Date().toISOString().split('T')[0]}.pdf`);
+      // Save PDF
+      const fileName = `DroneSense-Report-${address.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 30)}-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
 
       setTimeout(() => {
         setGenerating(false);
         setProgress(0);
         setCurrentStep('');
       }, 1000);
+
     } catch (error) {
       console.error('Report generation failed:', error);
-      alert('Failed to generate report');
+      alert('Failed to generate report. Please try again.');
       setGenerating(false);
       setProgress(0);
       setCurrentStep('');
@@ -485,26 +745,26 @@ export default function PDFReportGenerator({ propertyData, address, mapRef }: PD
   };
 
   const getScoreLabel = (score: number) => {
-    if (score >= 8) return 'Excellent';
-    if (score >= 6) return 'Good';
-    if (score >= 4) return 'Fair';
-    return 'Poor';
+    if (score >= 8) return 'EXCELLENT';
+    if (score >= 6) return 'GOOD';
+    if (score >= 4) return 'FAIR';
+    return 'NEEDS REVIEW';
   };
 
   const getScoreColor = (score: number): [number, number, number] => {
-    if (score >= 8) return [0, 200, 100];
-    if (score >= 6) return [100, 200, 50];
-    if (score >= 4) return [255, 180, 0];
-    return [255, 80, 80];
+    if (score >= 8) return [34, 197, 94];
+    if (score >= 6) return [6, 182, 212];
+    if (score >= 4) return [234, 179, 8];
+    return [239, 68, 68];
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-lg">Generate PDF Report</h3>
+          <h3 className="font-semibold text-lg">Professional PDF Report</h3>
           <p className="text-sm text-[var(--text-muted)]">
-            Download a comprehensive analysis report
+            Download a comprehensive site analysis report
           </p>
         </div>
         <button
@@ -525,7 +785,7 @@ export default function PDFReportGenerator({ propertyData, address, mapRef }: PD
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Download PDF Report
+              Download PDF
             </>
           )}
         </button>
@@ -533,9 +793,9 @@ export default function PDFReportGenerator({ propertyData, address, mapRef }: PD
 
       {generating && (
         <div className="space-y-2">
-          <div className="w-full bg-[var(--bg-tertiary)] rounded-full h-2 overflow-hidden">
+          <div className="w-full bg-[var(--bg-tertiary)] rounded-full h-2.5 overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-blue)] transition-all duration-300"
+              className="h-full bg-gradient-to-r from-[var(--accent-cyan)] to-[var(--accent-green)] transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -546,57 +806,33 @@ export default function PDFReportGenerator({ propertyData, address, mapRef }: PD
       )}
 
       <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
-        <h4 className="font-medium mb-2 text-sm">Report Includes:</h4>
-        <ul className="grid grid-cols-2 gap-2 text-sm text-[var(--text-secondary)]">
-          <li className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-[var(--accent-green)]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Executive Summary
-          </li>
-          <li className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-[var(--accent-green)]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Traffic Analysis
-          </li>
-          <li className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-[var(--accent-green)]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Demographics
-          </li>
-          <li className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-[var(--accent-green)]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Nearby Businesses
-          </li>
-          <li className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-[var(--accent-green)]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Risk Assessment
-          </li>
-          <li className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-[var(--accent-green)]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Retailer Matches
-          </li>
-          <li className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-[var(--accent-green)]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Recommendations
-          </li>
-          <li className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-[var(--accent-green)]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
-            Site Details
-          </li>
-        </ul>
+        <h4 className="font-medium mb-3 text-sm flex items-center gap-2">
+          <svg className="w-4 h-4 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Report Contents
+        </h4>
+        <div className="grid grid-cols-2 gap-2 text-sm text-[var(--text-secondary)]">
+          {[
+            'Cover Page & Score',
+            'Executive Summary',
+            'Property Details',
+            'Traffic Analysis',
+            'Demographics Data',
+            'Market Competition',
+            'Environmental Risk',
+            'Retailer Matches',
+            'AI Recommendations',
+            'Data Sources',
+          ].map((item) => (
+            <div key={item} className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-[var(--accent-green)] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              {item}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

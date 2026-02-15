@@ -40,6 +40,7 @@ interface SearchFilters {
   center: { lat: number; lng: number } | null;
   radiusMiles: number;
   minScore: number;
+  maxScore: number;
   propertyType: 'all' | 'vacant' | 'commercial';
   minAcres: number | null;
   maxAcres: number | null;
@@ -124,7 +125,8 @@ export default function SearchPage() {
   const [filters, setFilters] = useState<SearchFilters>({
     center: null,
     radiusMiles: 1,
-    minScore: 5,
+    minScore: 1,
+    maxScore: 10,
     propertyType: 'all',
     minAcres: null,
     maxAcres: null,
@@ -196,7 +198,8 @@ export default function SearchPage() {
     setFilters({
       center: null,
       radiusMiles: 1,
-      minScore: 5,
+      minScore: 1,
+      maxScore: 10,
       propertyType: 'all',
       minAcres: null,
       maxAcres: null,
@@ -282,7 +285,8 @@ export default function SearchPage() {
       const parcelsData = await parcelsResponse.json();
       setProgress(30);
 
-      const searchAreaLabel = `${filters.radiusMiles} mile${filters.radiusMiles !== 1 ? 's' : ''} radius`;
+      const radiusDisplay = Number.isInteger(filters.radiusMiles) ? filters.radiusMiles : filters.radiusMiles.toFixed(1);
+      const searchAreaLabel = `${radiusDisplay} mile${filters.radiusMiles !== 1 ? 's' : ''} radius`;
 
       if (parcelsData.parcels.length === 0) {
         setResults({
@@ -336,6 +340,11 @@ export default function SearchPage() {
     if (!results) return [];
 
     return results.results.filter(property => {
+      // Filter by score range
+      if (property.score < filters.minScore || property.score > filters.maxScore) {
+        return false;
+      }
+
       if (filters.minAcres !== null && (property.lotSizeAcres === undefined || property.lotSizeAcres < filters.minAcres)) {
         return false;
       }
@@ -507,23 +516,39 @@ export default function SearchPage() {
 
           {/* Filter Controls */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            {/* Min Score */}
+            {/* Score Range */}
             <div>
               <label className="block text-sm text-[var(--text-muted)] mb-2">
-                Minimum Score: {filters.minScore}
+                Score Range: {filters.minScore} - {filters.maxScore}
               </label>
-              <input
-                type="range"
-                min="1"
-                max="10"
-                value={filters.minScore}
-                onChange={(e) => setFilters(prev => ({ ...prev, minScore: parseInt(e.target.value) }))}
-                className="w-full accent-[var(--accent-cyan)]"
-              />
-              <div className="flex justify-between text-xs text-[var(--text-muted)]">
-                <span>1</span>
-                <span>10</span>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  step="0.5"
+                  value={filters.minScore}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value) || 1;
+                    setFilters(prev => ({ ...prev, minScore: Math.min(val, prev.maxScore) }));
+                  }}
+                  className="w-16 px-2 py-1.5 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-center text-sm"
+                />
+                <span className="text-[var(--text-muted)]">to</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  step="0.5"
+                  value={filters.maxScore}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value) || 10;
+                    setFilters(prev => ({ ...prev, maxScore: Math.max(val, prev.minScore) }));
+                  }}
+                  className="w-16 px-2 py-1.5 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-center text-sm"
+                />
               </div>
+              <p className="text-xs text-[var(--text-muted)] mt-1">e.g., 2-5 for mid-range</p>
             </div>
 
             {/* Property Type */}
@@ -733,7 +758,7 @@ export default function SearchPage() {
               </div>
               <p className="text-xs text-[var(--text-muted)] mt-1 text-center">
                 {progress < 30
-                  ? `Scanning ${filters.radiusMiles >= 1 ? 'grid cells in' : ''} ${filters.radiusMiles} mile radius...`
+                  ? `Scanning ${filters.radiusMiles >= 1 ? 'grid cells in' : ''} ${Number.isInteger(filters.radiusMiles) ? filters.radiusMiles : filters.radiusMiles.toFixed(1)} mile radius...`
                   : progress < 80
                     ? 'Analyzing properties with real traffic data...'
                     : 'Finalizing results...'}
