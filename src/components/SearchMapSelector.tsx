@@ -125,10 +125,11 @@ export default function SearchMapSelector({
       zoomControl: true,
     });
 
-    // Use Esri satellite imagery (same as other maps in the app)
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: '&copy; Esri',
+    // Use OpenStreetMap tiles (more reliable than Esri)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
+      subdomains: ['a', 'b', 'c'],
     }).addTo(map);
 
     // Custom marker icon
@@ -418,6 +419,12 @@ export default function SearchMapSelector({
       {/* Map */}
       <div className="relative">
         <style jsx global>{`
+          .search-map-container {
+            filter: brightness(0.9) saturate(0.8);
+          }
+          .search-map-container .leaflet-tile-pane {
+            filter: hue-rotate(180deg) invert(0.92) saturate(0.3);
+          }
           .custom-score-pin {
             background: transparent !important;
             border: none !important;
@@ -437,7 +444,7 @@ export default function SearchMapSelector({
         `}</style>
         <div
           ref={mapRef}
-          className={`w-full rounded-lg border border-[var(--border-color)] overflow-hidden transition-all duration-300 ${
+          className={`w-full rounded-lg border border-[var(--border-color)] overflow-hidden transition-all duration-300 search-map-container ${
             topResults.length > 0 ? 'h-[450px]' : 'h-[300px]'
           }`}
         />
