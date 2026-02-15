@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic';
 import { EnvironmentalRisk, SelectedParcel } from '@/types';
 import { NearbyParcel, AccessPoint } from './LeafletMap';
 import { getZoningColor, CATEGORY_COLORS } from '@/constants/zoning';
-import { PropertyPhotos } from './PropertyPhotos';
 
 // Re-export for backward compatibility
 export type { SelectedParcel };
@@ -668,15 +667,6 @@ export default function MapView({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Property Photos */}
-      {(selectedParcel?.coordinates || coordinates) && (
-        <PropertyPhotos
-          coordinates={selectedParcel?.coordinates || coordinates}
-          address={selectedParcel?.parcelInfo?.address || address}
-          apn={selectedParcel?.parcelInfo?.apn}
-        />
       )}
 
       {/* Parcel Info */}

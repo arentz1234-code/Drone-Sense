@@ -5,6 +5,13 @@ import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, Environmen
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 import { calculateFeasibilityScore, getScoreLabelAndIcon } from '@/utils/feasibilityScore';
 
+interface ParcelInfo {
+  acres?: number;
+  sqft?: number;
+  zoning?: string;
+  landUse?: string;
+}
+
 interface AnalysisReportProps {
   analysis: AnalysisResult;
   address: string;
@@ -16,35 +23,9 @@ interface AnalysisReportProps {
   marketComps?: MarketComp[] | null;
   accessPoints?: AccessPoint[];
   locationIntelligence?: LocationIntelligence | null;
+  parcelInfo?: ParcelInfo | null;
 }
 
-// Calculate location intelligence bonus (max +0.5)
-function calculateLocationBonus(locationIntel: LocationIntelligence | null | undefined): { bonus: number; reasons: string[] } {
-  if (!locationIntel) return { bonus: 0, reasons: [] };
-
-  let bonus = 0;
-  const reasons: string[] = [];
-
-  // Opportunity Zone: +0.2
-  if (locationIntel.opportunityZone?.isInZone) {
-    bonus += 0.2;
-    reasons.push('Opportunity Zone');
-  }
-
-  // Good highway access (under 1 mile): +0.15
-  if (locationIntel.highwayAccess?.distanceMiles <= 1) {
-    bonus += 0.15;
-    reasons.push('Highway Access');
-  }
-
-  // Commercial daytime population: +0.15
-  if (locationIntel.daytimePopulation?.populationType === 'commercial') {
-    bonus += 0.15;
-    reasons.push('High Worker Pop.');
-  }
-
-  return { bonus: Math.min(0.5, bonus), reasons };
-}
 
 export default function AnalysisReport({
   analysis,
@@ -56,11 +37,12 @@ export default function AnalysisReport({
   marketComps,
   accessPoints = [],
   locationIntelligence,
+  parcelInfo,
 }: AnalysisReportProps) {
   // Calculate live feasibility score if data is provided
   const liveFeasibilityScore = useMemo(() => {
     try {
-      const hasLiveData = trafficData || demographicsData || businesses.length > 0 || environmentalRisk || (marketComps && marketComps.length > 0) || accessPoints.length > 0;
+      const hasLiveData = trafficData || demographicsData || businesses.length > 0 || environmentalRisk || (marketComps && marketComps.length > 0) || accessPoints.length > 0 || locationIntelligence || parcelInfo;
       if (!hasLiveData) return null;
 
       return calculateFeasibilityScore(
@@ -69,22 +51,19 @@ export default function AnalysisReport({
         businesses,
         environmentalRisk || null,
         marketComps || null,
-        accessPoints
+        accessPoints,
+        locationIntelligence,
+        parcelInfo
       );
     } catch (err) {
       console.error('Error calculating live feasibility score:', err);
       return null;
     }
-  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps, accessPoints]);
-
-  // Calculate location intelligence bonus
-  const locationBonus = useMemo(() => calculateLocationBonus(locationIntelligence), [locationIntelligence]);
+  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps, accessPoints, locationIntelligence, parcelInfo]);
 
   // Use live score if available, otherwise use analysis score
   const feasibilityScore: FeasibilityScore | undefined = liveFeasibilityScore || analysis.feasibilityScore;
-  const baseScore = feasibilityScore?.overall ?? analysis.viabilityScore ?? 0;
-  // Apply location intelligence bonus (capped at 10)
-  const viabilityScore = Math.min(10, baseScore + locationBonus.bonus);
+  const viabilityScore = feasibilityScore?.overall ?? analysis.viabilityScore ?? 0;
   const [showAllSuitability, setShowAllSuitability] = useState(false);
   const INITIAL_SUITABILITY_COUNT = 4;
 
@@ -235,16 +214,6 @@ export default function AnalysisReport({
           <p className="text-xs text-[var(--text-muted)]">
             <DataSourceTooltip source={DATA_SOURCES.feasibilityCalc}>Feasibility Score</DataSourceTooltip>
           </p>
-          {locationBonus.bonus > 0 && (
-            <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 border border-green-500/40 rounded-full">
-              <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
-              </svg>
-              <span className="text-xs text-green-400 font-medium">
-                +{locationBonus.bonus.toFixed(1)} {locationBonus.reasons.join(', ')}
-              </span>
-            </div>
-          )}
         </div>
       </div>
 
@@ -257,7 +226,7 @@ export default function AnalysisReport({
             </svg>
             <DataSourceTooltip source={DATA_SOURCES.feasibilityCalc}>Feasibility Score Breakdown</DataSourceTooltip>
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
             {/* Traffic Score */}
             <div className="text-center">
               <div className="relative w-16 h-16 mx-auto mb-2">
@@ -401,16 +370,66 @@ export default function AnalysisReport({
                 {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.marketScore).label}
               </p>
             </div>
+
+            {/* Economic Score */}
+            <div className="text-center">
+              <div className="relative w-16 h-16 mx-auto mb-2">
+                <svg className="w-16 h-16 transform -rotate-90">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
+                  <circle
+                    cx="32" cy="32" r="28" fill="none"
+                    stroke={feasibilityScore.breakdown.economicScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.economicScore >= 5 ? '#eab308' : '#ef4444'}
+                    strokeWidth="6"
+                    strokeDasharray={`${feasibilityScore.breakdown.economicScore * 17.6} 176`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+                  {feasibilityScore.breakdown.economicScore}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-emerald-400">Economic</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.economicScore).icon}</span>
+                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.economicScore).label}
+              </p>
+            </div>
+
+            {/* Site Score */}
+            <div className="text-center">
+              <div className="relative w-16 h-16 mx-auto mb-2">
+                <svg className="w-16 h-16 transform -rotate-90">
+                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
+                  <circle
+                    cx="32" cy="32" r="28" fill="none"
+                    stroke={feasibilityScore.breakdown.siteScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.siteScore >= 5 ? '#eab308' : '#ef4444'}
+                    strokeWidth="6"
+                    strokeDasharray={`${feasibilityScore.breakdown.siteScore * 17.6} 176`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+                  {feasibilityScore.breakdown.siteScore}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-amber-400">Site</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.siteScore).icon}</span>
+                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.siteScore).label}
+              </p>
+            </div>
           </div>
 
           {/* Details */}
-          <div className="mt-4 pt-4 border-t border-[var(--border-color)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+          <div className="mt-4 pt-4 border-t border-[var(--border-color)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
             <p><span className="text-[var(--accent-cyan)]">Traffic:</span> {feasibilityScore.details.traffic}</p>
             <p><span className="text-[var(--accent-green)]">Demographics:</span> {feasibilityScore.details.demographics}</p>
             <p><span className="text-[var(--accent-orange)]">Competition:</span> {feasibilityScore.details.competition}</p>
             <p><span className="text-[var(--accent-blue)]">Access:</span> {feasibilityScore.details.access}</p>
             <p><span className="text-[var(--accent-purple)]">Environmental:</span> {feasibilityScore.details.environmental || 'No data'}</p>
             <p><span className="text-[var(--accent-red)]">Market:</span> {feasibilityScore.details.market || 'No data'}</p>
+            <p><span className="text-emerald-400">Economic:</span> {feasibilityScore.details.economic || 'No data'}</p>
+            <p><span className="text-amber-400">Site:</span> {feasibilityScore.details.site || 'No data'}</p>
           </div>
         </div>
       )}

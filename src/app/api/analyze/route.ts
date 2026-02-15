@@ -61,6 +61,8 @@ export interface FeasibilityScore {
     accessScore: number;
     environmentalScore: number;
     marketScore: number;
+    economicScore: number;
+    siteScore: number;
   };
   details: {
     traffic: string;
@@ -69,6 +71,8 @@ export interface FeasibilityScore {
     access: string;
     environmental: string;
     market: string;
+    economic: string;
+    site: string;
   };
   rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
 }
@@ -97,6 +101,30 @@ interface DemographicsInfo {
     type: string;
     description: string;
     preferredBusinesses: string[];
+  };
+  // Extended demographics
+  consumerSpending?: number; // Annual consumer spending in 3-mile radius
+  growthTrend?: number; // Population growth percentage
+  educationLevels?: { level: string; percent: number }[];
+  incomeDistribution?: { range: string; percent: number }[];
+}
+
+interface LocationIntelligenceInfo {
+  opportunityZone?: {
+    isInZone: boolean;
+    tractId?: string;
+    designation?: string;
+  };
+  daytimePopulation?: {
+    totalWorkers: number;
+    totalResidents: number;
+    workerToResidentRatio: number;
+    populationType: 'commercial' | 'residential' | 'mixed';
+  };
+  highwayAccess?: {
+    nearestHighway: string;
+    distanceMiles: number;
+    hasDirectAccess: boolean;
   };
 }
 
@@ -128,6 +156,7 @@ interface AnalyzeRequest {
   demographicsData: DemographicsInfo | null;
   environmentalRisk: EnvironmentalRiskInfo | null;
   marketComps: MarketCompInfo[] | null;
+  locationIntelligence?: LocationIntelligenceInfo | null;
 }
 
 // VPD thresholds, income preferences, and lot size requirements for different business types
@@ -1177,7 +1206,9 @@ function calculateFeasibilityScore(
       competitionScore,
       accessScore,
       environmentalScore,
-      marketScore
+      marketScore,
+      economicScore: 5, // Calculated on client with full data
+      siteScore: 5      // Calculated on client with parcel info
     },
     details: {
       traffic: trafficDetail,
@@ -1185,7 +1216,9 @@ function calculateFeasibilityScore(
       competition: competitionDetail,
       environmental: environmentalDetail,
       market: marketDetail,
-      access: accessDetail
+      access: accessDetail,
+      economic: 'Calculated with live data',
+      site: 'Calculated with parcel data'
     },
     rating
   };
@@ -1460,7 +1493,8 @@ function calculateBusinessSuitability(
   nearbyBusinesses: Business[],
   demographics: DemographicsInfo | null,
   lotSizeAcres: number | null = null,
-  districtInfo: DistrictInfo | null = null
+  districtInfo: DistrictInfo | null = null,
+  locationIntelligence: LocationIntelligenceInfo | null = null
 ) {
   const suitability: Array<{
     category: string;
@@ -1472,7 +1506,14 @@ function calculateBusinessSuitability(
     districtIssue?: string;
   }> = [];
 
-const incomeLevel = demographics?.incomeLevel || 'middle';
+  const incomeLevel = demographics?.incomeLevel || 'middle';
+
+  // Extract new factors
+  const consumerSpending = demographics?.consumerSpending || 0;
+  const growthTrend = demographics?.growthTrend || 0;
+  const highwayDistance = locationIntelligence?.highwayAccess?.distanceMiles ?? 999;
+  const isCommercialArea = locationIntelligence?.daytimePopulation?.populationType === 'commercial';
+  const isOpportunityZone = locationIntelligence?.opportunityZone?.isInZone || false;
 
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
     // Check if this category is inappropriate for the district
@@ -1555,6 +1596,45 @@ const incomeLevel = demographics?.incomeLevel || 'middle';
         lotSizeIssue = `LOT TOO SMALL: Need ${threshold.lotSize.min} acres min, site has ~${lotSizeAcres.toFixed(2)} acres`;
         reasoning += `. ${lotSizeIssue}`;
       }
+    }
+
+    // Consumer Spending Power bonus (strong spending = +1)
+    if (consumerSpending >= 500000000) { // $500M+
+      score = Math.min(10, score + 1);
+      reasoning += `. Strong consumer spending ($${(consumerSpending / 1000000).toFixed(0)}M in 3-mi)`;
+    } else if (consumerSpending >= 200000000) { // $200M+
+      score = Math.min(10, score + 0.5);
+      reasoning += `. Good consumer spending ($${(consumerSpending / 1000000).toFixed(0)}M in 3-mi)`;
+    }
+
+    // Growth Trend bonus (growing areas are better for new development)
+    if (growthTrend >= 2) {
+      score = Math.min(10, score + 0.5);
+      reasoning += `. High growth area (${growthTrend}% trend)`;
+    }
+
+    // Highway Access bonus (logistics-dependent categories get bigger bonus)
+    const logisticsCategories = ['bigBox', 'gasStation', 'convenience', 'hotelBudget', 'hotelMidScale', 'hotelUpscale', 'selfStorage', 'rvBoatStorage', 'carDealershipNew', 'carDealershipUsed'];
+    if (highwayDistance <= 1) {
+      const bonus = logisticsCategories.includes(key) ? 1 : 0.5;
+      score = Math.min(10, score + bonus);
+      reasoning += `. Excellent highway access (${highwayDistance.toFixed(1)} mi)`;
+    } else if (highwayDistance <= 3 && logisticsCategories.includes(key)) {
+      score = Math.min(10, score + 0.5);
+      reasoning += `. Good highway access (${highwayDistance.toFixed(1)} mi)`;
+    }
+
+    // Commercial Area bonus (daytime workers = more customers)
+    const daytimeCategories = ['fastFoodValue', 'fastFoodPremium', 'coffeePremium', 'coffeeValue', 'quickServiceValue', 'quickServicePremium', 'casualDiningValue', 'casualDiningPremium', 'bank', 'pharmacy'];
+    if (isCommercialArea && daytimeCategories.includes(key)) {
+      score = Math.min(10, score + 1);
+      reasoning += `. Commercial area with high daytime traffic`;
+    }
+
+    // Opportunity Zone note (informational, slight bonus for investment appeal)
+    if (isOpportunityZone) {
+      score = Math.min(10, score + 0.25);
+      reasoning += `. Opportunity Zone (tax incentives)`;
     }
 
     const categoryNames: Record<string, string> = {
@@ -1717,7 +1797,8 @@ function generateTopRecommendations(
   districtInfo: DistrictInfo | null = null,
   stateCode: string | null = null,
   isCornerLot: boolean = false,
-  buildingSqFt: number | null = null
+  buildingSqFt: number | null = null,
+  locationIntelligence: LocationIntelligenceInfo | null = null
 ): TopRecommendation[] {
   const recommendations: Array<{ name: string; score: number; category: string }> = [];
 
@@ -1726,6 +1807,13 @@ function generateTopRecommendations(
   const actualPopulation = demographics?.population || 0;
   const actualMedianIncome = demographics?.medianHouseholdIncome || 0;
   const actualIncomeLevel = demographics?.incomeLevel || 'middle';
+
+  // New economic/location factors
+  const consumerSpending = demographics?.consumerSpending || 0;
+  const growthTrend = demographics?.growthTrend || 0;
+  const highwayDistance = locationIntelligence?.highwayAccess?.distanceMiles ?? 999;
+  const isCommercialArea = locationIntelligence?.daytimePopulation?.populationType === 'commercial';
+  const isOpportunityZone = locationIntelligence?.opportunityZone?.isInZone || false;
 
   // Determine region from state code
   let addressRegion: string | null = null;
@@ -1773,11 +1861,67 @@ function generateTopRecommendations(
       continue;
     }
 
+    // ============ HARD FILTERS - SKIP IF SITE DOESN'T FIT ============
+
+    // HARD FILTER 1: Lot size too small - SKIP entirely
+    if (lotSizeAcres !== null && lotSizeAcres > 0) {
+      if (lotSizeAcres < retailer.minLotSize * 0.7) {
+        // Lot is more than 30% below minimum - impossible to fit
+        continue;
+      }
+    }
+
+    // HARD FILTER 2: VPD way below minimum - SKIP entirely
+    if (actualVPD > 0 && retailer.minVPD > 0) {
+      if (actualVPD < retailer.minVPD * 0.4) {
+        // VPD is less than 40% of minimum - not viable
+        continue;
+      }
+    }
+
+    // HARD FILTER 3: Population way below minimum - SKIP entirely
+    if (actualPopulation > 0 && retailer.minPopulation > 0) {
+      if (actualPopulation < retailer.minPopulation * 0.3) {
+        // Population is less than 30% of minimum - not viable
+        continue;
+      }
+    }
+
+    // HARD FILTER 4: Income bracket completely mismatched - SKIP entirely
+    if (retailer.incomePreference && retailer.incomePreference.length > 0) {
+      const incomeOrder = ['low', 'moderate', 'middle', 'upper-middle', 'high'];
+      const actualIndex = incomeOrder.indexOf(actualIncomeLevel);
+
+      // Find closest preferred income bracket
+      let minDistance = 5;
+      for (const pref of retailer.incomePreference) {
+        const prefIndex = incomeOrder.indexOf(pref);
+        minDistance = Math.min(minDistance, Math.abs(prefIndex - actualIndex));
+      }
+
+      // If income is 3+ brackets away, skip entirely
+      if (minDistance >= 3) {
+        continue;
+      }
+    }
+
+    // HARD FILTER 5: Highway-dependent retailers far from highway - SKIP
+    const highwayDependentCategories = ['Gas Station', 'Hotel', 'Truck Stop', 'Travel Center'];
+    const isHighwayDependent = highwayDependentCategories.some(cat =>
+      retailer.category.toLowerCase().includes(cat.toLowerCase())
+    );
+    if (isHighwayDependent && highwayDistance > 5) {
+      // Highway-dependent retailer more than 5 miles from highway - not viable
+      continue;
+    }
+
+    // ============ END HARD FILTERS ============
+
     let score = 0;
     let matchCount = 0;
     let totalChecks = 0;
 
-    // === VPD SCORING (0-30 points) - More forgiving ===
+    // === VPD SCORING (0-30 points) ===
     totalChecks++;
     if (actualVPD > 0) {
       if (actualVPD >= retailer.idealVPD) {
@@ -1974,12 +2118,11 @@ function generateTopRecommendations(
     // These are commonly desired tenant types, give slight priority
     const foodCategories = ['qsr', 'restaurant', 'coffee', 'bakery', 'grocery'];
     if (foodCategories.some(fc => retailer.category.toLowerCase().includes(fc))) {
-      score += 8; // Boost food/restaurant categories
+      score += 3; // Small boost for food categories
     }
 
-    // === MAJOR BRAND BOOST ===
-    // Well-known national brands that users commonly want to see as recommendations
-    // Premium tier: iconic brands that are highly desirable tenants
+    // === BRAND RECOGNITION (small boost - site fit matters more) ===
+    // Premium tier: iconic brands (small boost, they still need to fit the site)
     const premiumBrands = [
       "McDonald's", "Chick-fil-A", "Starbucks", "Raising Cane's",
       "Costco", "Target", "Walmart", "Publix", "Whole Foods Market"
@@ -1993,9 +2136,9 @@ function generateTopRecommendations(
       "Marriott", "Hilton", "Hampton Inn"
     ];
     if (premiumBrands.includes(retailer.name)) {
-      score += 18; // Premium brands get bigger boost
+      score += 5; // Small boost for recognizable brands
     } else if (majorBrands.includes(retailer.name)) {
-      score += 12; // Major brands get standard boost
+      score += 3; // Minor boost for major brands
     }
 
     // === INVESTMENT LEVEL CONSIDERATION ===
@@ -2008,8 +2151,53 @@ function generateTopRecommendations(
       }
     }
 
+    // === CONSUMER SPENDING POWER (0-10 points) ===
+    if (consumerSpending >= 500000000) { // $500M+
+      score += 10; // Strong consumer spending in trade area
+    } else if (consumerSpending >= 300000000) { // $300M+
+      score += 7;
+    } else if (consumerSpending >= 100000000) { // $100M+
+      score += 4;
+    }
+
+    // === GROWTH TREND (0-5 points) ===
+    if (growthTrend >= 2) {
+      score += 5; // High growth area - attractive for new development
+    } else if (growthTrend >= 1) {
+      score += 3;
+    }
+
+    // === HIGHWAY ACCESS (0-8 points) ===
+    // Categories that benefit most from highway access
+    const hwCategories = ['Gas Station', 'Hotel', 'Storage', 'Auto', 'Big Box', 'Warehouse'];
+    const needsHighwayAccess = hwCategories.some(cat =>
+      retailer.category.toLowerCase().includes(cat.toLowerCase())
+    );
+    if (highwayDistance <= 1) {
+      score += needsHighwayAccess ? 8 : 4; // Direct highway access
+    } else if (highwayDistance <= 3) {
+      score += needsHighwayAccess ? 5 : 2;
+    } else if (highwayDistance > 10 && needsHighwayAccess) {
+      score -= 10; // Highway-dependent retailer far from highway
+    }
+
+    // === DAYTIME POPULATION / COMMERCIAL AREA (0-8 points) ===
+    const daytimeDependentCategories = ['QSR', 'Restaurant', 'Coffee', 'Fast', 'Bank', 'Pharmacy'];
+    const needsDaytimeTraffic = daytimeDependentCategories.some(cat =>
+      retailer.category.toLowerCase().includes(cat.toLowerCase()) ||
+      retailer.name.toLowerCase().includes(cat.toLowerCase())
+    );
+    if (isCommercialArea) {
+      score += needsDaytimeTraffic ? 8 : 3; // Commercial area = more daytime customers
+    }
+
+    // === OPPORTUNITY ZONE (0-3 points) ===
+    if (isOpportunityZone) {
+      score += 3; // Tax incentives make site more attractive for investment
+    }
+
     // Only include if score is positive and meets minimum threshold
-    const minScoreThreshold = 15; // Lower threshold to include more viable options
+    const minScoreThreshold = 35; // Higher threshold - only show retailers that actually fit the site
     if (score >= minScoreThreshold) {
       recommendations.push({
         name: retailer.name,
@@ -2048,7 +2236,7 @@ function generateTopRecommendations(
 export async function POST(request: Request) {
   try {
     const body: AnalyzeRequest = await request.json();
-    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps } = body;
+    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence } = body;
 
     const hasImages = images && images.length > 0;
 
@@ -2110,7 +2298,7 @@ INCOME-BASED TARGETING:
 
     if (trafficData) {
       // Initial recommendations for the prompt (will be recalculated with lot size after AI response)
-      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData, null, null, prelimStateCode);
+      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData, null, null, prelimStateCode, false, null, locationIntelligence);
 
       trafficContext = `\n\nTraffic Data:
 - Estimated VPD (Vehicles Per Day): ${trafficData.estimatedVPD.toLocaleString()}
@@ -2242,7 +2430,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
         nearbyBusinesses,
         demographicsData,
         lotSizeAcres,
-        districtInfo
+        districtInfo,
+        locationIntelligence
       );
       topRecommendations = generateTopRecommendations(
         trafficData.estimatedVPD,
@@ -2252,7 +2441,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
         districtInfo,
         stateCode,
         isCornerLot,
-        buildingSqFt
+        buildingSqFt,
+        locationIntelligence
       );
 
       // Add downtown-specific recommendations if in historic downtown
@@ -2313,8 +2503,8 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     stateCode = stateMatch[1];
   }
 
-  const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData, lotSizeAcres);
-  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres, null, stateCode);
+  const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData, lotSizeAcres, null, null);
+  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres, null, stateCode, false, null, null);
   const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps);
 
   const retailerMatches = calculateRetailerMatches(

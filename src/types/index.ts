@@ -89,6 +89,8 @@ export interface FeasibilityScore {
     accessScore: number;
     environmentalScore: number;
     marketScore: number;
+    economicScore: number;
+    siteScore: number;
   };
   details: {
     traffic: string;
@@ -97,6 +99,8 @@ export interface FeasibilityScore {
     access: string;
     environmental: string;
     market: string;
+    economic: string;
+    site: string;
   };
   rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
 }

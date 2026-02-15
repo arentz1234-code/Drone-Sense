@@ -1,8 +1,15 @@
 'use client';
 
 import { useMemo } from 'react';
-import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, AccessPoint } from '@/types';
+import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, AccessPoint, LocationIntelligence } from '@/types';
 import { calculateFeasibilityScore, getScoreColor, getRatingColor, getScoreLabelAndIcon } from '@/utils/feasibilityScore';
+
+interface ParcelInfo {
+  acres?: number;
+  sqft?: number;
+  zoning?: string;
+  landUse?: string;
+}
 
 interface LiveFeasibilityScoreProps {
   trafficData: TrafficInfo | null;
@@ -11,6 +18,8 @@ interface LiveFeasibilityScoreProps {
   environmentalRisk: EnvironmentalRisk | null;
   marketComps: MarketComp[] | null;
   accessPoints?: AccessPoint[];
+  locationIntelligence?: LocationIntelligence | null;
+  parcelInfo?: ParcelInfo | null;
   isVisible?: boolean;
 }
 
@@ -21,6 +30,8 @@ export default function LiveFeasibilityScore({
   environmentalRisk,
   marketComps,
   accessPoints = [],
+  locationIntelligence,
+  parcelInfo,
   isVisible = true,
 }: LiveFeasibilityScoreProps) {
   const feasibilityScore = useMemo(() => {
@@ -31,7 +42,9 @@ export default function LiveFeasibilityScore({
         businesses,
         environmentalRisk,
         marketComps,
-        accessPoints
+        accessPoints,
+        locationIntelligence,
+        parcelInfo
       );
     } catch (err) {
       console.error('Error calculating feasibility score:', err);
@@ -44,6 +57,8 @@ export default function LiveFeasibilityScore({
           accessScore: 0,
           environmentalScore: 0,
           marketScore: 0,
+          economicScore: 0,
+          siteScore: 0,
         },
         details: {
           traffic: 'Error calculating',
@@ -52,34 +67,40 @@ export default function LiveFeasibilityScore({
           access: 'Error calculating',
           environmental: 'Error calculating',
           market: 'Error calculating',
+          economic: 'Error calculating',
+          site: 'Error calculating',
         },
         rating: 'Poor' as const,
       };
     }
-  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps]);
+  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps, accessPoints, locationIntelligence, parcelInfo]);
 
   // Count available data sources
   const dataSources = useMemo(() => {
     return {
-      traffic: !!trafficData,
+      traffic: !!trafficData || accessPoints.length > 0,
       demographics: !!demographicsData,
       competition: businesses.length > 0,
       environmental: !!environmentalRisk,
       market: !!marketComps && marketComps.length > 0,
+      economic: !!demographicsData?.consumerSpending,
+      site: !!parcelInfo || !!locationIntelligence,
     };
-  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps]);
+  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps, accessPoints, parcelInfo, locationIntelligence]);
 
   const availableCount = Object.values(dataSources).filter(Boolean).length;
-  const totalSources = 5;
+  const totalSources = 7;
 
   if (!isVisible) return null;
 
   const scoreBreakdown = [
-    { key: 'traffic', label: 'Traffic', score: feasibilityScore.breakdown.trafficScore, weight: '25%', available: dataSources.traffic },
-    { key: 'demographics', label: 'Demographics', score: feasibilityScore.breakdown.demographicsScore, weight: '20%', available: dataSources.demographics },
-    { key: 'competition', label: 'Competition', score: feasibilityScore.breakdown.competitionScore, weight: '15%', available: dataSources.competition },
-    { key: 'access', label: 'Access', score: feasibilityScore.breakdown.accessScore, weight: '15%', available: dataSources.traffic },
-    { key: 'environmental', label: 'Environmental', score: feasibilityScore.breakdown.environmentalScore, weight: '15%', available: dataSources.environmental },
+    { key: 'traffic', label: 'Traffic', score: feasibilityScore.breakdown.trafficScore, weight: '20%', available: dataSources.traffic },
+    { key: 'demographics', label: 'Demographics', score: feasibilityScore.breakdown.demographicsScore, weight: '15%', available: dataSources.demographics },
+    { key: 'economic', label: 'Economic', score: feasibilityScore.breakdown.economicScore, weight: '15%', available: dataSources.economic },
+    { key: 'competition', label: 'Competition', score: feasibilityScore.breakdown.competitionScore, weight: '10%', available: dataSources.competition },
+    { key: 'access', label: 'Access', score: feasibilityScore.breakdown.accessScore, weight: '10%', available: dataSources.traffic },
+    { key: 'site', label: 'Site', score: feasibilityScore.breakdown.siteScore, weight: '10%', available: dataSources.site },
+    { key: 'environmental', label: 'Environmental', score: feasibilityScore.breakdown.environmentalScore, weight: '10%', available: dataSources.environmental },
     { key: 'market', label: 'Market', score: feasibilityScore.breakdown.marketScore, weight: '10%', available: dataSources.market },
   ];
 

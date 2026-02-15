@@ -1,4 +1,11 @@
-import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore, AccessPoint } from '@/types';
+import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore, AccessPoint, LocationIntelligence, SelectedParcel } from '@/types';
+
+interface ParcelInfo {
+  acres?: number;
+  sqft?: number;
+  zoning?: string;
+  landUse?: string;
+}
 
 export function calculateFeasibilityScore(
   trafficData: TrafficInfo | null,
@@ -6,7 +13,9 @@ export function calculateFeasibilityScore(
   nearbyBusinesses: Business[],
   environmentalRisk: EnvironmentalRisk | null,
   marketComps: MarketComp[] | null,
-  accessPoints?: AccessPoint[]
+  accessPoints?: AccessPoint[],
+  locationIntelligence?: LocationIntelligence | null,
+  parcelInfo?: ParcelInfo | null
 ): FeasibilityScore {
   let trafficScore = 5;
   let demographicsScore = 5;
@@ -14,6 +23,8 @@ export function calculateFeasibilityScore(
   let accessScore = 5;
   let environmentalScore = 5;
   let marketScore = 5;
+  let economicScore = 5;
+  let siteScore = 5;
 
   let trafficDetail = 'No traffic data available';
   let demographicsDetail = 'No demographics data available';
@@ -21,15 +32,8 @@ export function calculateFeasibilityScore(
   let accessDetail = 'Unable to assess access';
   let environmentalDetail = 'No environmental data available';
   let marketDetail = 'No market comp data available';
-
-  // Track which data sources are available
-  const dataAvailable = {
-    traffic: !!trafficData,
-    demographics: !!demographicsData,
-    competition: nearbyBusinesses.length > 0,
-    environmental: !!environmentalRisk,
-    market: !!marketComps && marketComps.length > 0,
-  };
+  let economicDetail = 'No economic data available';
+  let siteDetail = 'No site data available';
 
   // TRAFFIC SCORE (0-10) - Use access points VPD if available (more accurate)
   let primaryVpd = 0;
@@ -99,10 +103,9 @@ export function calculateFeasibilityScore(
     }
   }
 
-  // ACCESS SCORE (0-10) - Based on access points
+  // ACCESS SCORE (0-10) - Based on access points + highway access
   if (accessPoints && accessPoints.length > 0) {
     const uniqueRoads = new Set(accessPoints.map(ap => ap.roadName)).size;
-    const hasFdotData = accessPoints.some(ap => ap.vpdSource === 'fdot');
     const hasPrimaryRoad = accessPoints.some(ap =>
       ap.roadType === 'primary' || ap.roadType === 'secondary' || ap.roadType === 'trunk'
     );
@@ -144,13 +147,28 @@ export function calculateFeasibilityScore(
     }
   }
 
-  // DEMOGRAPHICS SCORE (0-10)
+  // Highway access bonus from location intelligence
+  if (locationIntelligence?.highwayAccess) {
+    const hwAccess = locationIntelligence.highwayAccess;
+    if (hwAccess.hasDirectAccess || hwAccess.distanceMiles <= 0.5) {
+      accessScore = Math.min(10, accessScore + 1);
+      accessDetail += ` + Direct ${hwAccess.nearestHighway} access`;
+    } else if (hwAccess.distanceMiles <= 2) {
+      accessScore = Math.min(10, accessScore + 0.5);
+      accessDetail += ` + ${hwAccess.nearestHighway} ${hwAccess.distanceMiles.toFixed(1)} mi`;
+    }
+  }
+
+  // DEMOGRAPHICS SCORE (0-10) - Income, employment, population, education, age
   if (demographicsData) {
     const income = demographicsData.medianHouseholdIncome ?? 0;
     const employment = demographicsData.employmentRate || 0;
     const population = demographicsData.population ?? 0;
     const isCollegeTown = demographicsData.isCollegeTown || false;
     const collegePercent = demographicsData.collegeEnrollmentPercent || 0;
+    const growthTrend = demographicsData.growthTrend || 0;
+    const educationLevels = demographicsData.educationLevels || [];
+    const ageDistribution = demographicsData.ageDistribution || [];
 
     let incomeScore = 5;
     if (isCollegeTown) {
@@ -175,13 +193,202 @@ export function calculateFeasibilityScore(
 
     const populationBonus = population >= 5000 ? 1 : population >= 2000 ? 0.5 : 0;
 
-    demographicsScore = Math.min(10, Math.round(incomeScore + employmentBonus + populationBonus));
+    // Education bonus - higher education correlates with spending power
+    let educationBonus = 0;
+    const bachelorsPlus = educationLevels
+      .filter(e => e.level.includes("Bachelor") || e.level.includes("Graduate"))
+      .reduce((sum, e) => sum + e.percent, 0);
+    if (bachelorsPlus >= 40) educationBonus = 1;
+    else if (bachelorsPlus >= 25) educationBonus = 0.5;
+
+    // Growth trend bonus
+    let growthBonus = 0;
+    if (growthTrend >= 2) growthBonus = 0.5;
+    else if (growthTrend >= 1) growthBonus = 0.25;
+
+    // Working age population bonus (25-64 age group)
+    let workingAgeBonus = 0;
+    const workingAge = ageDistribution
+      .filter(a => {
+        const age = a.age.toLowerCase();
+        return age.includes('25-') || age.includes('35-') || age.includes('45-') || age.includes('55-');
+      })
+      .reduce((sum, a) => sum + a.percent, 0);
+    if (workingAge >= 50) workingAgeBonus = 0.5;
+    else if (workingAge >= 40) workingAgeBonus = 0.25;
+
+    demographicsScore = Math.min(10, Math.round((incomeScore + employmentBonus + populationBonus + educationBonus + growthBonus + workingAgeBonus) * 10) / 10);
 
     if (isCollegeTown) {
       demographicsDetail = `College Town (${collegePercent}% students) - Strong spending power, $${income.toLocaleString()} median, ${population.toLocaleString()} pop`;
     } else {
       demographicsDetail = `$${income.toLocaleString()} median income, ${population.toLocaleString()} pop, ${employment}% employed`;
+      if (bachelorsPlus > 0) {
+        demographicsDetail += `, ${bachelorsPlus}% college educated`;
+      }
+      if (growthTrend > 0) {
+        demographicsDetail += `, ${growthTrend}% growth`;
+      }
     }
+  }
+
+  // ECONOMIC SCORE (0-10) - Consumer spending power + income distribution
+  if (demographicsData) {
+    const consumerSpending = demographicsData.consumerSpending || 0;
+    const incomeDistribution = demographicsData.incomeDistribution || [];
+
+    // Consumer spending score (3-mile radius)
+    let spendingScore = 5;
+    if (consumerSpending >= 800000000) { // $800M+
+      spendingScore = 10;
+    } else if (consumerSpending >= 500000000) { // $500M+
+      spendingScore = 9;
+    } else if (consumerSpending >= 300000000) { // $300M+
+      spendingScore = 8;
+    } else if (consumerSpending >= 200000000) { // $200M+
+      spendingScore = 7;
+    } else if (consumerSpending >= 100000000) { // $100M+
+      spendingScore = 6;
+    } else if (consumerSpending >= 50000000) { // $50M+
+      spendingScore = 5;
+    } else if (consumerSpending > 0) {
+      spendingScore = 4;
+    }
+
+    // Income distribution bonus - higher income brackets
+    let highIncomeBonus = 0;
+    const highIncomePercent = incomeDistribution
+      .filter(i => i.range.includes('$100K') || i.range.includes('$150K') || i.range.includes('$200K'))
+      .reduce((sum, i) => sum + i.percent, 0);
+    if (highIncomePercent >= 30) highIncomeBonus = 1;
+    else if (highIncomePercent >= 20) highIncomeBonus = 0.5;
+
+    economicScore = Math.min(10, Math.round((spendingScore + highIncomeBonus) * 10) / 10);
+
+    // Format spending for display
+    const spendingFormatted = consumerSpending >= 1000000000
+      ? `$${(consumerSpending / 1000000000).toFixed(1)}B`
+      : consumerSpending >= 1000000
+        ? `$${(consumerSpending / 1000000).toFixed(1)}M`
+        : `$${consumerSpending.toLocaleString()}`;
+
+    economicDetail = `${spendingFormatted} consumer spending (3-mi)`;
+    if (highIncomePercent > 0) {
+      economicDetail += `, ${highIncomePercent}% high-income households`;
+    }
+  }
+
+  // SITE SCORE (0-10) - Lot size + zoning + daytime population
+  if (parcelInfo || locationIntelligence) {
+    let lotScore = 5;
+    let zoningScore = 5;
+    let daytimeScore = 5;
+    const siteDetails: string[] = [];
+
+    // Lot size scoring
+    if (parcelInfo?.acres) {
+      const acres = parcelInfo.acres;
+      if (acres >= 2 && acres <= 10) {
+        lotScore = 9; // Ideal for most commercial
+        siteDetails.push(`${acres.toFixed(2)} acres (ideal)`);
+      } else if (acres >= 1 && acres < 2) {
+        lotScore = 8; // Good for smaller retail
+        siteDetails.push(`${acres.toFixed(2)} acres (good)`);
+      } else if (acres >= 0.5 && acres < 1) {
+        lotScore = 6; // Limited options
+        siteDetails.push(`${acres.toFixed(2)} acres (limited)`);
+      } else if (acres > 10) {
+        lotScore = 8; // Large site - good for big box or multi-tenant
+        siteDetails.push(`${acres.toFixed(2)} acres (large site)`);
+      } else {
+        lotScore = 4; // Too small
+        siteDetails.push(`${acres.toFixed(2)} acres (small)`);
+      }
+    } else if (parcelInfo?.sqft) {
+      const sqft = parcelInfo.sqft;
+      const acres = sqft / 43560;
+      if (acres >= 2 && acres <= 10) {
+        lotScore = 9;
+        siteDetails.push(`${sqft.toLocaleString()} sqft (ideal)`);
+      } else if (acres >= 1) {
+        lotScore = 8;
+        siteDetails.push(`${sqft.toLocaleString()} sqft (good)`);
+      } else if (acres >= 0.5) {
+        lotScore = 6;
+        siteDetails.push(`${sqft.toLocaleString()} sqft (limited)`);
+      } else {
+        lotScore = 4;
+        siteDetails.push(`${sqft.toLocaleString()} sqft (small)`);
+      }
+    }
+
+    // Zoning scoring
+    if (parcelInfo?.zoning) {
+      const zoning = parcelInfo.zoning.toUpperCase();
+      if (zoning.includes('C-') || zoning.includes('COM') || zoning.includes('COMMERCIAL') || zoning.includes('B-')) {
+        zoningScore = 10;
+        siteDetails.push(`${parcelInfo.zoning} (commercial)`);
+      } else if (zoning.includes('MU') || zoning.includes('MIXED') || zoning.includes('PUD')) {
+        zoningScore = 9;
+        siteDetails.push(`${parcelInfo.zoning} (mixed-use)`);
+      } else if (zoning.includes('O-') || zoning.includes('OFFICE')) {
+        zoningScore = 7;
+        siteDetails.push(`${parcelInfo.zoning} (office)`);
+      } else if (zoning.includes('I-') || zoning.includes('IND')) {
+        zoningScore = 6;
+        siteDetails.push(`${parcelInfo.zoning} (industrial)`);
+      } else if (zoning.includes('R-') || zoning.includes('RES')) {
+        zoningScore = 3;
+        siteDetails.push(`${parcelInfo.zoning} (residential - rezoning needed)`);
+      } else {
+        zoningScore = 5;
+        siteDetails.push(`${parcelInfo.zoning}`);
+      }
+    }
+
+    // Daytime population scoring from location intelligence
+    if (locationIntelligence?.daytimePopulation) {
+      const dayPop = locationIntelligence.daytimePopulation;
+      if (dayPop.populationType === 'commercial') {
+        daytimeScore = 9;
+        siteDetails.push(`Commercial area (${dayPop.workerToResidentRatio.toFixed(1)}x workers)`);
+      } else if (dayPop.populationType === 'mixed') {
+        daytimeScore = 7;
+        siteDetails.push(`Mixed use area`);
+      } else {
+        daytimeScore = 5;
+        siteDetails.push(`Residential area`);
+      }
+    }
+
+    // Opportunity Zone bonus
+    if (locationIntelligence?.opportunityZone?.isInZone) {
+      siteDetails.push('Opportunity Zone');
+    }
+
+    // Calculate weighted site score
+    const hasLot = parcelInfo?.acres || parcelInfo?.sqft;
+    const hasZoning = parcelInfo?.zoning;
+    const hasDaytime = locationIntelligence?.daytimePopulation;
+
+    if (hasLot && hasZoning && hasDaytime) {
+      siteScore = Math.round((lotScore * 0.4 + zoningScore * 0.4 + daytimeScore * 0.2) * 10) / 10;
+    } else if (hasLot && hasZoning) {
+      siteScore = Math.round((lotScore * 0.5 + zoningScore * 0.5) * 10) / 10;
+    } else if (hasLot) {
+      siteScore = lotScore;
+    } else if (hasZoning) {
+      siteScore = zoningScore;
+    } else if (hasDaytime) {
+      siteScore = daytimeScore;
+    }
+
+    // Opportunity Zone bonus
+    if (locationIntelligence?.opportunityZone?.isInZone) {
+      siteScore = Math.min(10, siteScore + 0.5);
+    }
+
+    siteDetail = siteDetails.length > 0 ? siteDetails.join(', ') : 'Limited site data';
   }
 
   // COMPETITION SCORE (0-10)
@@ -288,20 +495,25 @@ export function calculateFeasibilityScore(
   }
 
   // Calculate overall score (weighted average)
+  // Adjusted weights to include new categories
   const weights = {
-    traffic: 0.25,
-    demographics: 0.20,
-    competition: 0.15,
-    access: 0.15,
-    environmental: 0.15,
+    traffic: 0.20,
+    demographics: 0.15,
+    economic: 0.15,
+    competition: 0.10,
+    access: 0.10,
+    site: 0.10,
+    environmental: 0.10,
     market: 0.10
   };
 
   const overall = Math.round(
     (trafficScore * weights.traffic +
     demographicsScore * weights.demographics +
+    economicScore * weights.economic +
     competitionScore * weights.competition +
     accessScore * weights.access +
+    siteScore * weights.site +
     environmentalScore * weights.environmental +
     marketScore * weights.market) * 10
   ) / 10;
@@ -315,12 +527,14 @@ export function calculateFeasibilityScore(
   return {
     overall,
     breakdown: {
-      trafficScore,
-      demographicsScore,
-      competitionScore,
-      accessScore,
-      environmentalScore,
-      marketScore
+      trafficScore: Math.round(trafficScore * 10) / 10,
+      demographicsScore: Math.round(demographicsScore * 10) / 10,
+      competitionScore: Math.round(competitionScore * 10) / 10,
+      accessScore: Math.round(accessScore * 10) / 10,
+      environmentalScore: Math.round(environmentalScore * 10) / 10,
+      marketScore: Math.round(marketScore * 10) / 10,
+      economicScore: Math.round(economicScore * 10) / 10,
+      siteScore: Math.round(siteScore * 10) / 10
     },
     details: {
       traffic: trafficDetail,
@@ -328,7 +542,9 @@ export function calculateFeasibilityScore(
       competition: competitionDetail,
       environmental: environmentalDetail,
       market: marketDetail,
-      access: accessDetail
+      access: accessDetail,
+      economic: economicDetail,
+      site: siteDetail
     },
     rating
   };

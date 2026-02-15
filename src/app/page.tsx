@@ -505,6 +505,7 @@ export default function HomePage() {
           demographicsData,
           environmentalRisk,
           marketComps,
+          locationIntelligence,
           selectedParcel: selectedParcel?.isConfirmed ? {
             boundaries: selectedParcel.boundaries,
             parcelInfo: selectedParcel.parcelInfo,
@@ -924,6 +925,7 @@ export default function HomePage() {
                   marketComps={marketComps}
                   accessPoints={accessPoints}
                   locationIntelligence={locationIntelligence}
+                  parcelInfo={selectedParcel?.parcelInfo}
                 />
               </div>
             </div>
