@@ -1472,9 +1472,7 @@ function calculateBusinessSuitability(
     districtIssue?: string;
   }> = [];
 
-  console.log('DEBUG demographics object:', JSON.stringify(demographics, null, 2));
-  const incomeLevel = demographics?.incomeLevel || 'middle';
-  console.log('DEBUG calculateBusinessSuitability - incomeLevel:', incomeLevel, 'demographics.incomeLevel:', demographics?.incomeLevel);
+const incomeLevel = demographics?.incomeLevel || 'middle';
 
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
     // Check if this category is inappropriate for the district
