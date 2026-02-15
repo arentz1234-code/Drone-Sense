@@ -192,6 +192,33 @@ export interface PropertyPhoto {
   available: boolean;
 }
 
+// Location intelligence types
+export interface LocationIntelligence {
+  // Opportunity Zone data
+  opportunityZone: {
+    isInZone: boolean;
+    tractId?: string;
+    designation?: string; // 'Low-Income Community' | 'Contiguous'
+    investmentBenefits?: string[];
+  };
+  // Daytime population (workers vs residents)
+  daytimePopulation: {
+    totalWorkers: number; // People who work in this area
+    totalResidents: number; // People who live in this area
+    workerToResidentRatio: number; // >1 means more workers than residents (commercial area)
+    populationType: 'commercial' | 'residential' | 'mixed'; // Based on ratio
+    topIndustries?: { industry: string; workers: number }[];
+  };
+  // Highway/Interstate access
+  highwayAccess: {
+    nearestHighway: string; // e.g., "I-10", "US-90"
+    distanceMiles: number;
+    driveTimeMinutes?: number;
+    interchangeName?: string;
+    hasDirectAccess: boolean; // Within 0.5 miles
+  };
+}
+
 // Property data (for saving/loading)
 export interface PropertyData {
   images: string[];
@@ -204,4 +231,5 @@ export interface PropertyData {
   environmentalRisk: EnvironmentalRisk | null;
   marketComps: MarketComp[] | null;
   selectedParcel?: SelectedParcel | null;
+  locationIntelligence?: LocationIntelligence | null;
 }

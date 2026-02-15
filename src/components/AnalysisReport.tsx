@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore, AccessPoint } from '@/types';
+import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore, AccessPoint, LocationIntelligence } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 import { calculateFeasibilityScore, getScoreLabelAndIcon } from '@/utils/feasibilityScore';
 
@@ -15,6 +15,35 @@ interface AnalysisReportProps {
   environmentalRisk?: EnvironmentalRisk | null;
   marketComps?: MarketComp[] | null;
   accessPoints?: AccessPoint[];
+  locationIntelligence?: LocationIntelligence | null;
+}
+
+// Calculate location intelligence bonus (max +0.5)
+function calculateLocationBonus(locationIntel: LocationIntelligence | null | undefined): { bonus: number; reasons: string[] } {
+  if (!locationIntel) return { bonus: 0, reasons: [] };
+
+  let bonus = 0;
+  const reasons: string[] = [];
+
+  // Opportunity Zone: +0.2
+  if (locationIntel.opportunityZone?.isInZone) {
+    bonus += 0.2;
+    reasons.push('Opportunity Zone');
+  }
+
+  // Good highway access (under 1 mile): +0.15
+  if (locationIntel.highwayAccess?.distanceMiles <= 1) {
+    bonus += 0.15;
+    reasons.push('Highway Access');
+  }
+
+  // Commercial daytime population: +0.15
+  if (locationIntel.daytimePopulation?.populationType === 'commercial') {
+    bonus += 0.15;
+    reasons.push('High Worker Pop.');
+  }
+
+  return { bonus: Math.min(0.5, bonus), reasons };
 }
 
 export default function AnalysisReport({
@@ -26,6 +55,7 @@ export default function AnalysisReport({
   environmentalRisk,
   marketComps,
   accessPoints = [],
+  locationIntelligence,
 }: AnalysisReportProps) {
   // Calculate live feasibility score if data is provided
   const liveFeasibilityScore = useMemo(() => {
@@ -47,9 +77,14 @@ export default function AnalysisReport({
     }
   }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps, accessPoints]);
 
+  // Calculate location intelligence bonus
+  const locationBonus = useMemo(() => calculateLocationBonus(locationIntelligence), [locationIntelligence]);
+
   // Use live score if available, otherwise use analysis score
   const feasibilityScore: FeasibilityScore | undefined = liveFeasibilityScore || analysis.feasibilityScore;
-  const viabilityScore = feasibilityScore?.overall ?? analysis.viabilityScore ?? 0;
+  const baseScore = feasibilityScore?.overall ?? analysis.viabilityScore ?? 0;
+  // Apply location intelligence bonus (capped at 10)
+  const viabilityScore = Math.min(10, baseScore + locationBonus.bonus);
   const [showAllSuitability, setShowAllSuitability] = useState(false);
   const INITIAL_SUITABILITY_COUNT = 4;
 
@@ -200,6 +235,16 @@ export default function AnalysisReport({
           <p className="text-xs text-[var(--text-muted)]">
             <DataSourceTooltip source={DATA_SOURCES.feasibilityCalc}>Feasibility Score</DataSourceTooltip>
           </p>
+          {locationBonus.bonus > 0 && (
+            <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 border border-green-500/40 rounded-full">
+              <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
+              </svg>
+              <span className="text-xs text-green-400 font-medium">
+                +{locationBonus.bonus.toFixed(1)} {locationBonus.reasons.join(', ')}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

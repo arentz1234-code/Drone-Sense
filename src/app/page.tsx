@@ -22,6 +22,7 @@ import {
   PropertyData,
   SelectedParcel,
   AccessPoint,
+  LocationIntelligence as LocationIntelligenceType,
 } from '@/types';
 
 
@@ -44,6 +45,11 @@ const RiskAssessment = dynamic(() => import('@/components/RiskAssessment'), {
 });
 
 const MarketComps = dynamic(() => import('@/components/MarketComps'), {
+  loading: () => <SkeletonCard />,
+  ssr: false
+});
+
+const LocationIntelligence = dynamic(() => import('@/components/LocationIntelligence'), {
   loading: () => <SkeletonCard />,
   ssr: false
 });
@@ -145,6 +151,7 @@ export default function HomePage() {
   const [demographicsData, setDemographicsData] = useState<ExtendedDemographics | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [environmentalRisk, setEnvironmentalRisk] = useState<EnvironmentalRisk | null>(null);
+  const [locationIntelligence, setLocationIntelligence] = useState<LocationIntelligenceType | null>(null);
   const [marketComps, setMarketComps] = useState<MarketComp[] | null>(null);
   const [selectedParcel, setSelectedParcel] = useState<SelectedParcel | null>(null);
   const [accessPoints, setAccessPoints] = useState<AccessPoint[]>([]);
@@ -560,7 +567,8 @@ export default function HomePage() {
     environmentalRisk,
     marketComps,
     selectedParcel,
-  }), [images, address, coordinates, businesses, trafficData, demographicsData, analysis, environmentalRisk, marketComps, selectedParcel]);
+    locationIntelligence,
+  }), [images, address, coordinates, businesses, trafficData, demographicsData, analysis, environmentalRisk, marketComps, selectedParcel, locationIntelligence]);
 
   return (
     <ErrorBoundary>
@@ -829,6 +837,22 @@ export default function HomePage() {
                 )}
               </div>
             </div>
+
+            {/* Location Intelligence Section */}
+            <div className="terminal-card">
+              <div className="terminal-header">
+                <div className="terminal-dot red"></div>
+                <div className="terminal-dot yellow"></div>
+                <div className="terminal-dot green"></div>
+                <span className="terminal-title">location_intel.module</span>
+              </div>
+              <div className="terminal-body">
+                <LocationIntelligence
+                  coordinates={coordinates}
+                  onDataLoaded={(data) => setLocationIntelligence(data)}
+                />
+              </div>
+            </div>
           </div>
         ) : (
           <div className="terminal-card">
@@ -899,6 +923,7 @@ export default function HomePage() {
                   environmentalRisk={environmentalRisk}
                   marketComps={marketComps}
                   accessPoints={accessPoints}
+                  locationIntelligence={locationIntelligence}
                 />
               </div>
             </div>
