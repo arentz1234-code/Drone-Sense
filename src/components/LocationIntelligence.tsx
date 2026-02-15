@@ -146,7 +146,7 @@ export default function LocationIntelligence({ coordinates, onDataLoaded }: Loca
                 {highwayAccess.distanceMiles.toFixed(1)} miles
               </span>
             </div>
-            {highwayAccess.driveTimeMinutes && (
+            {highwayAccess.driveTimeMinutes != null && highwayAccess.driveTimeMinutes > 0 && (
               <div className="flex justify-between items-center">
                 <span className="text-sm text-[var(--text-muted)]">Est. Drive Time</span>
                 <span className="text-sm font-medium">

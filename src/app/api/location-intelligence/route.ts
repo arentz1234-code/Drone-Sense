@@ -230,17 +230,17 @@ async function getHighwayAccess(lat: number, lng: number): Promise<{
   hasDirectAccess: boolean;
 }> {
   try {
-    // Use Overpass API to find nearest highways
-    // Look for motorway, trunk, and primary roads
-    const radius = 16093; // 10 miles in meters
+    // Use Overpass API to find nearest INTERSTATES (not regular highways)
+    // We want actual limited-access highways, not US routes running through town
+    const radius = 32186; // 20 miles in meters (interstates may be farther)
 
+    // Only query for actual motorways (interstates) and their links
     const overpassQuery = `
       [out:json][timeout:15];
       (
         way["highway"="motorway"](around:${radius},${lat},${lng});
         way["highway"="motorway_link"](around:${radius},${lat},${lng});
-        way["highway"="trunk"](around:${radius},${lat},${lng});
-        way["ref"~"^(I-|US-|SR-)"](around:${radius},${lat},${lng});
+        way["ref"~"^I-[0-9]"](around:${radius},${lat},${lng});
       );
       out body;
       >;
@@ -263,10 +263,14 @@ async function getHighwayAccess(lat: number, lng: number): Promise<{
       return getDefaultHighwayAccess();
     }
 
-    // Find ways with ref tags (highway numbers)
-    const highways = data.elements.filter((el: { type: string; tags?: { ref?: string; name?: string; highway?: string } }) =>
-      el.type === 'way' && el.tags && (el.tags.ref || el.tags.name)
-    );
+    // Find ways with ref tags that are actual interstates (I-XX)
+    const highways = data.elements.filter((el: { type: string; tags?: { ref?: string; name?: string; highway?: string } }) => {
+      if (el.type !== 'way' || !el.tags) return false;
+      const ref = el.tags.ref || '';
+      const highway = el.tags.highway || '';
+      // Only include actual interstates or motorways
+      return highway === 'motorway' || highway === 'motorway_link' || ref.match(/^I-\d+/);
+    });
 
     // Get nodes for distance calculation
     const nodes = new Map<number, { lat: number; lon: number }>();
@@ -283,6 +287,11 @@ async function getHighwayAccess(lat: number, lng: number): Promise<{
     for (const hw of highways) {
       const ref = hw.tags?.ref || hw.tags?.name || '';
 
+      // Skip non-interstate refs (we only want I-XX)
+      if (ref && !ref.match(/^I-\d+/) && hw.tags?.highway !== 'motorway') {
+        continue;
+      }
+
       // Calculate distance to this highway
       if (hw.nodes && hw.nodes.length > 0) {
         for (const nodeId of hw.nodes) {
@@ -291,7 +300,7 @@ async function getHighwayAccess(lat: number, lng: number): Promise<{
             const dist = calculateDistance(lat, lng, node.lat, node.lon);
             if (dist < minDistance) {
               minDistance = dist;
-              nearestHighway = formatHighwayRef(ref);
+              nearestHighway = formatHighwayRef(ref) || 'Interstate';
 
               // Check for junction/interchange name
               if (hw.tags?.junction || hw.tags?.name?.includes('Exit')) {
