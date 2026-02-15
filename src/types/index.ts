@@ -37,10 +37,11 @@ export interface AccessPoint {
   estimatedVpd?: number; // Estimated VPD based on road classification
 }
 
-// Top recommendation type (grouped by category)
+// Top recommendation type (ranked by score)
 export interface TopRecommendation {
   name: string;
   category: string;
+  score: number;
 }
 
 // Business suitability types

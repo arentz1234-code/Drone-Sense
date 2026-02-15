@@ -1504,6 +1504,7 @@ function calculateBusinessSuitability(
     existingInArea: string[];
     lotSizeIssue?: string;
     districtIssue?: string;
+    siteAdvantage?: number;
   }> = [];
 
   const incomeLevel = demographics?.incomeLevel || 'middle';
@@ -1768,6 +1769,42 @@ function calculateBusinessSuitability(
       }
     }
 
+    // Calculate "site advantage" - how much this site exceeds requirements
+    // This helps differentiate between sites that merely "fit" vs sites that excel
+    let siteAdvantage = 0;
+
+    // VPD advantage: how much does VPD exceed ideal?
+    if (vpd >= threshold.ideal) {
+      siteAdvantage += Math.min(50, ((vpd - threshold.ideal) / threshold.ideal) * 30);
+    } else if (vpd >= threshold.min) {
+      // Below ideal but meets minimum - small advantage
+      siteAdvantage += ((vpd - threshold.min) / (threshold.ideal - threshold.min)) * 10;
+    }
+    // If VPD is below minimum, no advantage (negative would penalize too harshly)
+
+    // Lot size advantage: how much does lot exceed ideal?
+    if (lotSizeAcres !== null && threshold.lotSize) {
+      if (lotSizeAcres >= threshold.lotSize.ideal) {
+        siteAdvantage += Math.min(30, ((lotSizeAcres - threshold.lotSize.ideal) / threshold.lotSize.ideal) * 20);
+      }
+    }
+
+    // Income match advantage
+    if (incomeMatches) {
+      siteAdvantage += 15;
+    }
+
+    // Consumer spending advantage (strong spending = site advantage)
+    if (consumerSpending >= 500000000) siteAdvantage += 10;
+    else if (consumerSpending >= 300000000) siteAdvantage += 5;
+
+    // Highway access advantage for relevant categories
+    if (highwayDistance <= 1 && logisticsCategories.includes(key)) siteAdvantage += 15;
+    else if (highwayDistance <= 3 && logisticsCategories.includes(key)) siteAdvantage += 8;
+
+    // Commercial area advantage for daytime categories
+    if (isCommercialArea && daytimeCategories.includes(key)) siteAdvantage += 12;
+
     suitability.push({
       category: categoryNames[key] || key,
       suitabilityScore: Math.max(1, Math.min(10, score)),
@@ -1775,11 +1812,23 @@ function calculateBusinessSuitability(
       examples: availableExamples.length > 0 ? availableExamples : ['Market may be saturated'],
       existingInArea,
       ...(lotSizeIssue && { lotSizeIssue }),
+      siteAdvantage, // Track site advantage for sorting
     });
   }
 
-  // Sort by suitability score descending
-  return suitability.sort((a, b) => b.suitabilityScore - a.suitabilityScore);
+  // Sort by SITE ADVANTAGE first (how much does this site excel for this category?)
+  // Then by suitability score as tiebreaker
+  // This ensures we show categories where THIS site has a competitive advantage
+  return suitability
+    .filter(s => (s.siteAdvantage || 0) > 5 || s.suitabilityScore >= 8) // Only show meaningful fits
+    .sort((a, b) => {
+      // Primary: site advantage (what makes THIS site special)
+      const advDiff = (b.siteAdvantage || 0) - (a.siteAdvantage || 0);
+      if (Math.abs(advDiff) > 5) return advDiff;
+      // Secondary: suitability score
+      return b.suitabilityScore - a.suitabilityScore;
+    })
+    .map(({ siteAdvantage, ...rest }) => rest); // Remove siteAdvantage from output
 }
 
 // Generate top specific recommendations using RETAILER_REQUIREMENTS spreadsheet
@@ -1787,6 +1836,7 @@ function calculateBusinessSuitability(
 interface TopRecommendation {
   name: string;
   category: string;
+  score: number;
 }
 
 function generateTopRecommendations(
@@ -2223,7 +2273,7 @@ function generateTopRecommendations(
 
     // Allow max 6 from same category for variety
     if (categoryCounts[category] <= 6) {
-      finalRecommendations.push({ name: rec.name, category: rec.category });
+      finalRecommendations.push({ name: rec.name, category: rec.category, score: rec.score });
     }
 
     if (finalRecommendations.length >= 30) break; // Increased total limit
@@ -2237,6 +2287,18 @@ export async function POST(request: Request) {
   try {
     const body: AnalyzeRequest = await request.json();
     const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence } = body;
+
+    // Debug logging - track what data is received for each address
+    console.log(`\n========== ANALYZE REQUEST ==========`);
+    console.log(`[Analyze] Address: ${address}`);
+    console.log(`[Analyze] Traffic VPD: ${trafficData?.estimatedVPD || 'N/A'}`);
+    console.log(`[Analyze] Demographics: Pop=${demographicsData?.population || 'N/A'}, Income=$${demographicsData?.medianHouseholdIncome || 'N/A'}, Level=${demographicsData?.incomeLevel || 'N/A'}`);
+    console.log(`[Analyze] Consumer Spending: $${demographicsData?.consumerSpending ? (demographicsData.consumerSpending / 1000000).toFixed(1) + 'M' : 'N/A'}`);
+    console.log(`[Analyze] Highway Access: ${locationIntelligence?.highwayAccess?.distanceMiles?.toFixed(1) || 'N/A'} miles`);
+    console.log(`[Analyze] Daytime Pop Type: ${locationIntelligence?.daytimePopulation?.populationType || 'N/A'}`);
+    console.log(`[Analyze] Opportunity Zone: ${locationIntelligence?.opportunityZone?.isInZone || false}`);
+    console.log(`[Analyze] Nearby Businesses: ${nearbyBusinesses?.length || 0}`);
+    console.log(`==========================================\n`);
 
     const hasImages = images && images.length > 0;
 
