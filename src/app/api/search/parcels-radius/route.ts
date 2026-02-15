@@ -17,6 +17,9 @@ interface ParcelResult {
 // Earth radius in miles
 const EARTH_RADIUS_MILES = 3959;
 
+// Max parcels to return (for performance)
+const MAX_TOTAL_PARCELS = 2000;
+
 // Calculate distance between two points using Haversine formula
 function getDistanceMiles(
   lat1: number,
@@ -65,19 +68,61 @@ function calculatePolygonArea(coords: [number, number][]): number {
   return sqft;
 }
 
-// Fetch parcels from ArcGIS USA Parcels
-async function fetchParcelsFromArcGIS(
+// Generate grid cells for large area searches
+function generateGridCells(
   center: { lat: number; lng: number },
-  radiusMiles: number
+  radiusMiles: number,
+  cellSizeMiles: number
+): Array<{ lat: number; lng: number; size: number }> {
+  const cells: Array<{ lat: number; lng: number; size: number }> = [];
+  const { latDeg, lngDeg } = radiusToDegrees(radiusMiles, center.lat);
+  const cellLatDeg = cellSizeMiles / 69.0;
+  const cellLngDeg = cellSizeMiles / (69.0 * Math.cos(center.lat * Math.PI / 180));
+
+  // Calculate grid dimensions
+  const numCellsLat = Math.ceil((latDeg * 2) / cellLatDeg);
+  const numCellsLng = Math.ceil((lngDeg * 2) / cellLngDeg);
+
+  const startLat = center.lat - latDeg;
+  const startLng = center.lng - lngDeg;
+
+  for (let i = 0; i < numCellsLat; i++) {
+    for (let j = 0; j < numCellsLng; j++) {
+      const cellCenterLat = startLat + (i + 0.5) * cellLatDeg;
+      const cellCenterLng = startLng + (j + 0.5) * cellLngDeg;
+
+      // Only include cells that overlap with the circle
+      const distToCenter = getDistanceMiles(center.lat, center.lng, cellCenterLat, cellCenterLng);
+      // Cell diagonal is roughly cellSize * sqrt(2), so add some buffer
+      if (distToCenter <= radiusMiles + cellSizeMiles * 0.75) {
+        cells.push({
+          lat: cellCenterLat,
+          lng: cellCenterLng,
+          size: cellSizeMiles,
+        });
+      }
+    }
+  }
+
+  return cells;
+}
+
+// Fetch parcels from a single cell (ArcGIS)
+async function fetchParcelsFromArcGISCell(
+  cellCenter: { lat: number; lng: number },
+  cellSizeMiles: number,
+  mainCenter: { lat: number; lng: number },
+  maxRadius: number
 ): Promise<ParcelResult[]> {
   try {
-    const { latDeg, lngDeg } = radiusToDegrees(radiusMiles, center.lat);
+    const halfSize = cellSizeMiles / 2;
+    const { latDeg, lngDeg } = radiusToDegrees(halfSize, cellCenter.lat);
 
     const envelope = JSON.stringify({
-      xmin: center.lng - lngDeg,
-      ymin: center.lat - latDeg,
-      xmax: center.lng + lngDeg,
-      ymax: center.lat + latDeg,
+      xmin: cellCenter.lng - lngDeg,
+      ymin: cellCenter.lat - latDeg,
+      xmax: cellCenter.lng + lngDeg,
+      ymax: cellCenter.lat + latDeg,
       spatialReference: { wkid: 4326 }
     });
 
@@ -89,11 +134,11 @@ async function fetchParcelsFromArcGIS(
     url.searchParams.set('outFields', 'APN,PARCEL_ID,OWNER,ADDR,SITEADDR,ADDRESS,ACRES,GIS_ACRES,ZONING,ZONE_CODE,LANDUSE,OBJECTID');
     url.searchParams.set('returnGeometry', 'true');
     url.searchParams.set('outSR', '4326');
-    url.searchParams.set('resultRecordCount', '500');
+    url.searchParams.set('resultRecordCount', '1000');
     url.searchParams.set('f', 'json');
 
     const response = await fetch(url.toString(), {
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) return [];
@@ -107,53 +152,49 @@ async function fetchParcelsFromArcGIS(
       const rings = feature.geometry?.rings;
       if (!rings || rings.length === 0) continue;
 
-      // Calculate centroid
       const coords = rings[0];
       const centroidLng = coords.reduce((sum: number, c: number[]) => sum + c[0], 0) / coords.length;
       const centroidLat = coords.reduce((sum: number, c: number[]) => sum + c[1], 0) / coords.length;
 
-      // Check if within radius (circle, not just bounding box)
-      const distance = getDistanceMiles(center.lat, center.lng, centroidLat, centroidLng);
-      if (distance > radiusMiles) continue;
+      // Check if within main radius (circle)
+      const distance = getDistanceMiles(mainCenter.lat, mainCenter.lng, centroidLat, centroidLng);
+      if (distance > maxRadius) continue;
 
       const attrs = feature.attributes || {};
       let lotSize = attrs.ACRES || attrs.GIS_ACRES;
       if (!lotSize) {
         const boundary: [number, number][] = coords.map((c: number[]) => [c[1], c[0]]);
-        lotSize = calculatePolygonArea(boundary) / 43560; // Convert sqft to acres
+        lotSize = calculatePolygonArea(boundary) / 43560;
       }
 
       parcels.push({
         parcelId: attrs.APN || attrs.PARCEL_ID || attrs.OBJECTID?.toString() || `parcel-${parcels.length}`,
         address: attrs.ADDR || attrs.SITEADDR || attrs.ADDRESS || 'Unknown Address',
         coordinates: { lat: centroidLat, lng: centroidLng },
-        lotSize: lotSize ? Math.round(lotSize * 43560) : undefined, // Store as sqft
+        lotSize: lotSize ? Math.round(lotSize * 43560) : undefined,
         zoning: attrs.ZONING || attrs.ZONE_CODE,
       });
     }
 
     return parcels;
   } catch (error) {
-    console.error('ArcGIS radius search error:', error);
+    console.error('ArcGIS cell search error:', error);
     return [];
   }
 }
 
-// Fetch from Florida county GIS services
-async function fetchParcelsFromFloridaCounty(
-  center: { lat: number; lng: number },
-  radiusMiles: number
+// Fetch parcels from a single cell (Leon County)
+async function fetchParcelsFromLeonCountyCell(
+  cellCenter: { lat: number; lng: number },
+  cellSizeMiles: number,
+  mainCenter: { lat: number; lng: number },
+  maxRadius: number
 ): Promise<ParcelResult[]> {
-  // Determine which county based on coordinates
-  const isLeonCounty = center.lat >= 30.26 && center.lat <= 30.70 &&
-                       center.lng >= -84.65 && center.lng <= -83.98;
-
-  if (!isLeonCounty) return [];
-
   try {
-    const { latDeg, lngDeg } = radiusToDegrees(radiusMiles, center.lat);
+    const halfSize = cellSizeMiles / 2;
+    const { latDeg, lngDeg } = radiusToDegrees(halfSize, cellCenter.lat);
 
-    // Convert to Web Mercator for Leon County
+    // Convert to Web Mercator
     const toWebMercator = (lat: number, lng: number) => {
       const x = lng * 20037508.34 / 180;
       let y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
@@ -161,8 +202,8 @@ async function fetchParcelsFromFloridaCounty(
       return { x, y };
     };
 
-    const sw = toWebMercator(center.lat - latDeg, center.lng - lngDeg);
-    const ne = toWebMercator(center.lat + latDeg, center.lng + lngDeg);
+    const sw = toWebMercator(cellCenter.lat - latDeg, cellCenter.lng - lngDeg);
+    const ne = toWebMercator(cellCenter.lat + latDeg, cellCenter.lng + lngDeg);
 
     const envelope = JSON.stringify({
       xmin: sw.x,
@@ -181,11 +222,11 @@ async function fetchParcelsFromFloridaCounty(
     url.searchParams.set('outFields', '*');
     url.searchParams.set('returnGeometry', 'true');
     url.searchParams.set('outSR', '4326');
-    url.searchParams.set('resultRecordCount', '500');
+    url.searchParams.set('resultRecordCount', '1000');
     url.searchParams.set('f', 'json');
 
     const response = await fetch(url.toString(), {
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000),
       headers: { 'User-Agent': 'DroneSense/1.0' }
     });
 
@@ -204,8 +245,8 @@ async function fetchParcelsFromFloridaCounty(
       const centroidLng = coords.reduce((sum: number, c: number[]) => sum + c[0], 0) / coords.length;
       const centroidLat = coords.reduce((sum: number, c: number[]) => sum + c[1], 0) / coords.length;
 
-      const distance = getDistanceMiles(center.lat, center.lng, centroidLat, centroidLng);
-      if (distance > radiusMiles) continue;
+      const distance = getDistanceMiles(mainCenter.lat, mainCenter.lng, centroidLat, centroidLng);
+      if (distance > maxRadius) continue;
 
       const attrs = feature.attributes || {};
       let lotSize = attrs.ACRES || attrs.ACREAGE || attrs.CALC_ACREA;
@@ -228,9 +269,15 @@ async function fetchParcelsFromFloridaCounty(
 
     return parcels;
   } catch (error) {
-    console.error('Florida county radius search error:', error);
+    console.error('Leon County cell search error:', error);
     return [];
   }
+}
+
+// Check if coordinates are in Leon County
+function isInLeonCounty(center: { lat: number; lng: number }): boolean {
+  return center.lat >= 30.26 && center.lat <= 30.70 &&
+         center.lng >= -84.65 && center.lng <= -83.98;
 }
 
 export async function POST(request: NextRequest) {
@@ -250,25 +297,113 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Radius Search] Center: ${center.lat}, ${center.lng}, Radius: ${radiusMiles} miles`);
 
-    // Try Florida county GIS first (better data for FL)
-    let parcels = await fetchParcelsFromFloridaCounty(center, radiusMiles);
-    let source = 'Leon County GIS';
+    const useLeonCounty = isInLeonCounty(center);
+    let allParcels: ParcelResult[] = [];
+    let source = useLeonCounty ? 'Leon County GIS' : 'ArcGIS USA Parcels';
 
-    // Fallback to ArcGIS
-    if (parcels.length === 0) {
-      parcels = await fetchParcelsFromArcGIS(center, radiusMiles);
+    // Determine cell size based on radius
+    // Smaller radius = single query, larger radius = grid of smaller queries
+    let cellSizeMiles: number;
+    if (radiusMiles <= 0.5) {
+      cellSizeMiles = radiusMiles * 2; // Single cell covers entire area
+    } else if (radiusMiles <= 1) {
+      cellSizeMiles = 0.75;
+    } else if (radiusMiles <= 2) {
+      cellSizeMiles = 1.0;
+    } else if (radiusMiles <= 5) {
+      cellSizeMiles = 1.5;
+    } else {
+      cellSizeMiles = 2.0;
+    }
+
+    const cells = generateGridCells(center, radiusMiles, cellSizeMiles);
+    console.log(`[Radius Search] Generated ${cells.length} grid cells (cell size: ${cellSizeMiles} miles)`);
+
+    // Process cells in batches for better performance
+    const BATCH_SIZE = 4; // Process 4 cells concurrently
+    const seenIds = new Set<string>();
+
+    for (let i = 0; i < cells.length; i += BATCH_SIZE) {
+      const batch = cells.slice(i, i + BATCH_SIZE);
+
+      const batchPromises = batch.map(cell => {
+        if (useLeonCounty) {
+          return fetchParcelsFromLeonCountyCell(
+            { lat: cell.lat, lng: cell.lng },
+            cell.size,
+            center,
+            radiusMiles
+          );
+        } else {
+          return fetchParcelsFromArcGISCell(
+            { lat: cell.lat, lng: cell.lng },
+            cell.size,
+            center,
+            radiusMiles
+          );
+        }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+
+      // Deduplicate and add to results
+      for (const cellParcels of batchResults) {
+        for (const parcel of cellParcels) {
+          if (!seenIds.has(parcel.parcelId)) {
+            seenIds.add(parcel.parcelId);
+            allParcels.push(parcel);
+          }
+        }
+      }
+
+      // Stop if we've hit the max
+      if (allParcels.length >= MAX_TOTAL_PARCELS) {
+        console.log(`[Radius Search] Hit max parcel limit (${MAX_TOTAL_PARCELS})`);
+        break;
+      }
+    }
+
+    // If Leon County returned nothing, try ArcGIS as fallback
+    if (allParcels.length === 0 && useLeonCounty) {
+      console.log('[Radius Search] Leon County returned no results, trying ArcGIS fallback');
       source = 'ArcGIS USA Parcels';
+
+      for (let i = 0; i < cells.length; i += BATCH_SIZE) {
+        const batch = cells.slice(i, i + BATCH_SIZE);
+
+        const batchPromises = batch.map(cell =>
+          fetchParcelsFromArcGISCell(
+            { lat: cell.lat, lng: cell.lng },
+            cell.size,
+            center,
+            radiusMiles
+          )
+        );
+
+        const batchResults = await Promise.all(batchPromises);
+
+        for (const cellParcels of batchResults) {
+          for (const parcel of cellParcels) {
+            if (!seenIds.has(parcel.parcelId)) {
+              seenIds.add(parcel.parcelId);
+              allParcels.push(parcel);
+            }
+          }
+        }
+
+        if (allParcels.length >= MAX_TOTAL_PARCELS) break;
+      }
     }
 
     // Filter by property type if needed
     if (propertyType === 'vacant') {
-      parcels = parcels.filter(p => {
+      allParcels = allParcels.filter(p => {
         const zoning = (p.zoning || '').toUpperCase();
         return zoning.includes('VL') || zoning.includes('AG') ||
                zoning.includes('VAC') || !p.address || p.address === 'Unknown Address';
       });
     } else if (propertyType === 'commercial') {
-      parcels = parcels.filter(p => {
+      allParcels = allParcels.filter(p => {
         const zoning = (p.zoning || '').toUpperCase();
         return zoning.includes('C-') || zoning.includes('COM') ||
                zoning.includes('CR') || zoning.includes('CG') ||
@@ -278,15 +413,16 @@ export async function POST(request: NextRequest) {
 
     const searchTime = Date.now() - startTime;
 
-    console.log(`[Radius Search] Found ${parcels.length} parcels in ${searchTime}ms from ${source}`);
+    console.log(`[Radius Search] Found ${allParcels.length} parcels in ${searchTime}ms from ${source} (${cells.length} cells queried)`);
 
     return NextResponse.json({
-      parcels,
-      totalCount: parcels.length,
+      parcels: allParcels,
+      totalCount: allParcels.length,
       source,
       searchTime,
       center,
       radiusMiles,
+      gridCells: cells.length,
     });
   } catch (error) {
     console.error('Radius search error:', error);

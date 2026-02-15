@@ -732,8 +732,17 @@ export default function SearchPage() {
                 />
               </div>
               <p className="text-xs text-[var(--text-muted)] mt-1 text-center">
-                {progress < 30 ? 'Fetching parcels in radius...' : progress < 80 ? 'Analyzing properties with real traffic data...' : 'Finalizing results...'}
+                {progress < 30
+                  ? `Scanning ${filters.radiusMiles >= 1 ? 'grid cells in' : ''} ${filters.radiusMiles} mile radius...`
+                  : progress < 80
+                    ? 'Analyzing properties with real traffic data...'
+                    : 'Finalizing results...'}
               </p>
+              {filters.radiusMiles >= 1 && progress < 30 && (
+                <p className="text-xs text-[var(--text-muted)] mt-1 text-center opacity-70">
+                  Larger areas take longer - scanning multiple zones
+                </p>
+              )}
             </div>
           )}
 
