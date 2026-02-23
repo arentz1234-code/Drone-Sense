@@ -1013,13 +1013,13 @@ function calculateFeasibilityScore(
     }
 
     // Bonus for road type
-    if (trafficData.roadType.includes('Major') || trafficData.roadType.includes('Motorway')) {
+    if (trafficData.roadType?.includes('Major') || trafficData.roadType?.includes('Motorway')) {
       accessScore = Math.min(10, accessScore + 2);
       accessDetail = `${trafficData.roadType} with high visibility`;
-    } else if (trafficData.roadType.includes('Secondary')) {
+    } else if (trafficData.roadType?.includes('Secondary')) {
       accessScore = 6;
       accessDetail = `${trafficData.roadType} - good local access`;
-    } else {
+    } else if (trafficData.roadType) {
       accessScore = 4;
       accessDetail = `${trafficData.roadType} - limited visibility`;
     }
