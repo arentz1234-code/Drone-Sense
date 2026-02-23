@@ -2669,7 +2669,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       );
 
       // Add downtown-specific recommendations if in historic downtown
-      if (districtInfo.type === 'historic_downtown') {
+      if (districtInfo?.type === 'historic_downtown') {
         analysis.downtownRecommendations = DOWNTOWN_BUSINESSES;
       }
     }
