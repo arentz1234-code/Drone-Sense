@@ -2425,9 +2425,39 @@ function generateTopRecommendations(
 }
 
 export async function POST(request: Request) {
+  // Declare variables at function scope so they're accessible in catch block
+  let requestData: {
+    nearbyBusinesses: Business[];
+    trafficData: TrafficInfo | null;
+    demographicsData: DemographicsInfo | null;
+    address: string;
+    environmentalRisk: EnvironmentalRiskInfo | null;
+    marketComps: MarketCompInfo[] | null;
+    validParcelAcres: number | null;
+  } = {
+    nearbyBusinesses: [],
+    trafficData: null,
+    demographicsData: null,
+    address: '',
+    environmentalRisk: null,
+    marketComps: null,
+    validParcelAcres: null
+  };
+
   try {
     const body: AnalyzeRequest = await request.json();
     const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence, selectedParcel } = body;
+
+    // Store in function-scoped variable for error handler access
+    requestData = {
+      nearbyBusinesses: nearbyBusinesses || [],
+      trafficData,
+      demographicsData,
+      address: address || '',
+      environmentalRisk,
+      marketComps,
+      validParcelAcres: null // Will be set below
+    };
 
     // Extract actual parcel acreage if available (from county records)
     // Ensure it's a number (could come as string from API)
@@ -2437,6 +2467,7 @@ export async function POST(request: Request) {
     console.log(`[Analyze] rawAcres:`, rawAcres, `type:`, typeof rawAcres);
     const parsedAcres = rawAcres != null ? (typeof rawAcres === 'number' ? rawAcres : parseFloat(String(rawAcres))) : null;
     const validParcelAcres = parsedAcres !== null && !isNaN(parsedAcres) ? parsedAcres : null;
+    requestData.validParcelAcres = validParcelAcres; // Store for error handler
     console.log(`[Analyze] validParcelAcres:`, validParcelAcres);
 
     // Debug logging - track what data is received for each address
@@ -2706,18 +2737,29 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
+    // Use actual request data in mock analysis (preserves lot size, traffic, demographics from request)
+    const mockAnalysis = getMockAnalysis(
+      requestData.nearbyBusinesses,
+      requestData.trafficData,
+      requestData.demographicsData,
+      requestData.validParcelAcres || 1.35,
+      requestData.address,
+      requestData.environmentalRisk,
+      requestData.marketComps
+    );
+
     if (process.env.NODE_ENV === 'development') {
       return NextResponse.json({
         error: 'Analysis failed',
         details: errorMessage,
         usingMockData: true,
-        ...getMockAnalysis([], null, null, 1.35, '', null, null)
+        ...mockAnalysis
       });
     }
 
     return NextResponse.json({
       error: errorMessage,
-      ...getMockAnalysis([], null, null, 1.35, '', null, null),
+      ...mockAnalysis,
       usingMockData: true
     });
   }
