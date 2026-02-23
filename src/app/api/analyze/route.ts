@@ -11,6 +11,7 @@ import {
   CONSTRUCTION_LABELS,
 } from '@/data/BusinessIntelligence';
 import { LOT_SIZE_REFERENCE } from '@/data/lotSizeReference';
+import { detectDistrictType as detectDistrictFromBusinesses, DistrictType as BusinessDistrictType } from '@/data/seCRETenants';
 
 // Helper to get tenant examples from CRE Lot Size Reference spreadsheet
 function getTenantsFromSpreadsheet(category: string): string[] {
@@ -157,6 +158,16 @@ interface AnalyzeRequest {
   environmentalRisk: EnvironmentalRiskInfo | null;
   marketComps: MarketCompInfo[] | null;
   locationIntelligence?: LocationIntelligenceInfo | null;
+  selectedParcel?: {
+    boundaries?: unknown;
+    parcelInfo?: {
+      acres?: number;
+      zoning?: string;
+      owner?: string;
+      address?: string;
+      apn?: string;
+    };
+  };
 }
 
 // VPD thresholds, income preferences, and lot size requirements for different business types
@@ -1244,6 +1255,34 @@ interface RetailerMatchResult {
   notes?: string;
 }
 
+// Map retailerRequirements categories to district penalty categories
+const RETAILER_CATEGORY_TO_DISTRICT_PENALTY: Record<string, string[]> = {
+  'Building Supply / Equipment Rental / Trade': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'medical_professional', 'big_box_power', 'neighborhood_retail'],
+  'Agriculture / Rural / Farm Equipment': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'medical_professional', 'big_box_power', 'neighborhood_retail'],
+  'Industrial / Warehouse / Distribution': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'neighborhood_retail'],
+  'Auto Parts / Service / Car Wash': ['fashion_retail', 'downtown_retail', 'medical_professional'],
+  'Auto Dealership': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'medical_professional', 'neighborhood_retail'],
+  'Manufactured Home / RV / Boat': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'medical_professional', 'neighborhood_retail'],
+};
+
+// Categories that get boosted in specific districts
+const RETAILER_CATEGORY_TO_DISTRICT_BOOST: Record<string, string[]> = {
+  'Apparel / Fashion': ['fashion_retail', 'downtown_retail'],
+  'Specialty Retail': ['fashion_retail', 'downtown_retail', 'neighborhood_retail'],
+  'QSR - Coffee / Bakery': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'neighborhood_retail'],
+  'QSR - Burger / Chicken': ['dining_entertainment', 'neighborhood_retail', 'big_box_power'],
+  'Casual Dining': ['dining_entertainment', 'downtown_retail'],
+  'Fine Dining': ['downtown_retail', 'dining_entertainment'],
+  'Personal Services': ['fashion_retail', 'downtown_retail', 'neighborhood_retail'],
+  'Medical / Dental': ['medical_professional', 'neighborhood_retail'],
+  'Bank / Financial': ['downtown_retail', 'medical_professional', 'neighborhood_retail'],
+  'Grocery / Supermarket': ['neighborhood_retail', 'mixed_suburban'],
+  'Pharmacy': ['neighborhood_retail', 'medical_professional'],
+  'Fitness / Gym': ['neighborhood_retail', 'mixed_suburban'],
+  'Big Box Retail': ['big_box_power', 'mixed_suburban'],
+  'Discount Retail': ['neighborhood_retail', 'mixed_suburban'],
+};
+
 function calculateRetailerMatches(
   lotSizeAcres: number | null,
   vpd: number | null,
@@ -1251,9 +1290,15 @@ function calculateRetailerMatches(
   incomeLevel: 'low' | 'moderate' | 'middle' | 'upper-middle' | 'high' | null,
   population: number | null,
   stateCode: string | null,
-  isCollegeTown: boolean = false
+  isCollegeTown: boolean = false,
+  nearbyBusinesses?: Array<{ name: string; type: string; distance?: string | number }>
 ): { matches: RetailerMatchResult[]; totalMatches: number } {
   const matches: RetailerMatchResult[] = [];
+
+  // Detect district type from nearby businesses
+  const districtInfo = nearbyBusinesses && nearbyBusinesses.length > 0
+    ? detectDistrictFromBusinesses(nearbyBusinesses.map(b => ({ name: b.name, type: b.type })))
+    : null;
 
   for (const retailer of RETAILER_REQUIREMENTS) {
     // Only include actively expanding retailers
@@ -1262,6 +1307,30 @@ function calculateRetailerMatches(
     // Skip discount retailers in college town markets (student income is deceptively low)
     if (isCollegeTown && retailer.category === 'Discount Retail') {
       continue;
+    }
+
+    // Check if this category should be penalized in the detected district
+    let districtPenalty = 0;
+    let districtBoost = 0;
+    if (districtInfo && districtInfo.confidence > 0.3) {
+      // Check for penalty categories
+      for (const [penaltyCategory, penalizedDistricts] of Object.entries(RETAILER_CATEGORY_TO_DISTRICT_PENALTY)) {
+        if (retailer.category.toLowerCase().includes(penaltyCategory.toLowerCase()) ||
+            penaltyCategory.toLowerCase().includes(retailer.category.toLowerCase().split('/')[0].trim())) {
+          if (penalizedDistricts.includes(districtInfo.type)) {
+            districtPenalty = 35 * Math.min(1, districtInfo.confidence * 1.5); // Significant penalty
+          }
+        }
+      }
+
+      // Check for boost categories
+      for (const [boostCategory, boostedDistricts] of Object.entries(RETAILER_CATEGORY_TO_DISTRICT_BOOST)) {
+        if (retailer.category.toLowerCase().includes(boostCategory.toLowerCase())) {
+          if (boostedDistricts.includes(districtInfo.type)) {
+            districtBoost = 15 * Math.min(1, districtInfo.confidence * 1.5);
+          }
+        }
+      }
     }
 
     const matchDetails = {
@@ -1426,10 +1495,13 @@ function calculateRetailerMatches(
       totalScore += regionWeight * 0.5;
     }
 
-    // Calculate final score
-    const finalScore = weightedFactors > 0
+    // Calculate final score with district adjustments
+    let finalScore = weightedFactors > 0
       ? Math.round((totalScore / weightedFactors) * 100)
       : 50;
+
+    // Apply district-based adjustments
+    finalScore = Math.max(0, Math.min(100, finalScore - districtPenalty + districtBoost));
 
     // Only include if score is reasonable
     if (finalScore < 30) continue;
@@ -1884,6 +1956,45 @@ function generateTopRecommendations(
     b.name.toLowerCase().replace(/[^a-z0-9]/g, '')
   );
 
+  // Detect district type from nearby businesses for context-aware recommendations
+  const nearbyForDistrict = nearbyBusinesses.map(b => ({
+    name: b.name,
+    type: b.type || '',
+    distance: typeof b.distance === 'string'
+      ? parseFloat(b.distance.match(/[\d.]+/)?.[0] || '0')
+      : b.distance
+  }));
+  const detectedDistrict = detectDistrictFromBusinesses(nearbyForDistrict);
+  console.log(`[Recommendations] Detected district type: ${detectedDistrict.type} (confidence: ${(detectedDistrict.confidence * 100).toFixed(0)}%)`);
+
+  // Categories that DON'T fit certain district types (should be heavily penalized)
+  const districtPenaltyCategories: Record<BusinessDistrictType, string[]> = {
+    fashion_retail: ['building supply', 'industrial', 'warehouse', 'equipment rental', 'hvac', 'plumbing', 'agriculture', 'manufacturing', 'auto parts', 'car wash'],
+    downtown_retail: ['building supply', 'industrial', 'warehouse', 'equipment rental', 'agriculture', 'manufacturing', 'big box'],
+    dining_entertainment: ['building supply', 'industrial', 'warehouse', 'agriculture', 'manufacturing'],
+    medical_professional: ['building supply', 'industrial', 'warehouse', 'agriculture', 'entertainment'],
+    industrial: ['apparel', 'fashion', 'boutique', 'entertainment'],
+    auto_corridor: [],
+    big_box_power: ['building supply', 'industrial', 'agriculture'],
+    neighborhood_retail: ['building supply', 'industrial', 'warehouse'],
+    mixed_suburban: [],
+    unknown: []
+  };
+
+  // Categories that FIT certain district types (should be boosted)
+  const districtBoostCategories: Record<BusinessDistrictType, string[]> = {
+    fashion_retail: ['apparel', 'clothing', 'shoes', 'boutique', 'retail', 'salon', 'coffee', 'bakery', 'restaurant'],
+    downtown_retail: ['retail', 'restaurant', 'coffee', 'salon', 'financial', 'office'],
+    dining_entertainment: ['restaurant', 'food', 'coffee', 'entertainment', 'fitness'],
+    medical_professional: ['medical', 'dental', 'pharmacy', 'financial', 'office', 'insurance'],
+    industrial: ['building supply', 'industrial', 'warehouse', 'equipment', 'hvac', 'auto'],
+    auto_corridor: ['auto', 'car wash', 'fuel', 'convenience'],
+    big_box_power: ['big box', 'retail', 'fitness', 'grocery'],
+    neighborhood_retail: ['grocery', 'pharmacy', 'convenience', 'dollar', 'food'],
+    mixed_suburban: [],
+    unknown: []
+  };
+
   // If historic downtown, add downtown-specific recommendations first
   if (districtInfo?.type === 'historic_downtown') {
     const allDowntownOptions = [
@@ -2246,6 +2357,36 @@ function generateTopRecommendations(
       score += 3; // Tax incentives make site more attractive for investment
     }
 
+    // === DISTRICT-BASED ADJUSTMENT (based on nearby businesses) ===
+    // This is critical for context-aware recommendations
+    if (detectedDistrict.confidence > 0.25) {
+      const categoryLower = retailer.category.toLowerCase();
+      const nameLower = retailer.name.toLowerCase();
+
+      // Check for penalty categories (things that don't fit the area)
+      const penaltyList = districtPenaltyCategories[detectedDistrict.type] || [];
+      const hasPenalty = penaltyList.some(penalty =>
+        categoryLower.includes(penalty) || nameLower.includes(penalty)
+      );
+      if (hasPenalty) {
+        const penaltyAmount = Math.round(35 * detectedDistrict.confidence);
+        score -= penaltyAmount;
+        // If it's a very poor fit, skip entirely
+        if (detectedDistrict.confidence > 0.5 && penaltyAmount > 20) {
+          continue;
+        }
+      }
+
+      // Check for boost categories (things that complement the area)
+      const boostList = districtBoostCategories[detectedDistrict.type] || [];
+      const hasBoost = boostList.some(boost =>
+        categoryLower.includes(boost) || nameLower.includes(boost)
+      );
+      if (hasBoost) {
+        score += Math.round(20 * detectedDistrict.confidence);
+      }
+    }
+
     // Only include if score is positive and meets minimum threshold
     const minScoreThreshold = 35; // Higher threshold - only show retailers that actually fit the site
     if (score >= minScoreThreshold) {
@@ -2286,11 +2427,22 @@ function generateTopRecommendations(
 export async function POST(request: Request) {
   try {
     const body: AnalyzeRequest = await request.json();
-    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence } = body;
+    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence, selectedParcel } = body;
+
+    // Extract actual parcel acreage if available (from county records)
+    // Ensure it's a number (could come as string from API)
+    console.log(`[Analyze] selectedParcel received:`, JSON.stringify(selectedParcel, null, 2));
+    console.log(`[Analyze] selectedParcel?.parcelInfo:`, JSON.stringify(selectedParcel?.parcelInfo, null, 2));
+    const rawAcres = selectedParcel?.parcelInfo?.acres;
+    console.log(`[Analyze] rawAcres:`, rawAcres, `type:`, typeof rawAcres);
+    const parsedAcres = rawAcres != null ? (typeof rawAcres === 'number' ? rawAcres : parseFloat(String(rawAcres))) : null;
+    const validParcelAcres = parsedAcres !== null && !isNaN(parsedAcres) ? parsedAcres : null;
+    console.log(`[Analyze] validParcelAcres:`, validParcelAcres);
 
     // Debug logging - track what data is received for each address
     console.log(`\n========== ANALYZE REQUEST ==========`);
     console.log(`[Analyze] Address: ${address}`);
+    console.log(`[Analyze] PARCEL ACRES: ${validParcelAcres || 'N/A'} (from county records)`);
     console.log(`[Analyze] Traffic VPD: ${trafficData?.estimatedVPD || 'N/A'}`);
     console.log(`[Analyze] Demographics: Pop=${demographicsData?.population || 'N/A'}, Income=$${demographicsData?.medianHouseholdIncome || 'N/A'}, Level=${demographicsData?.incomeLevel || 'N/A'}`);
     console.log(`[Analyze] Consumer Spending: $${demographicsData?.consumerSpending ? (demographicsData.consumerSpending / 1000000).toFixed(1) + 'M' : 'N/A'}`);
@@ -2306,7 +2458,7 @@ export async function POST(request: Request) {
     if (!apiKey) {
       console.error('GOOGLE_GEMINI_API_KEY not configured');
       return NextResponse.json({
-        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, 1.35, address, environmentalRisk, marketComps),
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, validParcelAcres || 1.35, address, environmentalRisk, marketComps),
         usingMockData: true,
         reason: 'API key not configured'
       });
@@ -2454,11 +2606,20 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     const analysis = JSON.parse(analysisText.trim());
 
-    // Parse lot size from AI analysis
-    const lotSizeAcres = parseLotSize(analysis.lotSizeEstimate);
+    // Use ACTUAL parcel acreage from county records if available, otherwise fall back to AI estimate
+    const aiEstimatedLotSize = parseLotSize(analysis.lotSizeEstimate);
+    const lotSizeAcres = validParcelAcres || aiEstimatedLotSize;
+
+    // Store both values for transparency
     if (lotSizeAcres !== null) {
       analysis.parsedLotSize = lotSizeAcres;
     }
+    if (validParcelAcres !== null && typeof validParcelAcres === 'number' && !isNaN(validParcelAcres)) {
+      analysis.validParcelAcres = validParcelAcres;
+      analysis.lotSizeEstimate = `${validParcelAcres.toFixed(2)} acres (from county records)`;
+    }
+
+    console.log(`[Analyze] Using lot size: ${lotSizeAcres} acres (source: ${validParcelAcres ? 'COUNTY RECORDS' : 'AI estimate'})`);
 
     // Detect district type for appropriate recommendations
     const districtInfo = detectDistrictType(
@@ -2534,7 +2695,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
       demographicsData?.incomeLevel || null,
       demographicsData?.population || null,
       stateCode,
-      demographicsData?.isCollegeTown || false
+      demographicsData?.isCollegeTown || false,
+      nearbyBusinesses
     );
     analysis.retailerMatches = retailerMatches;
 
@@ -2542,16 +2704,22 @@ Return ONLY valid JSON, no markdown or explanation.`;
   } catch (error) {
     console.error('Analysis error:', error);
 
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
     if (process.env.NODE_ENV === 'development') {
       return NextResponse.json({
         error: 'Analysis failed',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: errorMessage,
         usingMockData: true,
-        ...getMockAnalysis([], null)
+        ...getMockAnalysis([], null, null, 1.35, '', null, null)
       });
     }
 
-    return NextResponse.json({ ...getMockAnalysis([], null), usingMockData: true });
+    return NextResponse.json({
+      error: errorMessage,
+      ...getMockAnalysis([], null, null, 1.35, '', null, null),
+      usingMockData: true
+    });
   }
 }
 
@@ -2576,7 +2744,8 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     demographicsData?.incomeLevel || null,
     demographicsData?.population || null,
     stateCode,
-    demographicsData?.isCollegeTown || false
+    demographicsData?.isCollegeTown || false,
+    nearbyBusinesses
   );
 
   // Build recommendation excluding existing businesses
@@ -2593,6 +2762,11 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this location suits local services. Consider: ${topRecs}. Focus on businesses serving the immediate community.`;
   }
 
+  // Use actual lot size if provided, otherwise fall back to estimate
+  const lotSizeDisplay = lotSizeAcres !== null && typeof lotSizeAcres === 'number' && !isNaN(lotSizeAcres) && lotSizeAcres !== 1.35
+    ? `${lotSizeAcres.toFixed(2)} acres (from county records)`
+    : 'Approximately 1.2 - 1.5 acres based on visual analysis';
+
   return {
     viabilityScore: feasibilityScore.overall,
     feasibilityScore,
@@ -2600,7 +2774,9 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     accessibility: 'Good visibility from main road. Multiple access points possible. Adequate space for parking configuration.',
     existingStructures: 'No significant existing structures visible. Possible remnants of previous foundation or utilities.',
     vegetation: 'Moderate vegetation coverage. Some tree clearing may be required. Landscaping opportunities present.',
-    lotSizeEstimate: 'Approximately 1.2 - 1.5 acres based on visual analysis',
+    lotSizeEstimate: lotSizeDisplay,
+    parsedLotSize: lotSizeAcres,
+    validParcelAcres: lotSizeAcres !== 1.35 ? lotSizeAcres : null,
     businessRecommendation: businessRec,
     constructionPotential: 'The site presents good construction potential with minimal grading required. Utilities appear accessible from the main road. Soil conditions should be verified through geotechnical survey.',
     keyFindings: [
