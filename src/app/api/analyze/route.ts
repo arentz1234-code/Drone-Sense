@@ -1068,7 +1068,7 @@ function calculateFeasibilityScore(
     if (isCollegeTown) {
       demographicsDetail = `College Town market (${collegePercent}% students) - Strong student spending power despite $${income.toLocaleString()} census income, ${population.toLocaleString()} pop`;
     } else {
-      demographicsDetail = `${demographicsData.consumerProfile.type} market - $${income.toLocaleString()} median income, ${population.toLocaleString()} pop, ${employment}% employed`;
+      demographicsDetail = `${demographicsData.consumerProfile?.type || 'Standard'} market - $${income.toLocaleString()} median income, ${population.toLocaleString()} pop, ${employment}% employed`;
     }
   }
 
