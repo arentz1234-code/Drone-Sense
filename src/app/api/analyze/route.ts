@@ -1590,7 +1590,7 @@ function calculateBusinessSuitability(
 
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
     // Check if this category is inappropriate for the district
-    if (districtInfo?.inappropriateCategories.includes(key)) {
+    if (districtInfo?.inappropriateCategories?.includes(key)) {
       // Skip this category entirely for this district type
       continue;
     }
