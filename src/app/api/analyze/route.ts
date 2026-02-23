@@ -2016,7 +2016,7 @@ function generateTopRecommendations(
   // Score each retailer from the spreadsheet against actual metrics
   for (const retailer of RETAILER_REQUIREMENTS) {
     // Skip inappropriate categories for district type
-    if (districtInfo?.inappropriateCategories.some(cat =>
+    if (districtInfo?.inappropriateCategories?.some(cat =>
       retailer.category.toLowerCase().includes(cat.toLowerCase())
     )) {
       continue;
