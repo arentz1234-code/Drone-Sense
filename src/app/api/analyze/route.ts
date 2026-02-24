@@ -2602,12 +2602,31 @@ function generateTopRecommendations(
 }
 
 export async function POST(request: Request) {
+  // Declare variables outside try block so they're accessible in catch for error handling
+  let nearbyBusinesses: Business[] = [];
+  let trafficData: TrafficInfo | null = null;
+  let demographicsData: DemographicsInfo | null = null;
+  let lotSizeAcres: number | null = null;
+  let address = '';
+  let environmentalRisk: EnvironmentalRiskInfo | null = null;
+  let marketComps: MarketCompInfo[] | null = null;
+  let enhancedData: EnhancedDataInfo | null = null;
+
   try {
     const body: AnalyzeRequest = await request.json();
-    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence, enhancedData, selectedParcel } = body;
+    const { images, selectedParcel, locationIntelligence } = body;
+
+    // Assign to outer scope variables
+    nearbyBusinesses = body.nearbyBusinesses || [];
+    trafficData = body.trafficData || null;
+    demographicsData = body.demographicsData || null;
+    address = body.address || '';
+    environmentalRisk = body.environmentalRisk || null;
+    marketComps = body.marketComps || null;
+    enhancedData = body.enhancedData || null;
 
     // Extract lot size from parcel info
-    const lotSizeAcres = selectedParcel?.parcelInfo?.acres || null;
+    lotSizeAcres = selectedParcel?.parcelInfo?.acres || null;
 
     // Debug logging - track what data is received for each address
     console.log(`\n========== ANALYZE REQUEST ==========`);
@@ -2629,7 +2648,7 @@ export async function POST(request: Request) {
     if (!apiKey) {
       console.error('GOOGLE_GEMINI_API_KEY not configured');
       return NextResponse.json({
-        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, lotSizeAcres, address, environmentalRisk, marketComps),
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, lotSizeAcres, address, environmentalRisk, marketComps, enhancedData),
         usingMockData: true,
         reason: 'API key not configured'
       });
