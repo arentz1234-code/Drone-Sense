@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, AccessPoint, WalkScoreData, CrimeData, BuildingPermitsData, VacancyData } from '@/types';
+import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 
 // Business types for dropdown
 const BUSINESS_TYPES = [
@@ -471,7 +472,9 @@ export default function RecommendationsPanel({
                   <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-lg">🚶</span>
-                      <span className="text-sm font-medium text-[var(--text-primary)]">Walkability</span>
+                      <DataSourceTooltip source={(enhancedData.walkScore as WalkScoreData & { isEstimate?: boolean }).isEstimate ? DATA_SOURCES.walkScoreEstimate : DATA_SOURCES.walkScoreOfficial}>
+                        <span className="text-sm font-medium text-[var(--text-primary)]">Walkability</span>
+                      </DataSourceTooltip>
                       <span className={`ml-auto text-sm font-bold ${
                         enhancedData.walkScore.walkScore >= 70 ? 'text-green-400' :
                         enhancedData.walkScore.walkScore >= 50 ? 'text-yellow-400' : 'text-red-400'
@@ -480,6 +483,9 @@ export default function RecommendationsPanel({
                       </span>
                     </div>
                     <p className="text-xs text-[var(--text-secondary)] mb-2">{enhancedData.walkScore.walkDescription}</p>
+                    {(enhancedData.walkScore as WalkScoreData & { isEstimate?: boolean }).isEstimate && (
+                      <p className="text-[10px] text-orange-400/80 mb-2 italic">⚠️ Estimate based on OSM amenity count</p>
+                    )}
                     {enhancedData.walkScore.recommendations && enhancedData.walkScore.recommendations.length > 0 && (
                       <ul className="space-y-1">
                         {enhancedData.walkScore.recommendations.slice(0, 2).map((rec, i) => (
@@ -498,7 +504,9 @@ export default function RecommendationsPanel({
                   <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-lg">🛡️</span>
-                      <span className="text-sm font-medium text-[var(--text-primary)]">Safety</span>
+                      <DataSourceTooltip source={enhancedData.crimeData.source?.includes('State') ? DATA_SOURCES.crimeStateLevel : DATA_SOURCES.crimeNationalEstimate}>
+                        <span className="text-sm font-medium text-[var(--text-primary)]">Safety</span>
+                      </DataSourceTooltip>
                       <span className={`ml-auto text-sm font-bold ${
                         enhancedData.crimeData.safetyGrade === 'A' ? 'text-green-400' :
                         enhancedData.crimeData.safetyGrade === 'B' ? 'text-cyan-400' :
@@ -510,6 +518,7 @@ export default function RecommendationsPanel({
                     <p className="text-xs text-[var(--text-secondary)] mb-2">
                       Crime rate {enhancedData.crimeData.vsNationalAverage} vs national average
                     </p>
+                    <p className="text-[10px] text-orange-400/80 mb-2 italic">⚠️ State-level data - verify with local statistics</p>
                     {enhancedData.crimeData.businessImpact?.securityRecommendations && enhancedData.crimeData.businessImpact.securityRecommendations.length > 0 && (
                       <ul className="space-y-1">
                         {enhancedData.crimeData.businessImpact.securityRecommendations.map((rec, i) => (
@@ -528,7 +537,9 @@ export default function RecommendationsPanel({
                   <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-lg">🏗️</span>
-                      <span className="text-sm font-medium text-[var(--text-primary)]">Development</span>
+                      <DataSourceTooltip source={DATA_SOURCES.buildingPermits}>
+                        <span className="text-sm font-medium text-[var(--text-primary)]">Development</span>
+                      </DataSourceTooltip>
                       <span className={`ml-auto text-sm font-bold ${
                         enhancedData.buildingPermits.yoyChange?.trend === 'growing' ? 'text-green-400' :
                         enhancedData.buildingPermits.yoyChange?.trend === 'stable' ? 'text-yellow-400' : 'text-red-400'
@@ -540,6 +551,7 @@ export default function RecommendationsPanel({
                     <p className="text-xs text-[var(--text-secondary)] mb-2">
                       {enhancedData.buildingPermits.currentYear?.totalUnits?.toLocaleString() || 'N/A'} units permitted
                     </p>
+                    <p className="text-[10px] text-orange-400/80 mb-2 italic">⚠️ MSA-level data - may not reflect immediate area</p>
                     {enhancedData.buildingPermits.marketAnalysis?.recommendations && enhancedData.buildingPermits.marketAnalysis.recommendations.length > 0 && (
                       <ul className="space-y-1">
                         {enhancedData.buildingPermits.marketAnalysis.recommendations.map((rec, i) => (
@@ -558,7 +570,9 @@ export default function RecommendationsPanel({
                   <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-lg">📊</span>
-                      <span className="text-sm font-medium text-[var(--text-primary)]">Market Saturation</span>
+                      <DataSourceTooltip source={enhancedData.vacancyData.source?.includes('Google') ? DATA_SOURCES.vacancyGooglePlaces : DATA_SOURCES.vacancyOSMFallback}>
+                        <span className="text-sm font-medium text-[var(--text-primary)]">Market Saturation</span>
+                      </DataSourceTooltip>
                       <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded ${
                         enhancedData.vacancyData.saturationLevel === 'undersupplied' ? 'bg-green-500/20 text-green-400' :
                         enhancedData.vacancyData.saturationLevel === 'balanced' ? 'bg-cyan-500/20 text-cyan-400' :
@@ -567,6 +581,9 @@ export default function RecommendationsPanel({
                         {enhancedData.vacancyData.saturationLevel}
                       </span>
                     </div>
+                    {!enhancedData.vacancyData.source?.includes('Google') && (
+                      <p className="text-[10px] text-orange-400/80 mb-2 italic">⚠️ Estimated from OSM data</p>
+                    )}
                     {enhancedData.vacancyData.opportunities?.undersuppliedSectors && enhancedData.vacancyData.opportunities.undersuppliedSectors.length > 0 && (
                       <div className="mb-2">
                         <p className="text-xs text-green-400 font-medium mb-1">Opportunity Sectors:</p>

@@ -12,6 +12,8 @@ export interface WalkScoreResponse {
   transitAccessible: boolean;
   retailViability: 'excellent' | 'good' | 'fair' | 'poor';
   recommendations: string[];
+  source: string; // Data source indicator for transparency
+  isEstimate: boolean; // Whether this is an estimate vs official API data
 }
 
 // Walk Score descriptions
@@ -128,6 +130,8 @@ async function fetchWalkScore(lat: number, lng: number, address: string): Promis
       transitAccessible: transitScore !== null && transitScore >= 50,
       retailViability: viability,
       recommendations,
+      source: 'Walk Score API (official)',
+      isEstimate: false,
     };
   } catch (error) {
     console.error('Walk Score API error:', error);
@@ -186,6 +190,8 @@ async function getEstimatedWalkScore(lat: number, lng: number): Promise<WalkScor
       transitAccessible: transitScore !== null && transitScore >= 50,
       retailViability: viability,
       recommendations,
+      source: 'OpenStreetMap amenity count estimate',
+      isEstimate: true,
     };
   } catch (error) {
     console.error('Walk Score estimation error:', error);
@@ -201,6 +207,8 @@ async function getEstimatedWalkScore(lat: number, lng: number): Promise<WalkScor
       transitAccessible: false,
       retailViability: 'fair',
       recommendations: ['Walk Score data unavailable - assess pedestrian infrastructure manually'],
+      source: 'Unable to fetch - using defaults',
+      isEstimate: true,
     };
   }
 }

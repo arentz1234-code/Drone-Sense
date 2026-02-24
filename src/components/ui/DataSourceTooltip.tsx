@@ -216,4 +216,45 @@ export const DATA_SOURCES = {
     description: 'Data entered by the user',
     type: 'user-input' as const,
   },
+  walkScoreEstimate: {
+    name: 'OpenStreetMap Walkability Estimate',
+    url: 'https://www.openstreetmap.org/',
+    description: 'Estimated from nearby amenities count - not official Walk Score',
+    type: 'estimate' as const,
+  },
+  walkScoreOfficial: {
+    name: 'Walk Score API',
+    url: 'https://www.walkscore.com/',
+    description: 'Official Walk Score data',
+    type: 'api' as const,
+  },
+  crimeStateLevel: {
+    name: 'FBI UCR (State Level)',
+    url: 'https://crime-data-explorer.fr.cloud.gov/',
+    description: 'State-level crime rates - not city/neighborhood specific',
+    type: 'estimate' as const,
+  },
+  crimeNationalEstimate: {
+    name: 'National Crime Estimate',
+    description: 'Based on national average rates - verify with local data',
+    type: 'estimate' as const,
+  },
+  buildingPermits: {
+    name: 'FRED + Census ACS',
+    url: 'https://fred.stlouisfed.org/',
+    description: 'MSA-level building permit data - may not reflect immediate area',
+    type: 'api' as const,
+  },
+  vacancyGooglePlaces: {
+    name: 'Google Places API',
+    url: 'https://developers.google.com/maps/documentation/places/',
+    description: 'Business counts from Google Places for market saturation',
+    type: 'api' as const,
+  },
+  vacancyOSMFallback: {
+    name: 'OpenStreetMap Estimate',
+    url: 'https://www.openstreetmap.org/',
+    description: 'Estimated from OSM data - Google Places provides more accurate counts',
+    type: 'estimate' as const,
+  },
 };

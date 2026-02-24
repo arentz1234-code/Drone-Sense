@@ -246,6 +246,8 @@ export interface WalkScoreData {
   transitAccessible: boolean;
   retailViability: 'excellent' | 'good' | 'fair' | 'poor';
   recommendations: string[];
+  source?: string; // Data source indicator for transparency
+  isEstimate?: boolean; // Whether this is an estimate vs official API data
 }
 
 // Crime data types
