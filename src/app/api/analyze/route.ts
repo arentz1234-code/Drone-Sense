@@ -215,6 +215,16 @@ interface AnalyzeRequest {
   locationIntelligence?: LocationIntelligenceInfo | null;
   // New enhanced data sources
   enhancedData?: EnhancedDataInfo | null;
+  // Parcel data with lot size
+  selectedParcel?: {
+    boundaries?: [number, number][];
+    parcelInfo?: {
+      acres?: number;
+      zoning?: string;
+      owner?: string;
+      address?: string;
+    };
+  } | null;
 }
 
 // VPD thresholds, income preferences, and lot size requirements for different business types
@@ -2594,11 +2604,16 @@ function generateTopRecommendations(
 export async function POST(request: Request) {
   try {
     const body: AnalyzeRequest = await request.json();
-    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence, enhancedData } = body;
+    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence, enhancedData, selectedParcel } = body;
+
+    // Extract lot size from parcel info
+    const lotSizeAcres = selectedParcel?.parcelInfo?.acres || null;
 
     // Debug logging - track what data is received for each address
     console.log(`\n========== ANALYZE REQUEST ==========`);
     console.log(`[Analyze] Address: ${address}`);
+    console.log(`[Analyze] Lot Size: ${lotSizeAcres ? lotSizeAcres.toFixed(2) + ' acres' : 'N/A'}`);
+    console.log(`[Analyze] Zoning: ${selectedParcel?.parcelInfo?.zoning || 'N/A'}`);
     console.log(`[Analyze] Traffic VPD: ${trafficData?.estimatedVPD || 'N/A'}`);
     console.log(`[Analyze] Demographics: Pop=${demographicsData?.population || 'N/A'}, Income=$${demographicsData?.medianHouseholdIncome || 'N/A'}, Level=${demographicsData?.incomeLevel || 'N/A'}`);
     console.log(`[Analyze] Consumer Spending: $${demographicsData?.consumerSpending ? (demographicsData.consumerSpending / 1000000).toFixed(1) + 'M' : 'N/A'}`);
@@ -2614,7 +2629,7 @@ export async function POST(request: Request) {
     if (!apiKey) {
       console.error('GOOGLE_GEMINI_API_KEY not configured');
       return NextResponse.json({
-        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, 1.35, address, environmentalRisk, marketComps),
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, lotSizeAcres, address, environmentalRisk, marketComps),
         usingMockData: true,
         reason: 'API key not configured'
       });
@@ -2762,17 +2777,26 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     const analysis = JSON.parse(analysisText.trim());
 
-    // Parse lot size from AI analysis
-    const lotSizeAcres = parseLotSize(analysis.lotSizeEstimate);
-    if (lotSizeAcres !== null) {
-      analysis.parsedLotSize = lotSizeAcres;
+    // Use parcel lot size first, fall back to AI-estimated lot size
+    const aiEstimatedLotSize = parseLotSize(analysis.lotSizeEstimate);
+    const actualLotSizeAcres = lotSizeAcres || aiEstimatedLotSize;
+    if (actualLotSizeAcres !== null) {
+      analysis.parsedLotSize = actualLotSizeAcres;
+      // Override the AI estimate with actual parcel data if available
+      if (lotSizeAcres) {
+        analysis.lotSizeEstimate = `${lotSizeAcres.toFixed(2)} acres (from parcel data)`;
+      }
     }
+    console.log(`[Analyze] Using lot size: ${actualLotSizeAcres?.toFixed(2) || 'N/A'} acres (parcel: ${lotSizeAcres?.toFixed(2) || 'N/A'}, AI: ${aiEstimatedLotSize?.toFixed(2) || 'N/A'})`);
+
+    // Use actualLotSizeAcres for all subsequent calculations
+    const finalLotSizeAcres = actualLotSizeAcres;
 
     // Detect district type for appropriate recommendations
     const districtInfo = detectDistrictType(
       address,
       nearbyBusinesses,
-      lotSizeAcres,
+      finalLotSizeAcres,
       trafficData?.estimatedVPD || null,
       demographicsData?.isCollegeTown || false
     );
@@ -2799,7 +2823,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
         trafficData.estimatedVPD,
         nearbyBusinesses,
         demographicsData,
-        lotSizeAcres,
+        finalLotSizeAcres,
         districtInfo,
         locationIntelligence
       );
@@ -2807,7 +2831,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
         trafficData.estimatedVPD,
         nearbyBusinesses,
         demographicsData,
-        lotSizeAcres,
+        finalLotSizeAcres,
         districtInfo,
         stateCode,
         isCornerLot,
@@ -2837,7 +2861,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
     analysis.viabilityScore = feasibilityScore.overall;
 
     const retailerMatches = calculateRetailerMatches(
-      lotSizeAcres,
+      finalLotSizeAcres,
       trafficData?.estimatedVPD || null,
       demographicsData?.medianHouseholdIncome || null,
       demographicsData?.incomeLevel || null,
