@@ -2775,10 +2775,21 @@ CRITICAL RULES:
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
-    const result = await model.generateContent([
-      prompt,
-      ...imageParts as any[],
-    ]);
+    let result;
+    try {
+      result = await model.generateContent([
+        prompt,
+        ...imageParts as any[],
+      ]);
+    } catch (geminiError) {
+      console.error('[Analyze] Gemini API error:', geminiError);
+      // Fall back to mock analysis if Gemini fails
+      return NextResponse.json({
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, lotSizeAcres, address, environmentalRisk, marketComps, enhancedData),
+        usingMockData: true,
+        reason: `AI analysis unavailable: ${geminiError instanceof Error ? geminiError.message : 'Unknown error'}`
+      });
+    }
 
     const response = await result.response;
     let analysisText = response.text().trim();
@@ -2794,7 +2805,18 @@ Return ONLY valid JSON, no markdown or explanation.`;
       analysisText = analysisText.slice(0, -3);
     }
 
-    const analysis = JSON.parse(analysisText.trim());
+    let analysis;
+    try {
+      analysis = JSON.parse(analysisText.trim());
+    } catch (parseError) {
+      console.error('[Analyze] Failed to parse Gemini response:', analysisText.substring(0, 500));
+      // Fall back to mock analysis if parsing fails
+      return NextResponse.json({
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, lotSizeAcres, address, environmentalRisk, marketComps, enhancedData),
+        usingMockData: true,
+        reason: 'AI response parsing failed - using calculated analysis'
+      });
+    }
 
     // Use parcel lot size first, fall back to AI-estimated lot size
     const aiEstimatedLotSize = parseLotSize(analysis.lotSizeEstimate);
