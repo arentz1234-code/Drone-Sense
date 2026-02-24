@@ -2875,21 +2875,27 @@ Return ONLY valid JSON, no markdown or explanation.`;
   } catch (error) {
     console.error('Analysis error:', error);
 
+    // Pass actual request data to getMockAnalysis so we use real VPD/demographics instead of defaults
     if (process.env.NODE_ENV === 'development') {
       return NextResponse.json({
         error: 'Analysis failed',
         details: error instanceof Error ? error.message : 'Unknown error',
         usingMockData: true,
-        ...getMockAnalysis([], null)
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, lotSizeAcres, address, environmentalRisk, marketComps, enhancedData)
       });
     }
 
-    return NextResponse.json({ ...getMockAnalysis([], null), usingMockData: true });
+    return NextResponse.json({
+      ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, lotSizeAcres, address, environmentalRisk, marketComps, enhancedData),
+      usingMockData: true
+    });
   }
 }
 
 function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = null, address: string = '', environmentalRisk: EnvironmentalRiskInfo | null = null, marketComps: MarketCompInfo[] | null = null, enhancedData: EnhancedDataInfo | null = null) {
-  const vpd = trafficData?.estimatedVPD || 15000;
+  const hasRealTrafficData = trafficData?.estimatedVPD && trafficData.estimatedVPD > 0;
+  const vpd = hasRealTrafficData ? trafficData.estimatedVPD : 15000;
+  const vpdIsEstimate = !hasRealTrafficData;
 
   // Extract state code from address FIRST
   let stateCode: string | null = null;
@@ -2939,7 +2945,9 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     keyFindings: [
       'Flat, buildable terrain with good drainage characteristics',
       'Excellent road frontage and visibility for commercial use',
-      `Traffic volume of ${vpd.toLocaleString()} VPD supports commercial development`,
+      vpdIsEstimate
+        ? `Traffic volume estimated at ${vpd.toLocaleString()} VPD (⚠️ default estimate - traffic data unavailable)`
+        : `Traffic volume of ${vpd.toLocaleString()} VPD supports commercial development`,
       'Utilities likely accessible from adjacent development',
       'No obvious environmental concerns visible from aerial view',
     ],
@@ -2953,5 +2961,6 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     businessSuitability,
     topRecommendations,
     retailerMatches,
+    vpdIsEstimate, // Flag indicating VPD is using default fallback
   };
 }
