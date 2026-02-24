@@ -3,10 +3,12 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar } from 'recharts';
 import { TrafficInfo, AccessPoint } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
+import AccessPointDiagram from './AccessPointDiagram';
 
 interface TrafficChartsProps {
   trafficData: TrafficInfo;
   accessPoints?: AccessPoint[];  // Provided by MapView via page.tsx - single source of truth
+  propertyAddress?: string;
 }
 
 // VPD estimates based on OSM highway classification
@@ -114,7 +116,7 @@ function calculateAccessPointVPD(accessPoints: AccessPoint[]): {
   };
 }
 
-export default function TrafficCharts({ trafficData, accessPoints: propAccessPoints }: TrafficChartsProps) {
+export default function TrafficCharts({ trafficData, accessPoints: propAccessPoints, propertyAddress }: TrafficChartsProps) {
   // Use access points directly from props - MapView is the single source of truth
   const accessPoints = propAccessPoints || [];
 
@@ -220,6 +222,11 @@ export default function TrafficCharts({ trafficData, accessPoints: propAccessPoi
 
   return (
     <div className="space-y-8">
+      {/* Access Point Identification Diagram */}
+      {accessPoints && accessPoints.length > 0 && (
+        <AccessPointDiagram accessPoints={accessPoints} propertyAddress={propertyAddress} />
+      )}
+
       {/* Access Points VPD Section */}
       {accessPoints && accessPoints.length > 0 && (
         <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--accent-green)]/30">

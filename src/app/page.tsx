@@ -855,7 +855,7 @@ export default function HomePage() {
                     onRetry={fetchTrafficData}
                   />
                 ) : trafficData ? (
-                  <TrafficCharts trafficData={trafficData} accessPoints={accessPoints} />
+                  <TrafficCharts trafficData={trafficData} accessPoints={accessPoints} propertyAddress={address} />
                 ) : (
                   <div className="text-center py-8 text-[var(--text-muted)]">Loading traffic data...</div>
                 )}
