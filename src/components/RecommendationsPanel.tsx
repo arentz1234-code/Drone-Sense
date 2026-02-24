@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, AccessPoint } from '@/types';
+import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, AccessPoint, WalkScoreData, CrimeData, BuildingPermitsData, VacancyData } from '@/types';
 
 // Business types for dropdown
 const BUSINESS_TYPES = [
@@ -45,6 +45,13 @@ interface RecommendationData {
   keyTakeaways: string[];
 }
 
+interface EnhancedDataProps {
+  walkScore?: WalkScoreData | null;
+  crimeData?: CrimeData | null;
+  buildingPermits?: BuildingPermitsData | null;
+  vacancyData?: VacancyData | null;
+}
+
 interface RecommendationsPanelProps {
   coordinates: { lat: number; lng: number } | null;
   address: string;
@@ -57,6 +64,7 @@ interface RecommendationsPanelProps {
     acres?: number;
     zoning?: string;
   } | null;
+  enhancedData?: EnhancedDataProps | null;
 }
 
 function getGradeColor(grade: string): string {
@@ -100,6 +108,7 @@ export default function RecommendationsPanel({
   environmentalRisk,
   accessPoints,
   parcelInfo,
+  enhancedData,
 }: RecommendationsPanelProps) {
   const [selectedBusinessType, setSelectedBusinessType] = useState('');
   const [recommendations, setRecommendations] = useState<RecommendationData | null>(null);
@@ -443,6 +452,146 @@ export default function RecommendationsPanel({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* Enhanced Data Insights - Consolidated Recommendations */}
+          {enhancedData && (
+            <div className="space-y-4 pt-4 border-t border-[var(--border-color)]">
+              <h4 className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                <svg className="w-5 h-5 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Data-Driven Insights
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Walkability & Transit */}
+                {enhancedData.walkScore && (
+                  <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">🚶</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">Walkability</span>
+                      <span className={`ml-auto text-sm font-bold ${
+                        enhancedData.walkScore.walkScore >= 70 ? 'text-green-400' :
+                        enhancedData.walkScore.walkScore >= 50 ? 'text-yellow-400' : 'text-red-400'
+                      }`}>
+                        {enhancedData.walkScore.walkScore}/100
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] mb-2">{enhancedData.walkScore.walkDescription}</p>
+                    {enhancedData.walkScore.recommendations && enhancedData.walkScore.recommendations.length > 0 && (
+                      <ul className="space-y-1">
+                        {enhancedData.walkScore.recommendations.slice(0, 2).map((rec, i) => (
+                          <li key={i} className="text-xs text-[var(--text-muted)] flex items-start gap-1">
+                            <span className="text-[var(--accent-cyan)]">•</span>
+                            {rec}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {/* Safety & Security */}
+                {enhancedData.crimeData && (
+                  <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">🛡️</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">Safety</span>
+                      <span className={`ml-auto text-sm font-bold ${
+                        enhancedData.crimeData.safetyGrade === 'A' ? 'text-green-400' :
+                        enhancedData.crimeData.safetyGrade === 'B' ? 'text-cyan-400' :
+                        enhancedData.crimeData.safetyGrade === 'C' ? 'text-yellow-400' : 'text-red-400'
+                      }`}>
+                        Grade {enhancedData.crimeData.safetyGrade}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] mb-2">
+                      Crime rate {enhancedData.crimeData.vsNationalAverage} vs national average
+                    </p>
+                    {enhancedData.crimeData.businessImpact?.securityRecommendations && enhancedData.crimeData.businessImpact.securityRecommendations.length > 0 && (
+                      <ul className="space-y-1">
+                        {enhancedData.crimeData.businessImpact.securityRecommendations.map((rec, i) => (
+                          <li key={i} className="text-xs text-[var(--text-muted)] flex items-start gap-1">
+                            <span className="text-[var(--accent-cyan)]">•</span>
+                            {rec}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {/* Development Activity */}
+                {enhancedData.buildingPermits && (
+                  <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">🏗️</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">Development</span>
+                      <span className={`ml-auto text-sm font-bold ${
+                        enhancedData.buildingPermits.yoyChange?.trend === 'growing' ? 'text-green-400' :
+                        enhancedData.buildingPermits.yoyChange?.trend === 'stable' ? 'text-yellow-400' : 'text-red-400'
+                      }`}>
+                        {enhancedData.buildingPermits.yoyChange?.trend === 'growing' ? '↑' :
+                         enhancedData.buildingPermits.yoyChange?.trend === 'declining' ? '↓' : '→'} {enhancedData.buildingPermits.yoyChange?.unitsPercent || 0}%
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-secondary)] mb-2">
+                      {enhancedData.buildingPermits.currentYear?.totalUnits?.toLocaleString() || 'N/A'} units permitted
+                    </p>
+                    {enhancedData.buildingPermits.marketAnalysis?.recommendations && enhancedData.buildingPermits.marketAnalysis.recommendations.length > 0 && (
+                      <ul className="space-y-1">
+                        {enhancedData.buildingPermits.marketAnalysis.recommendations.map((rec, i) => (
+                          <li key={i} className="text-xs text-[var(--text-muted)] flex items-start gap-1">
+                            <span className="text-[var(--accent-cyan)]">•</span>
+                            {rec}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {/* Market Saturation */}
+                {enhancedData.vacancyData && (
+                  <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">📊</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">Market Saturation</span>
+                      <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded ${
+                        enhancedData.vacancyData.saturationLevel === 'undersupplied' ? 'bg-green-500/20 text-green-400' :
+                        enhancedData.vacancyData.saturationLevel === 'balanced' ? 'bg-cyan-500/20 text-cyan-400' :
+                        enhancedData.vacancyData.saturationLevel === 'saturated' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'
+                      }`}>
+                        {enhancedData.vacancyData.saturationLevel}
+                      </span>
+                    </div>
+                    {enhancedData.vacancyData.opportunities?.undersuppliedSectors && enhancedData.vacancyData.opportunities.undersuppliedSectors.length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-xs text-green-400 font-medium mb-1">Opportunity Sectors:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {enhancedData.vacancyData.opportunities.undersuppliedSectors.slice(0, 3).map((sector, i) => (
+                            <span key={i} className="text-[10px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded">
+                              {sector}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {enhancedData.vacancyData.opportunities?.recommendations && enhancedData.vacancyData.opportunities.recommendations.length > 0 && (
+                      <ul className="space-y-1">
+                        {enhancedData.vacancyData.opportunities.recommendations.slice(0, 2).map((rec, i) => (
+                          <li key={i} className="text-xs text-[var(--text-muted)] flex items-start gap-1">
+                            <span className="text-[var(--accent-cyan)]">•</span>
+                            {rec}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

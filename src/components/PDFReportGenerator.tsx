@@ -291,8 +291,13 @@ export default function PDFReportGenerator({
       if (parcelInfo?.acres) propertyDetails.push(['Lot Size', `${parcelInfo.acres.toFixed(2)} acres (${(parcelInfo.acres * 43560).toLocaleString()} sq ft)`]);
       if (parcelInfo?.zoning) propertyDetails.push(['Zoning', parcelInfo.zoning]);
       if (parcelInfo?.landUse) propertyDetails.push(['Land Use', parcelInfo.landUse]);
-      if (analysis?.terrain) propertyDetails.push(['Terrain', analysis.terrain]);
-      if (analysis?.accessibility) propertyDetails.push(['Accessibility', analysis.accessibility]);
+
+      // AI Analysis Details
+      if (analysis?.terrain) propertyDetails.push(['Terrain (AI)', analysis.terrain]);
+      if (analysis?.accessibility) propertyDetails.push(['Accessibility (AI)', analysis.accessibility]);
+      if (analysis?.existingStructures) propertyDetails.push(['Existing Structures (AI)', analysis.existingStructures]);
+      if (analysis?.vegetation) propertyDetails.push(['Vegetation (AI)', analysis.vegetation]);
+      if (analysis?.lotSizeEstimate) propertyDetails.push(['Lot Size Estimate (AI)', analysis.lotSizeEstimate]);
 
       if (propertyDetails.length > 0) {
         autoTable(doc, {
@@ -634,23 +639,179 @@ export default function PDFReportGenerator({
         }
       }
 
-      setProgress(85);
-      setCurrentStep('Adding retailer matches...');
+      setProgress(80);
+      setCurrentStep('Adding AI analysis results...');
 
-      // ========== RETAILER MATCHES ==========
-      if (analysis?.retailerMatches?.matches && analysis.retailerMatches.matches.length > 0) {
+      // ========== DISTRICT TYPE ==========
+      if (analysis?.districtType) {
+        checkNewPage(40);
+        addSectionHeader('Location Classification');
+
+        const districtLabel = analysis.districtType === 'historic_downtown' ? 'Historic Downtown District' :
+          analysis.districtType === 'college_campus' ? 'College Campus Area' :
+          analysis.districtType === 'highway_corridor' ? 'Highway Corridor' :
+          analysis.districtType === 'suburban_retail' ? 'Suburban Retail' :
+          'Neighborhood Commercial';
+
+        const districtColor: [number, number, number] = analysis.districtType === 'historic_downtown' ? [234, 179, 8] :
+          analysis.districtType === 'college_campus' ? [168, 85, 247] :
+          analysis.districtType === 'highway_corridor' ? [59, 130, 246] :
+          primaryColor;
+
+        doc.setFillColor(...cardBg);
+        doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 25, 3, 3, 'F');
+
+        doc.setTextColor(...districtColor);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(districtLabel, margin + 5, yPos + 10);
+
+        if (analysis.districtDescription) {
+          doc.setTextColor(...textWhite);
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          const descLines = doc.splitTextToSize(analysis.districtDescription, pageWidth - 2 * margin - 10);
+          doc.text(descLines.slice(0, 2), margin + 5, yPos + 18);
+        }
+
+        yPos += 32;
+      }
+
+      // ========== DOWNTOWN RECOMMENDATIONS ==========
+      if (analysis?.downtownRecommendations) {
         checkNewPage(60);
-        addSectionHeader('Recommended Retailers');
+        addSectionHeader('Downtown-Appropriate Businesses');
+
+        const categories = [
+          { label: 'Dining', items: analysis.downtownRecommendations.dining },
+          { label: 'Retail', items: analysis.downtownRecommendations.retail },
+          { label: 'Services', items: analysis.downtownRecommendations.services },
+          { label: 'Entertainment', items: analysis.downtownRecommendations.entertainment },
+        ];
+
+        const colWidth = (pageWidth - 2 * margin - 15) / 4;
+        categories.forEach((cat, idx) => {
+          const x = margin + idx * (colWidth + 5);
+          doc.setFillColor(...cardBg);
+          doc.roundedRect(x, yPos, colWidth, 45, 2, 2, 'F');
+
+          doc.setTextColor([234, 179, 8][0], [234, 179, 8][1], [234, 179, 8][2]);
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.text(cat.label.toUpperCase(), x + 3, yPos + 8);
+
+          doc.setTextColor(...textWhite);
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          cat.items.slice(0, 4).forEach((item, i) => {
+            const itemText = doc.splitTextToSize(item, colWidth - 6)[0];
+            doc.text(itemText, x + 3, yPos + 16 + i * 7);
+          });
+        });
+
+        yPos += 52;
+      }
+
+      // ========== TOP RECOMMENDATIONS (AI RANKED) ==========
+      if (analysis?.topRecommendations && analysis.topRecommendations.length > 0) {
+        checkNewPage(60);
+        addSectionHeader('AI-Ranked Best Fit Recommendations');
 
         doc.setTextColor(...textMuted);
         doc.setFontSize(9);
-        doc.text(`Based on site characteristics, ${analysis.retailerMatches.totalMatches} potential retailer matches were identified.`, margin, yPos);
+        doc.text('Retailers ranked by how well they match this site\'s characteristics:', margin, yPos);
         yPos += 8;
 
         autoTable(doc, {
           startY: yPos,
           margin: { left: margin, right: margin },
-          head: [['Retailer', 'Category', 'Match', 'Est. Investment', 'Status']],
+          head: [['Rank', 'Retailer', 'Category', 'Score']],
+          body: analysis.topRecommendations.slice(0, 15).map((r, idx) => [
+            `#${idx + 1}`,
+            r.name,
+            r.category,
+            `${r.score} pts`,
+          ]),
+          styles: {
+            fillColor: cardBg,
+            textColor: textWhite,
+            fontSize: 9,
+          },
+          headStyles: {
+            fillColor: [0, 120, 120],
+            textColor: textWhite,
+            fontStyle: 'bold',
+          },
+          alternateRowStyles: {
+            fillColor: [40, 50, 65],
+          },
+          columnStyles: {
+            0: { cellWidth: 15 },
+            3: { cellWidth: 20 },
+          },
+        });
+        yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+      }
+
+      // ========== BUSINESS SUITABILITY ==========
+      if (analysis?.businessSuitability && analysis.businessSuitability.length > 0) {
+        checkNewPage(60);
+        addSectionHeader('Business Suitability by Category');
+
+        doc.setTextColor(...textMuted);
+        doc.setFontSize(9);
+        doc.text('Suitability scores based on traffic volume, demographics, and lot size requirements:', margin, yPos);
+        yPos += 8;
+
+        autoTable(doc, {
+          startY: yPos,
+          margin: { left: margin, right: margin },
+          head: [['Category', 'Score', 'Reasoning', 'Examples']],
+          body: analysis.businessSuitability.slice(0, 10).map(item => [
+            item.category,
+            `${item.suitabilityScore}/10`,
+            item.reasoning.substring(0, 60) + (item.reasoning.length > 60 ? '...' : ''),
+            item.examples.slice(0, 3).join(', '),
+          ]),
+          styles: {
+            fillColor: cardBg,
+            textColor: textWhite,
+            fontSize: 8,
+          },
+          headStyles: {
+            fillColor: [0, 120, 120],
+            textColor: textWhite,
+            fontStyle: 'bold',
+          },
+          alternateRowStyles: {
+            fillColor: [40, 50, 65],
+          },
+          columnStyles: {
+            0: { cellWidth: 35 },
+            1: { cellWidth: 18 },
+            2: { cellWidth: 55 },
+          },
+        });
+        yPos = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+      }
+
+      setProgress(88);
+      setCurrentStep('Adding retailer matches...');
+
+      // ========== RETAILER MATCHES ==========
+      if (analysis?.retailerMatches?.matches && analysis.retailerMatches.matches.length > 0) {
+        checkNewPage(60);
+        addSectionHeader('Retailer Expansion Intelligence');
+
+        doc.setTextColor(...textMuted);
+        doc.setFontSize(9);
+        doc.text(`${analysis.retailerMatches.totalMatches} retailers actively expanding match this site's characteristics.`, margin, yPos);
+        yPos += 8;
+
+        autoTable(doc, {
+          startY: yPos,
+          margin: { left: margin, right: margin },
+          head: [['Retailer', 'Category', 'Match %', 'Investment', 'Status']],
           body: analysis.retailerMatches.matches.slice(0, 10).map(r => [
             r.name,
             r.category,
@@ -676,11 +837,67 @@ export default function PDFReportGenerator({
       }
 
       setProgress(92);
-      setCurrentStep('Adding recommendations...');
+      setCurrentStep('Adding AI recommendations...');
+
+      // ========== AI BUSINESS RECOMMENDATION ==========
+      if (analysis?.businessRecommendation) {
+        checkNewPage(40);
+        addSectionHeader('AI Business Recommendation');
+
+        doc.setFillColor(0, 60, 60);
+        doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 30, 3, 3, 'F');
+        doc.setDrawColor(...primaryColor);
+        doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 30, 3, 3, 'S');
+
+        doc.setTextColor(...primaryColor);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text('AI-GENERATED RECOMMENDATION', margin + 5, yPos + 7);
+
+        doc.setTextColor(...textWhite);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        const recLines = doc.splitTextToSize(analysis.businessRecommendation, pageWidth - 2 * margin - 10);
+        doc.text(recLines.slice(0, 4), margin + 5, yPos + 15);
+        yPos += 38;
+      }
+
+      // ========== CONSTRUCTION POTENTIAL ==========
+      if (analysis?.constructionPotential) {
+        checkNewPage(35);
+        addSectionHeader('Construction Potential');
+
+        doc.setFillColor(...cardBg);
+        doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 25, 3, 3, 'F');
+
+        doc.setTextColor(...textWhite);
+        doc.setFontSize(9);
+        const constLines = doc.splitTextToSize(analysis.constructionPotential, pageWidth - 2 * margin - 10);
+        doc.text(constLines.slice(0, 4), margin + 5, yPos + 8);
+        yPos += 32;
+      }
+
+      // ========== KEY FINDINGS ==========
+      if (analysis?.keyFindings && analysis.keyFindings.length > 0) {
+        checkNewPage(50);
+        addSectionHeader('Key Findings');
+
+        analysis.keyFindings.slice(0, 6).forEach((finding, idx) => {
+          checkNewPage(12);
+          doc.setTextColor(...accentGreen);
+          doc.setFontSize(9);
+          doc.text('▸', margin + 3, yPos);
+          doc.setTextColor(...textWhite);
+          const findLines = doc.splitTextToSize(finding, pageWidth - 2 * margin - 12);
+          doc.text(findLines[0], margin + 10, yPos);
+          yPos += 8;
+        });
+        yPos += 5;
+      }
 
       // ========== RECOMMENDATIONS ==========
       checkNewPage(50);
-      addSectionHeader('Recommendations & Next Steps');
+      addSectionHeader('AI Recommendations & Next Steps');
 
       if (analysis?.recommendations && analysis.recommendations.length > 0) {
         analysis.recommendations.forEach((rec, idx) => {
@@ -816,14 +1033,16 @@ export default function PDFReportGenerator({
           {[
             'Cover Page & Score',
             'Executive Summary',
-            'Property Details',
+            'Property & Site Details',
             'Traffic Analysis',
             'Demographics Data',
-            'Market Competition',
-            'Environmental Risk',
+            'Location Classification',
+            'AI Best-Fit Rankings',
+            'Business Suitability',
             'Retailer Matches',
             'AI Recommendations',
-            'Data Sources',
+            'Key Findings',
+            'Construction Potential',
           ].map((item) => (
             <div key={item} className="flex items-center gap-2">
               <svg className="w-4 h-4 text-[var(--accent-green)] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">

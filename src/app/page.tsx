@@ -25,6 +25,8 @@ import {
   LocationIntelligence as LocationIntelligenceType,
 } from '@/types';
 
+// Import enhanced data fetcher
+import { fetchEnhancedData, EnhancedDataResult } from '@/lib/fetchEnhancedData';
 
 // Lazy load new components
 import dynamic from 'next/dynamic';
@@ -65,6 +67,11 @@ const SavedProperties = dynamic(() => import('@/components/SavedProperties'), {
 });
 
 const RecommendationsPanel = dynamic(() => import('@/components/RecommendationsPanel'), {
+  loading: () => <SkeletonCard />,
+  ssr: false
+});
+
+const EnhancedDataPanel = dynamic(() => import('@/components/EnhancedDataPanel'), {
   loading: () => <SkeletonCard />,
   ssr: false
 });
@@ -159,6 +166,10 @@ export default function HomePage() {
   const [retailerMatches, setRetailerMatches] = useState<RetailerMatchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Enhanced data sources (Walk Score, Crime, Building Permits, Isochrone, Vacancy)
+  const [enhancedData, setEnhancedData] = useState<EnhancedDataResult | null>(null);
+  const [enhancedDataLoading, setEnhancedDataLoading] = useState(false);
 
   // Error tracking for individual data sources with retry capability
   const [dataErrors, setDataErrors] = useState<{
@@ -477,6 +488,25 @@ export default function HomePage() {
     address,
   ]);
 
+  // Fetch enhanced data (Walk Score, Crime, Building Permits, Isochrone, Vacancy)
+  const fetchEnhancedDataCallback = useCallback(async () => {
+    if (!coordinates) return;
+
+    setEnhancedDataLoading(true);
+    try {
+      const data = await fetchEnhancedData(coordinates.lat, coordinates.lng, address);
+      setEnhancedData(data);
+    } catch (err) {
+      console.error('Failed to fetch enhanced data:', err);
+    } finally {
+      setEnhancedDataLoading(false);
+    }
+  }, [coordinates, address]);
+
+  useEffect(() => {
+    fetchEnhancedDataCallback();
+  }, [fetchEnhancedDataCallback]);
+
   const handleAnalyze = async () => {
     if (!address && !coordinates) {
       setError('Please enter an address or drop a pin on the map');
@@ -509,6 +539,13 @@ export default function HomePage() {
           selectedParcel: selectedParcel?.isConfirmed ? {
             boundaries: selectedParcel.boundaries,
             parcelInfo: selectedParcel.parcelInfo,
+          } : undefined,
+          enhancedData: enhancedData ? {
+            walkScore: enhancedData.walkScore,
+            crimeData: enhancedData.crimeData,
+            buildingPermits: enhancedData.buildingPermits,
+            isochrone: enhancedData.isochrone,
+            vacancyData: enhancedData.vacancyData,
           } : undefined,
         }),
       });
@@ -758,6 +795,12 @@ export default function HomePage() {
                 environmentalRisk={environmentalRisk}
                 accessPoints={accessPoints}
                 parcelInfo={selectedParcel?.parcelInfo || parcelData?.parcelInfo}
+                enhancedData={enhancedData ? {
+                  walkScore: enhancedData.walkScore,
+                  crimeData: enhancedData.crimeData,
+                  buildingPermits: enhancedData.buildingPermits,
+                  vacancyData: enhancedData.vacancyData,
+                } : null}
               />
             ) : (
               <div className="text-center py-12 text-[var(--text-muted)]">
@@ -851,6 +894,26 @@ export default function HomePage() {
                 <LocationIntelligence
                   coordinates={coordinates}
                   onDataLoaded={(data) => setLocationIntelligence(data)}
+                />
+              </div>
+            </div>
+
+            {/* Enhanced Data Section */}
+            <div className="terminal-card">
+              <div className="terminal-header">
+                <div className="terminal-dot red"></div>
+                <div className="terminal-dot yellow"></div>
+                <div className="terminal-dot green"></div>
+                <span className="terminal-title">enhanced_data.module</span>
+              </div>
+              <div className="terminal-body">
+                <EnhancedDataPanel
+                  walkScore={enhancedData?.walkScore || null}
+                  crimeData={enhancedData?.crimeData || null}
+                  buildingPermits={enhancedData?.buildingPermits || null}
+                  vacancyData={enhancedData?.vacancyData || null}
+                  isochrone={enhancedData?.isochrone || null}
+                  isLoading={enhancedDataLoading}
                 />
               </div>
             </div>

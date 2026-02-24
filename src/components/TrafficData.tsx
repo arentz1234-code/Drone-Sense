@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { TrafficInfo } from '@/types';
+import AccessPointVisualization from './AccessPointVisualization';
 
 interface TrafficDataProps {
   coordinates: { lat: number; lng: number } | null;
@@ -90,7 +91,14 @@ export default function TrafficData({ coordinates, address, parcelBoundary, onDa
   };
 
   return (
-    <div>
+    <div className="space-y-6">
+      {/* Access Point Visualization */}
+      <AccessPointVisualization
+        coordinates={coordinates}
+        parcelBoundary={parcelBoundary}
+      />
+
+      <div>
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-[var(--text-primary)]">Traffic Data</h3>
         <button
@@ -223,6 +231,7 @@ export default function TrafficData({ coordinates, address, parcelBoundary, onDa
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 }

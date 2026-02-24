@@ -534,7 +534,12 @@ export function calculateFeasibilityScore(
       environmentalScore: Math.round(environmentalScore * 10) / 10,
       marketScore: Math.round(marketScore * 10) / 10,
       economicScore: Math.round(economicScore * 10) / 10,
-      siteScore: Math.round(siteScore * 10) / 10
+      siteScore: Math.round(siteScore * 10) / 10,
+      // Enhanced scores - calculated on server with enhanced data
+      walkabilityScore: 5,
+      safetyScore: 5,
+      developmentScore: 5,
+      saturationScore: 5
     },
     details: {
       traffic: trafficDetail,
@@ -544,7 +549,12 @@ export function calculateFeasibilityScore(
       market: marketDetail,
       access: accessDetail,
       economic: economicDetail,
-      site: siteDetail
+      site: siteDetail,
+      // Enhanced details - calculated on server with enhanced data
+      walkability: 'Calculated with Walk Score data',
+      safety: 'Calculated with crime data',
+      development: 'Calculated with building permits data',
+      saturation: 'Calculated with vacancy data'
     },
     rating
   };

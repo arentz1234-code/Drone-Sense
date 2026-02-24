@@ -440,6 +440,7 @@ export default function SearchMapSelector({
         <style jsx global>{`
           .search-map-container {
             filter: brightness(0.9) saturate(0.8);
+            background: #0d1117;
           }
           .search-map-container .leaflet-tile-pane {
             filter: hue-rotate(180deg) invert(0.92) saturate(0.3);
@@ -460,13 +461,60 @@ export default function SearchMapSelector({
             60% { transform: translateY(4px); }
             100% { transform: translateY(0); opacity: 1; }
           }
+          .map-streets-bg {
+            position: absolute;
+            inset: 0;
+            background:
+              linear-gradient(90deg, transparent 49%, rgba(0, 212, 255, 0.08) 49%, rgba(0, 212, 255, 0.08) 51%, transparent 51%),
+              linear-gradient(0deg, transparent 49%, rgba(0, 212, 255, 0.08) 49%, rgba(0, 212, 255, 0.08) 51%, transparent 51%),
+              linear-gradient(90deg, transparent 24%, rgba(0, 212, 255, 0.04) 24%, rgba(0, 212, 255, 0.04) 26%, transparent 26%),
+              linear-gradient(0deg, transparent 24%, rgba(0, 212, 255, 0.04) 24%, rgba(0, 212, 255, 0.04) 26%, transparent 26%),
+              linear-gradient(90deg, transparent 74%, rgba(0, 212, 255, 0.04) 74%, rgba(0, 212, 255, 0.04) 76%, transparent 76%),
+              linear-gradient(0deg, transparent 74%, rgba(0, 212, 255, 0.04) 74%, rgba(0, 212, 255, 0.04) 76%, transparent 76%);
+            background-size: 120px 120px;
+            pointer-events: none;
+            z-index: 0;
+          }
+          .map-diagonal-streets {
+            position: absolute;
+            inset: 0;
+            background:
+              linear-gradient(45deg, transparent 48%, rgba(0, 212, 255, 0.03) 48%, rgba(0, 212, 255, 0.03) 52%, transparent 52%),
+              linear-gradient(-45deg, transparent 48%, rgba(0, 212, 255, 0.03) 48%, rgba(0, 212, 255, 0.03) 52%, transparent 52%);
+            background-size: 200px 200px;
+            pointer-events: none;
+            z-index: 0;
+          }
+          .map-blocks {
+            position: absolute;
+            inset: 0;
+            background-image:
+              radial-gradient(ellipse 80px 60px at 20% 30%, rgba(30, 41, 59, 0.5) 0%, transparent 70%),
+              radial-gradient(ellipse 100px 70px at 70% 20%, rgba(30, 41, 59, 0.4) 0%, transparent 70%),
+              radial-gradient(ellipse 90px 65px at 40% 70%, rgba(30, 41, 59, 0.45) 0%, transparent 70%),
+              radial-gradient(ellipse 70px 50px at 80% 60%, rgba(30, 41, 59, 0.35) 0%, transparent 70%),
+              radial-gradient(ellipse 85px 55px at 15% 80%, rgba(30, 41, 59, 0.4) 0%, transparent 70%),
+              radial-gradient(ellipse 75px 60px at 60% 45%, rgba(30, 41, 59, 0.3) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 1;
+          }
         `}</style>
-        <div
-          ref={mapRef}
-          className={`w-full rounded-lg border border-[var(--border-color)] overflow-hidden transition-all duration-300 search-map-container ${
+        <div className={`w-full rounded-lg border border-[var(--border-color)] overflow-hidden transition-all duration-300 relative ${
             topResults.length > 0 ? 'h-[450px]' : 'h-[300px]'
           }`}
-        />
+          style={{ background: '#0d1117' }}
+        >
+          {/* Styled map background */}
+          <div className="map-streets-bg"></div>
+          <div className="map-diagonal-streets"></div>
+          <div className="map-blocks"></div>
+
+          {/* Leaflet map container */}
+          <div
+            ref={mapRef}
+            className="absolute inset-0 search-map-container z-10"
+          />
+        </div>
         <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
           Click map to set search center
         </div>

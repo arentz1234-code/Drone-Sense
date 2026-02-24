@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, AccessPoint, LocationIntelligence } from '@/types';
+import { TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, AccessPoint, LocationIntelligence, WalkScoreData, CrimeData, BuildingPermitsData, VacancyData } from '@/types';
 import { calculateFeasibilityScore, getScoreColor, getRatingColor, getScoreLabelAndIcon } from '@/utils/feasibilityScore';
 
 interface ParcelInfo {
@@ -9,6 +9,13 @@ interface ParcelInfo {
   sqft?: number;
   zoning?: string;
   landUse?: string;
+}
+
+interface EnhancedData {
+  walkScore: WalkScoreData | null;
+  crimeData: CrimeData | null;
+  buildingPermits: BuildingPermitsData | null;
+  vacancyData: VacancyData | null;
 }
 
 interface LiveFeasibilityScoreProps {
@@ -20,6 +27,7 @@ interface LiveFeasibilityScoreProps {
   accessPoints?: AccessPoint[];
   locationIntelligence?: LocationIntelligence | null;
   parcelInfo?: ParcelInfo | null;
+  enhancedData?: EnhancedData | null;
   isVisible?: boolean;
 }
 
@@ -32,6 +40,7 @@ export default function LiveFeasibilityScore({
   accessPoints = [],
   locationIntelligence,
   parcelInfo,
+  enhancedData,
   isVisible = true,
 }: LiveFeasibilityScoreProps) {
   const feasibilityScore = useMemo(() => {
@@ -59,6 +68,10 @@ export default function LiveFeasibilityScore({
           marketScore: 0,
           economicScore: 0,
           siteScore: 0,
+          walkabilityScore: 0,
+          safetyScore: 0,
+          developmentScore: 0,
+          saturationScore: 0,
         },
         details: {
           traffic: 'Error calculating',
@@ -69,6 +82,10 @@ export default function LiveFeasibilityScore({
           market: 'Error calculating',
           economic: 'Error calculating',
           site: 'Error calculating',
+          walkability: 'Error calculating',
+          safety: 'Error calculating',
+          development: 'Error calculating',
+          saturation: 'Error calculating',
         },
         rating: 'Poor' as const,
       };
@@ -85,23 +102,38 @@ export default function LiveFeasibilityScore({
       market: !!marketComps && marketComps.length > 0,
       economic: !!demographicsData?.consumerSpending,
       site: !!parcelInfo || !!locationIntelligence,
+      // Enhanced data sources
+      walkability: !!enhancedData?.walkScore,
+      safety: !!enhancedData?.crimeData,
+      development: !!enhancedData?.buildingPermits,
+      saturation: !!enhancedData?.vacancyData,
     };
-  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps, accessPoints, parcelInfo, locationIntelligence]);
+  }, [trafficData, demographicsData, businesses, environmentalRisk, marketComps, accessPoints, parcelInfo, locationIntelligence, enhancedData]);
 
   const availableCount = Object.values(dataSources).filter(Boolean).length;
-  const totalSources = 7;
+  const totalSources = 11; // Updated to include enhanced sources
 
   if (!isVisible) return null;
 
+  // Check if enhanced data scores exist in the breakdown
+  const hasEnhancedScores = feasibilityScore.breakdown.walkabilityScore !== undefined;
+
   const scoreBreakdown = [
-    { key: 'traffic', label: 'Traffic', score: feasibilityScore.breakdown.trafficScore, weight: '20%', available: dataSources.traffic },
-    { key: 'demographics', label: 'Demographics', score: feasibilityScore.breakdown.demographicsScore, weight: '15%', available: dataSources.demographics },
-    { key: 'economic', label: 'Economic', score: feasibilityScore.breakdown.economicScore, weight: '15%', available: dataSources.economic },
-    { key: 'competition', label: 'Competition', score: feasibilityScore.breakdown.competitionScore, weight: '10%', available: dataSources.competition },
-    { key: 'access', label: 'Access', score: feasibilityScore.breakdown.accessScore, weight: '10%', available: dataSources.traffic },
-    { key: 'site', label: 'Site', score: feasibilityScore.breakdown.siteScore, weight: '10%', available: dataSources.site },
-    { key: 'environmental', label: 'Environmental', score: feasibilityScore.breakdown.environmentalScore, weight: '10%', available: dataSources.environmental },
-    { key: 'market', label: 'Market', score: feasibilityScore.breakdown.marketScore, weight: '10%', available: dataSources.market },
+    { key: 'traffic', label: 'Traffic', score: feasibilityScore.breakdown.trafficScore, weight: hasEnhancedScores ? '15%' : '20%', available: dataSources.traffic },
+    { key: 'demographics', label: 'Demographics', score: feasibilityScore.breakdown.demographicsScore, weight: hasEnhancedScores ? '12%' : '15%', available: dataSources.demographics },
+    { key: 'economic', label: 'Economic', score: feasibilityScore.breakdown.economicScore, weight: hasEnhancedScores ? '12%' : '15%', available: dataSources.economic },
+    { key: 'competition', label: 'Competition', score: feasibilityScore.breakdown.competitionScore, weight: hasEnhancedScores ? '8%' : '10%', available: dataSources.competition },
+    { key: 'access', label: 'Access', score: feasibilityScore.breakdown.accessScore, weight: hasEnhancedScores ? '8%' : '10%', available: dataSources.traffic },
+    { key: 'site', label: 'Site', score: feasibilityScore.breakdown.siteScore, weight: hasEnhancedScores ? '8%' : '10%', available: dataSources.site },
+    { key: 'environmental', label: 'Environmental', score: feasibilityScore.breakdown.environmentalScore, weight: hasEnhancedScores ? '7%' : '10%', available: dataSources.environmental },
+    { key: 'market', label: 'Market', score: feasibilityScore.breakdown.marketScore, weight: hasEnhancedScores ? '7%' : '10%', available: dataSources.market },
+    // Enhanced scores (only show if available)
+    ...(hasEnhancedScores ? [
+      { key: 'walkability', label: 'Walkability', score: feasibilityScore.breakdown.walkabilityScore ?? 5, weight: '6%', available: dataSources.walkability },
+      { key: 'safety', label: 'Safety', score: feasibilityScore.breakdown.safetyScore ?? 5, weight: '6%', available: dataSources.safety },
+      { key: 'development', label: 'Development', score: feasibilityScore.breakdown.developmentScore ?? 5, weight: '6%', available: dataSources.development },
+      { key: 'saturation', label: 'Saturation', score: feasibilityScore.breakdown.saturationScore ?? 5, weight: '5%', available: dataSources.saturation },
+    ] : []),
   ];
 
   return (

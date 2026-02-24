@@ -92,6 +92,11 @@ export interface FeasibilityScore {
     marketScore: number;
     economicScore: number;
     siteScore: number;
+    // Enhanced scores from new data sources
+    walkabilityScore: number;
+    safetyScore: number;
+    developmentScore: number;
+    saturationScore: number;
   };
   details: {
     traffic: string;
@@ -102,6 +107,11 @@ export interface FeasibilityScore {
     market: string;
     economic: string;
     site: string;
+    // Enhanced details from new data sources
+    walkability: string;
+    safety: string;
+    development: string;
+    saturation: string;
   };
   rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
 }
@@ -224,6 +234,130 @@ export interface LocationIntelligence {
   };
 }
 
+// Walk Score types
+export interface WalkScoreData {
+  walkScore: number;
+  walkDescription: string;
+  transitScore: number | null;
+  transitDescription: string | null;
+  bikeScore: number | null;
+  bikeDescription: string | null;
+  pedestrianFriendly: boolean;
+  transitAccessible: boolean;
+  retailViability: 'excellent' | 'good' | 'fair' | 'poor';
+  recommendations: string[];
+}
+
+// Crime data types
+export interface CrimeData {
+  safetyScore: number;
+  safetyGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+  crimeIndex: number;
+  violentCrimeRate: number;
+  propertyCrimeRate: number;
+  totalCrimeRate: number;
+  vsNationalAverage: 'lower' | 'average' | 'higher' | 'much higher';
+  vsStateAverage: 'lower' | 'average' | 'higher' | 'much higher';
+  businessImpact: {
+    insurancePremiumImpact: 'low' | 'moderate' | 'high';
+    securityRecommendations: string[];
+    operationalConsiderations: string[];
+  };
+  dataYear: number;
+  jurisdiction: string;
+  source: string;
+}
+
+// Building permits types
+export interface BuildingPermitsData {
+  currentYear: {
+    year: number;
+    totalUnits: number;
+    singleFamily: number;
+    multiFamilyUnits: number;
+    totalValue: number;
+  };
+  previousYear: {
+    year: number;
+    totalUnits: number;
+    singleFamily: number;
+    multiFamilyUnits: number;
+    totalValue: number;
+  };
+  yoyChange: {
+    unitsPercent: number;
+    valuePercent: number;
+    trend: 'growing' | 'stable' | 'declining';
+  };
+  developmentMomentum: number;
+  momentumDescription: string;
+  marketAnalysis: {
+    constructionActivity: 'high' | 'moderate' | 'low';
+    newCompetitionRisk: 'high' | 'moderate' | 'low';
+    populationGrowthSignal: 'strong' | 'moderate' | 'weak';
+    recommendations: string[];
+  };
+  jurisdiction: string;
+  jurisdictionType: 'county' | 'metro' | 'state';
+  source: string;
+}
+
+// Isochrone types
+export interface IsochronePolygon {
+  timeMinutes: number;
+  coordinates: Array<[number, number]>;
+  areaSquareMiles: number;
+}
+
+export interface IsochroneData {
+  polygons: {
+    fiveMinute: IsochronePolygon;
+    tenMinute: IsochronePolygon;
+    fifteenMinute: IsochronePolygon;
+  };
+  origin: { lat: number; lng: number };
+  tradeAreaAnalysis: {
+    fiveMinute: { estimatedPopulation: number; estimatedHouseholds: number };
+    tenMinute: { estimatedPopulation: number; estimatedHouseholds: number };
+    fifteenMinute: { estimatedPopulation: number; estimatedHouseholds: number };
+  };
+  radiusComparison: {
+    fiveMinuteEquivalentMiles: number;
+    tenMinuteEquivalentMiles: number;
+    fifteenMinuteEquivalentMiles: number;
+    urbanDensity: 'urban' | 'suburban' | 'rural';
+  };
+  trafficContext: string;
+  source: string;
+}
+
+// Vacancy / Market saturation types
+export interface VacancyData {
+  marketSaturationScore: number;
+  saturationLevel: 'undersupplied' | 'balanced' | 'saturated' | 'oversupplied';
+  establishments: {
+    total: number;
+    perCapita: number;
+    vsNationalAverage: number;
+  };
+  sectors: {
+    retail: { count: number; perCapita: number; saturation: 'low' | 'medium' | 'high' };
+    foodService: { count: number; perCapita: number; saturation: 'low' | 'medium' | 'high' };
+    healthcare: { count: number; perCapita: number; saturation: 'low' | 'medium' | 'high' };
+    professional: { count: number; perCapita: number; saturation: 'low' | 'medium' | 'high' };
+    finance: { count: number; perCapita: number; saturation: 'low' | 'medium' | 'high' };
+  };
+  opportunities: {
+    undersuppliedSectors: string[];
+    oversuppliedSectors: string[];
+    recommendations: string[];
+  };
+  jurisdiction: string;
+  population: number;
+  year: number;
+  source: string;
+}
+
 // Property data (for saving/loading)
 export interface PropertyData {
   images: string[];
@@ -237,4 +371,10 @@ export interface PropertyData {
   marketComps: MarketComp[] | null;
   selectedParcel?: SelectedParcel | null;
   locationIntelligence?: LocationIntelligence | null;
+  // New data sources
+  walkScore?: WalkScoreData | null;
+  crimeData?: CrimeData | null;
+  buildingPermits?: BuildingPermitsData | null;
+  isochrone?: IsochroneData | null;
+  vacancyData?: VacancyData | null;
 }

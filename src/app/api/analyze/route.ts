@@ -11,7 +11,6 @@ import {
   CONSTRUCTION_LABELS,
 } from '@/data/BusinessIntelligence';
 import { LOT_SIZE_REFERENCE } from '@/data/lotSizeReference';
-import { detectDistrictType as detectDistrictFromBusinesses, DistrictType as BusinessDistrictType } from '@/data/seCRETenants';
 
 // Helper to get tenant examples from CRE Lot Size Reference spreadsheet
 function getTenantsFromSpreadsheet(category: string): string[] {
@@ -64,6 +63,11 @@ export interface FeasibilityScore {
     marketScore: number;
     economicScore: number;
     siteScore: number;
+    // New enhanced scores
+    walkabilityScore: number;
+    safetyScore: number;
+    developmentScore: number;
+    saturationScore: number;
   };
   details: {
     traffic: string;
@@ -74,8 +78,59 @@ export interface FeasibilityScore {
     market: string;
     economic: string;
     site: string;
+    // New enhanced details
+    walkability: string;
+    safety: string;
+    development: string;
+    saturation: string;
   };
   rating: 'Excellent' | 'Good' | 'Fair' | 'Poor';
+}
+
+// Enhanced data types for new data sources
+interface WalkScoreInfo {
+  walkScore: number;
+  transitScore: number | null;
+  bikeScore: number | null;
+  retailViability: 'excellent' | 'good' | 'fair' | 'poor';
+}
+
+interface CrimeDataInfo {
+  safetyScore: number;
+  safetyGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+  crimeIndex: number;
+  vsNationalAverage: 'lower' | 'average' | 'higher' | 'much higher';
+}
+
+interface BuildingPermitsInfo {
+  developmentMomentum: number;
+  yoyChange: { trend: 'growing' | 'stable' | 'declining' };
+  marketAnalysis: {
+    constructionActivity: 'high' | 'moderate' | 'low';
+    newCompetitionRisk: 'high' | 'moderate' | 'low';
+    populationGrowthSignal: 'strong' | 'moderate' | 'weak';
+  };
+}
+
+interface VacancyInfo {
+  marketSaturationScore: number;
+  saturationLevel: 'undersupplied' | 'balanced' | 'saturated' | 'oversupplied';
+  sectors: {
+    retail: { saturation: 'low' | 'medium' | 'high' };
+    foodService: { saturation: 'low' | 'medium' | 'high' };
+    healthcare: { saturation: 'low' | 'medium' | 'high' };
+  };
+  opportunities: {
+    undersuppliedSectors: string[];
+    oversuppliedSectors: string[];
+  };
+}
+
+interface EnhancedDataInfo {
+  walkScore?: WalkScoreInfo | null;
+  crimeData?: CrimeDataInfo | null;
+  buildingPermits?: BuildingPermitsInfo | null;
+  vacancyData?: VacancyInfo | null;
 }
 
 interface TrafficInfo {
@@ -158,16 +213,8 @@ interface AnalyzeRequest {
   environmentalRisk: EnvironmentalRiskInfo | null;
   marketComps: MarketCompInfo[] | null;
   locationIntelligence?: LocationIntelligenceInfo | null;
-  selectedParcel?: {
-    boundaries?: unknown;
-    parcelInfo?: {
-      acres?: number;
-      zoning?: string;
-      owner?: string;
-      address?: string;
-      apn?: string;
-    };
-  };
+  // New enhanced data sources
+  enhancedData?: EnhancedDataInfo | null;
 }
 
 // VPD thresholds, income preferences, and lot size requirements for different business types
@@ -973,7 +1020,8 @@ function calculateFeasibilityScore(
   demographicsData: DemographicsInfo | null,
   nearbyBusinesses: Business[],
   environmentalRisk: EnvironmentalRiskInfo | null,
-  marketComps: MarketCompInfo[] | null
+  marketComps: MarketCompInfo[] | null,
+  enhancedData?: EnhancedDataInfo | null
 ): FeasibilityScore {
   let trafficScore = 5; // Default middle score
   let demographicsScore = 5;
@@ -981,6 +1029,11 @@ function calculateFeasibilityScore(
   let accessScore = 5;
   let environmentalScore = 5;
   let marketScore = 5;
+  // New enhanced scores
+  let walkabilityScore = 5;
+  let safetyScore = 5;
+  let developmentScore = 5;
+  let saturationScore = 5;
 
   let trafficDetail = 'No traffic data available';
   let demographicsDetail = 'No demographics data available';
@@ -988,6 +1041,11 @@ function calculateFeasibilityScore(
   let accessDetail = 'Unable to assess access';
   let environmentalDetail = 'No environmental data available';
   let marketDetail = 'No market comp data available';
+  // New enhanced details
+  let walkabilityDetail = 'Walk Score data not available';
+  let safetyDetail = 'Crime data not available';
+  let developmentDetail = 'Building permits data not available';
+  let saturationDetail = 'Market saturation data not available';
 
   // TRAFFIC SCORE (0-10)
   if (trafficData) {
@@ -1013,13 +1071,13 @@ function calculateFeasibilityScore(
     }
 
     // Bonus for road type
-    if (trafficData.roadType?.includes('Major') || trafficData.roadType?.includes('Motorway')) {
+    if (trafficData.roadType.includes('Major') || trafficData.roadType.includes('Motorway')) {
       accessScore = Math.min(10, accessScore + 2);
       accessDetail = `${trafficData.roadType} with high visibility`;
-    } else if (trafficData.roadType?.includes('Secondary')) {
+    } else if (trafficData.roadType.includes('Secondary')) {
       accessScore = 6;
       accessDetail = `${trafficData.roadType} - good local access`;
-    } else if (trafficData.roadType) {
+    } else {
       accessScore = 4;
       accessDetail = `${trafficData.roadType} - limited visibility`;
     }
@@ -1068,7 +1126,7 @@ function calculateFeasibilityScore(
     if (isCollegeTown) {
       demographicsDetail = `College Town market (${collegePercent}% students) - Strong student spending power despite $${income.toLocaleString()} census income, ${population.toLocaleString()} pop`;
     } else {
-      demographicsDetail = `${demographicsData.consumerProfile?.type || 'Standard'} market - $${income.toLocaleString()} median income, ${population.toLocaleString()} pop, ${employment}% employed`;
+      demographicsDetail = `${demographicsData.consumerProfile.type} market - $${income.toLocaleString()} median income, ${population.toLocaleString()} pop, ${employment}% employed`;
     }
   }
 
@@ -1183,14 +1241,142 @@ function calculateFeasibilityScore(
     }
   }
 
+  // WALKABILITY SCORE (0-10) - From Walk Score API
+  if (enhancedData?.walkScore) {
+    const ws = enhancedData.walkScore;
+    // Convert 0-100 Walk Score to 0-10
+    walkabilityScore = Math.round(ws.walkScore / 10);
+
+    // Adjust based on retail viability
+    if (ws.retailViability === 'excellent') {
+      walkabilityScore = Math.min(10, walkabilityScore + 1);
+      walkabilityDetail = `Excellent walkability (${ws.walkScore}) - ideal for pedestrian retail`;
+    } else if (ws.retailViability === 'good') {
+      walkabilityDetail = `Good walkability (${ws.walkScore}) - supports neighborhood retail`;
+    } else if (ws.retailViability === 'fair') {
+      walkabilityDetail = `Moderate walkability (${ws.walkScore}) - mixed pedestrian/drive-up`;
+    } else {
+      walkabilityDetail = `Low walkability (${ws.walkScore}) - car-dependent, drive-thru recommended`;
+    }
+
+    // Transit bonus
+    if (ws.transitScore && ws.transitScore >= 50) {
+      walkabilityScore = Math.min(10, walkabilityScore + 1);
+      walkabilityDetail += ` + transit access (${ws.transitScore})`;
+    }
+  }
+
+  // SAFETY SCORE (0-10) - From Crime Data API
+  if (enhancedData?.crimeData) {
+    const crime = enhancedData.crimeData;
+    // Convert 0-100 safety score to 0-10
+    safetyScore = Math.round(crime.safetyScore / 10);
+
+    const gradeDescriptions: Record<string, string> = {
+      'A': 'Very safe area - excellent for all business types',
+      'B': 'Safe area - favorable for retail and services',
+      'C': 'Average safety - standard security measures advised',
+      'D': 'Below average safety - enhanced security recommended',
+      'F': 'High crime area - significant security investment needed'
+    };
+
+    safetyDetail = `Safety Grade: ${crime.safetyGrade} - ${gradeDescriptions[crime.safetyGrade]}`;
+
+    // Adjust based on comparison to national average
+    if (crime.vsNationalAverage === 'lower') {
+      safetyScore = Math.min(10, safetyScore + 1);
+      safetyDetail += ' (below national average)';
+    } else if (crime.vsNationalAverage === 'much higher') {
+      safetyScore = Math.max(0, safetyScore - 1);
+      safetyDetail += ' (well above national average)';
+    }
+  }
+
+  // DEVELOPMENT SCORE (0-10) - From Building Permits API
+  if (enhancedData?.buildingPermits) {
+    const permits = enhancedData.buildingPermits;
+    // Convert 0-100 momentum to 0-10
+    developmentScore = Math.round(permits.developmentMomentum / 10);
+
+    if (permits.yoyChange.trend === 'growing') {
+      developmentScore = Math.min(10, developmentScore + 1);
+      developmentDetail = `Growing market - ${permits.marketAnalysis.constructionActivity} construction activity`;
+    } else if (permits.yoyChange.trend === 'declining') {
+      developmentScore = Math.max(0, developmentScore - 1);
+      developmentDetail = `Slowing market - ${permits.marketAnalysis.constructionActivity} construction activity`;
+    } else {
+      developmentDetail = `Stable market - ${permits.marketAnalysis.constructionActivity} construction activity`;
+    }
+
+    // Population growth signal affects score
+    if (permits.marketAnalysis.populationGrowthSignal === 'strong') {
+      developmentScore = Math.min(10, developmentScore + 1);
+      developmentDetail += ' + strong population growth';
+    }
+
+    // Competition risk consideration
+    if (permits.marketAnalysis.newCompetitionRisk === 'high') {
+      developmentDetail += ' (high new competition risk)';
+    }
+  }
+
+  // SATURATION SCORE (0-10) - From Vacancy/Market Saturation API
+  // Note: Lower saturation = higher score (more opportunity)
+  if (enhancedData?.vacancyData) {
+    const vacancy = enhancedData.vacancyData;
+    // Invert saturation: undersupplied = high score, oversupplied = low score
+    saturationScore = Math.round((100 - vacancy.marketSaturationScore) / 10);
+
+    const levelDescriptions = {
+      'undersupplied': 'Undersupplied market - strong opportunity for new entrants',
+      'balanced': 'Balanced market - room for well-positioned businesses',
+      'saturated': 'Saturated market - differentiation essential',
+      'oversupplied': 'Oversupplied market - high competition, entry challenging'
+    };
+
+    saturationDetail = levelDescriptions[vacancy.saturationLevel];
+
+    // Add undersupplied sectors insight
+    if (vacancy.opportunities.undersuppliedSectors.length > 0) {
+      saturationDetail += `. Opportunity sectors: ${vacancy.opportunities.undersuppliedSectors.slice(0, 3).join(', ')}`;
+    }
+
+    // Penalize if retail/food specifically oversupplied
+    if (vacancy.sectors.retail.saturation === 'high' || vacancy.sectors.foodService.saturation === 'high') {
+      saturationScore = Math.max(0, saturationScore - 1);
+    }
+  }
+
   // Calculate overall score (weighted average)
-  const weights = {
+  // Weights adjusted to incorporate new data sources
+  const hasEnhancedData = enhancedData && (
+    enhancedData.walkScore || enhancedData.crimeData ||
+    enhancedData.buildingPermits || enhancedData.vacancyData
+  );
+
+  // Use different weights based on whether enhanced data is available
+  const weights = hasEnhancedData ? {
+    traffic: 0.18,        // 18% - traffic is critical
+    demographics: 0.15,   // 15% - demographics matter
+    competition: 0.10,    // 10% - market validation
+    access: 0.10,         // 10% - visibility/access
+    environmental: 0.10,  // 10% - environmental risk
+    market: 0.07,         // 7% - market comps validation
+    walkability: 0.08,    // 8% - pedestrian traffic potential
+    safety: 0.08,         // 8% - crime/safety impact
+    development: 0.07,    // 7% - development momentum
+    saturation: 0.07      // 7% - market opportunity
+  } : {
     traffic: 0.25,        // 25% - traffic is critical
     demographics: 0.20,   // 20% - demographics matter
     competition: 0.15,    // 15% - market validation
     access: 0.15,         // 15% - visibility/access
     environmental: 0.15,  // 15% - environmental risk
-    market: 0.10          // 10% - market comps validation
+    market: 0.10,         // 10% - market comps validation
+    walkability: 0,
+    safety: 0,
+    development: 0,
+    saturation: 0
   };
 
   const overall = Math.round(
@@ -1199,7 +1385,11 @@ function calculateFeasibilityScore(
     competitionScore * weights.competition +
     accessScore * weights.access +
     environmentalScore * weights.environmental +
-    marketScore * weights.market) * 10
+    marketScore * weights.market +
+    walkabilityScore * weights.walkability +
+    safetyScore * weights.safety +
+    developmentScore * weights.development +
+    saturationScore * weights.saturation) * 10
   ) / 10;
 
   // Determine rating
@@ -1219,7 +1409,12 @@ function calculateFeasibilityScore(
       environmentalScore,
       marketScore,
       economicScore: 5, // Calculated on client with full data
-      siteScore: 5      // Calculated on client with parcel info
+      siteScore: 5,     // Calculated on client with parcel info
+      // New enhanced scores
+      walkabilityScore,
+      safetyScore,
+      developmentScore,
+      saturationScore
     },
     details: {
       traffic: trafficDetail,
@@ -1229,7 +1424,12 @@ function calculateFeasibilityScore(
       market: marketDetail,
       access: accessDetail,
       economic: 'Calculated with live data',
-      site: 'Calculated with parcel data'
+      site: 'Calculated with parcel data',
+      // New enhanced details
+      walkability: walkabilityDetail,
+      safety: safetyDetail,
+      development: developmentDetail,
+      saturation: saturationDetail
     },
     rating
   };
@@ -1255,34 +1455,6 @@ interface RetailerMatchResult {
   notes?: string;
 }
 
-// Map retailerRequirements categories to district penalty categories
-const RETAILER_CATEGORY_TO_DISTRICT_PENALTY: Record<string, string[]> = {
-  'Building Supply / Equipment Rental / Trade': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'medical_professional', 'big_box_power', 'neighborhood_retail'],
-  'Agriculture / Rural / Farm Equipment': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'medical_professional', 'big_box_power', 'neighborhood_retail'],
-  'Industrial / Warehouse / Distribution': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'neighborhood_retail'],
-  'Auto Parts / Service / Car Wash': ['fashion_retail', 'downtown_retail', 'medical_professional'],
-  'Auto Dealership': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'medical_professional', 'neighborhood_retail'],
-  'Manufactured Home / RV / Boat': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'medical_professional', 'neighborhood_retail'],
-};
-
-// Categories that get boosted in specific districts
-const RETAILER_CATEGORY_TO_DISTRICT_BOOST: Record<string, string[]> = {
-  'Apparel / Fashion': ['fashion_retail', 'downtown_retail'],
-  'Specialty Retail': ['fashion_retail', 'downtown_retail', 'neighborhood_retail'],
-  'QSR - Coffee / Bakery': ['fashion_retail', 'downtown_retail', 'dining_entertainment', 'neighborhood_retail'],
-  'QSR - Burger / Chicken': ['dining_entertainment', 'neighborhood_retail', 'big_box_power'],
-  'Casual Dining': ['dining_entertainment', 'downtown_retail'],
-  'Fine Dining': ['downtown_retail', 'dining_entertainment'],
-  'Personal Services': ['fashion_retail', 'downtown_retail', 'neighborhood_retail'],
-  'Medical / Dental': ['medical_professional', 'neighborhood_retail'],
-  'Bank / Financial': ['downtown_retail', 'medical_professional', 'neighborhood_retail'],
-  'Grocery / Supermarket': ['neighborhood_retail', 'mixed_suburban'],
-  'Pharmacy': ['neighborhood_retail', 'medical_professional'],
-  'Fitness / Gym': ['neighborhood_retail', 'mixed_suburban'],
-  'Big Box Retail': ['big_box_power', 'mixed_suburban'],
-  'Discount Retail': ['neighborhood_retail', 'mixed_suburban'],
-};
-
 function calculateRetailerMatches(
   lotSizeAcres: number | null,
   vpd: number | null,
@@ -1290,15 +1462,9 @@ function calculateRetailerMatches(
   incomeLevel: 'low' | 'moderate' | 'middle' | 'upper-middle' | 'high' | null,
   population: number | null,
   stateCode: string | null,
-  isCollegeTown: boolean = false,
-  nearbyBusinesses?: Array<{ name: string; type: string; distance?: string | number }>
+  isCollegeTown: boolean = false
 ): { matches: RetailerMatchResult[]; totalMatches: number } {
   const matches: RetailerMatchResult[] = [];
-
-  // Detect district type from nearby businesses
-  const districtInfo = nearbyBusinesses && nearbyBusinesses.length > 0
-    ? detectDistrictFromBusinesses(nearbyBusinesses.map(b => ({ name: b.name, type: b.type })))
-    : null;
 
   for (const retailer of RETAILER_REQUIREMENTS) {
     // Only include actively expanding retailers
@@ -1307,30 +1473,6 @@ function calculateRetailerMatches(
     // Skip discount retailers in college town markets (student income is deceptively low)
     if (isCollegeTown && retailer.category === 'Discount Retail') {
       continue;
-    }
-
-    // Check if this category should be penalized in the detected district
-    let districtPenalty = 0;
-    let districtBoost = 0;
-    if (districtInfo && districtInfo.confidence > 0.3) {
-      // Check for penalty categories
-      for (const [penaltyCategory, penalizedDistricts] of Object.entries(RETAILER_CATEGORY_TO_DISTRICT_PENALTY)) {
-        if (retailer.category.toLowerCase().includes(penaltyCategory.toLowerCase()) ||
-            penaltyCategory.toLowerCase().includes(retailer.category.toLowerCase().split('/')[0].trim())) {
-          if (penalizedDistricts.includes(districtInfo.type)) {
-            districtPenalty = 35 * Math.min(1, districtInfo.confidence * 1.5); // Significant penalty
-          }
-        }
-      }
-
-      // Check for boost categories
-      for (const [boostCategory, boostedDistricts] of Object.entries(RETAILER_CATEGORY_TO_DISTRICT_BOOST)) {
-        if (retailer.category.toLowerCase().includes(boostCategory.toLowerCase())) {
-          if (boostedDistricts.includes(districtInfo.type)) {
-            districtBoost = 15 * Math.min(1, districtInfo.confidence * 1.5);
-          }
-        }
-      }
     }
 
     const matchDetails = {
@@ -1495,13 +1637,10 @@ function calculateRetailerMatches(
       totalScore += regionWeight * 0.5;
     }
 
-    // Calculate final score with district adjustments
-    let finalScore = weightedFactors > 0
+    // Calculate final score
+    const finalScore = weightedFactors > 0
       ? Math.round((totalScore / weightedFactors) * 100)
       : 50;
-
-    // Apply district-based adjustments
-    finalScore = Math.max(0, Math.min(100, finalScore - districtPenalty + districtBoost));
 
     // Only include if score is reasonable
     if (finalScore < 30) continue;
@@ -1590,7 +1729,7 @@ function calculateBusinessSuitability(
 
   for (const [key, threshold] of Object.entries(VPD_THRESHOLDS)) {
     // Check if this category is inappropriate for the district
-    if (districtInfo?.inappropriateCategories?.includes(key)) {
+    if (districtInfo?.inappropriateCategories.includes(key)) {
       // Skip this category entirely for this district type
       continue;
     }
@@ -1920,7 +2059,8 @@ function generateTopRecommendations(
   stateCode: string | null = null,
   isCornerLot: boolean = false,
   buildingSqFt: number | null = null,
-  locationIntelligence: LocationIntelligenceInfo | null = null
+  locationIntelligence: LocationIntelligenceInfo | null = null,
+  enhancedData: EnhancedDataInfo | null = null
 ): TopRecommendation[] {
   const recommendations: Array<{ name: string; score: number; category: string }> = [];
 
@@ -1929,6 +2069,16 @@ function generateTopRecommendations(
   const actualPopulation = demographics?.population || 0;
   const actualMedianIncome = demographics?.medianHouseholdIncome || 0;
   const actualIncomeLevel = demographics?.incomeLevel || 'middle';
+
+  // Enhanced data factors
+  const walkScore = enhancedData?.walkScore?.walkScore || 50;
+  const safetyScore = enhancedData?.crimeData?.safetyScore || 50;
+  const safetyGrade = enhancedData?.crimeData?.safetyGrade || 'C';
+  const retailSaturation = enhancedData?.vacancyData?.sectors?.retail?.saturation || 'medium';
+  const foodSaturation = enhancedData?.vacancyData?.sectors?.foodService?.saturation || 'medium';
+  const healthcareSaturation = enhancedData?.vacancyData?.sectors?.healthcare?.saturation || 'medium';
+  const developmentTrend = enhancedData?.buildingPermits?.yoyChange?.trend || 'stable';
+  const undersuppliedSectors = enhancedData?.vacancyData?.opportunities?.undersuppliedSectors || [];
 
   // New economic/location factors
   const consumerSpending = demographics?.consumerSpending || 0;
@@ -1956,45 +2106,6 @@ function generateTopRecommendations(
     b.name.toLowerCase().replace(/[^a-z0-9]/g, '')
   );
 
-  // Detect district type from nearby businesses for context-aware recommendations
-  const nearbyForDistrict = nearbyBusinesses.map(b => ({
-    name: b.name,
-    type: b.type || '',
-    distance: typeof b.distance === 'string'
-      ? parseFloat(b.distance.match(/[\d.]+/)?.[0] || '0')
-      : b.distance
-  }));
-  const detectedDistrict = detectDistrictFromBusinesses(nearbyForDistrict);
-  console.log(`[Recommendations] Detected district type: ${detectedDistrict.type} (confidence: ${(detectedDistrict.confidence * 100).toFixed(0)}%)`);
-
-  // Categories that DON'T fit certain district types (should be heavily penalized)
-  const districtPenaltyCategories: Record<BusinessDistrictType, string[]> = {
-    fashion_retail: ['building supply', 'industrial', 'warehouse', 'equipment rental', 'hvac', 'plumbing', 'agriculture', 'manufacturing', 'auto parts', 'car wash'],
-    downtown_retail: ['building supply', 'industrial', 'warehouse', 'equipment rental', 'agriculture', 'manufacturing', 'big box'],
-    dining_entertainment: ['building supply', 'industrial', 'warehouse', 'agriculture', 'manufacturing'],
-    medical_professional: ['building supply', 'industrial', 'warehouse', 'agriculture', 'entertainment'],
-    industrial: ['apparel', 'fashion', 'boutique', 'entertainment'],
-    auto_corridor: [],
-    big_box_power: ['building supply', 'industrial', 'agriculture'],
-    neighborhood_retail: ['building supply', 'industrial', 'warehouse'],
-    mixed_suburban: [],
-    unknown: []
-  };
-
-  // Categories that FIT certain district types (should be boosted)
-  const districtBoostCategories: Record<BusinessDistrictType, string[]> = {
-    fashion_retail: ['apparel', 'clothing', 'shoes', 'boutique', 'retail', 'salon', 'coffee', 'bakery', 'restaurant'],
-    downtown_retail: ['retail', 'restaurant', 'coffee', 'salon', 'financial', 'office'],
-    dining_entertainment: ['restaurant', 'food', 'coffee', 'entertainment', 'fitness'],
-    medical_professional: ['medical', 'dental', 'pharmacy', 'financial', 'office', 'insurance'],
-    industrial: ['building supply', 'industrial', 'warehouse', 'equipment', 'hvac', 'auto'],
-    auto_corridor: ['auto', 'car wash', 'fuel', 'convenience'],
-    big_box_power: ['big box', 'retail', 'fitness', 'grocery'],
-    neighborhood_retail: ['grocery', 'pharmacy', 'convenience', 'dollar', 'food'],
-    mixed_suburban: [],
-    unknown: []
-  };
-
   // If historic downtown, add downtown-specific recommendations first
   if (districtInfo?.type === 'historic_downtown') {
     const allDowntownOptions = [
@@ -2016,7 +2127,7 @@ function generateTopRecommendations(
   // Score each retailer from the spreadsheet against actual metrics
   for (const retailer of RETAILER_REQUIREMENTS) {
     // Skip inappropriate categories for district type
-    if (districtInfo?.inappropriateCategories?.some(cat =>
+    if (districtInfo?.inappropriateCategories.some(cat =>
       retailer.category.toLowerCase().includes(cat.toLowerCase())
     )) {
       continue;
@@ -2357,34 +2468,90 @@ function generateTopRecommendations(
       score += 3; // Tax incentives make site more attractive for investment
     }
 
-    // === DISTRICT-BASED ADJUSTMENT (based on nearby businesses) ===
-    // This is critical for context-aware recommendations
-    if (detectedDistrict.confidence > 0.25) {
-      const categoryLower = retailer.category.toLowerCase();
-      const nameLower = retailer.name.toLowerCase();
+    // === ENHANCED DATA SCORING (NEW) ===
 
-      // Check for penalty categories (things that don't fit the area)
-      const penaltyList = districtPenaltyCategories[detectedDistrict.type] || [];
-      const hasPenalty = penaltyList.some(penalty =>
-        categoryLower.includes(penalty) || nameLower.includes(penalty)
-      );
-      if (hasPenalty) {
-        const penaltyAmount = Math.round(35 * detectedDistrict.confidence);
-        score -= penaltyAmount;
-        // If it's a very poor fit, skip entirely
-        if (detectedDistrict.confidence > 0.5 && penaltyAmount > 20) {
-          continue;
-        }
+    // WALKABILITY SCORING (0-10 points for pedestrian-dependent businesses)
+    const pedestrianDependentCategories = ['Coffee', 'Bakery', 'Cafe', 'Restaurant', 'Boutique', 'Pharmacy'];
+    const needsPedestrianTraffic = pedestrianDependentCategories.some(cat =>
+      retailer.category.toLowerCase().includes(cat.toLowerCase()) ||
+      retailer.name.toLowerCase().includes(cat.toLowerCase())
+    );
+    if (needsPedestrianTraffic) {
+      if (walkScore >= 90) {
+        score += 10; // Walker's paradise - perfect for pedestrian retail
+      } else if (walkScore >= 70) {
+        score += 6;  // Very walkable
+      } else if (walkScore >= 50) {
+        score += 3;  // Somewhat walkable
+      } else if (walkScore < 30) {
+        score -= 5;  // Car-dependent area not ideal for pedestrian retail
       }
+    }
 
-      // Check for boost categories (things that complement the area)
-      const boostList = districtBoostCategories[detectedDistrict.type] || [];
-      const hasBoost = boostList.some(boost =>
-        categoryLower.includes(boost) || nameLower.includes(boost)
-      );
-      if (hasBoost) {
-        score += Math.round(20 * detectedDistrict.confidence);
+    // Drive-thru/auto-oriented businesses actually benefit from low walkability
+    const autoOrientedCategories = ['Gas Station', 'Drive', 'Auto', 'Car Wash', 'Oil Change'];
+    const isAutoOriented = autoOrientedCategories.some(cat =>
+      retailer.category.toLowerCase().includes(cat.toLowerCase()) ||
+      retailer.name.toLowerCase().includes(cat.toLowerCase())
+    );
+    if (isAutoOriented && walkScore < 40) {
+      score += 5; // Car-dependent areas are better for drive-thru concepts
+    }
+
+    // SAFETY SCORING (0-8 points)
+    if (safetyGrade === 'A' || safetyGrade === 'B') {
+      score += 5; // Safe area - favorable for all retail
+      // Premium retailers especially benefit from safe areas
+      if (['Whole Foods', 'Trader Joe', 'Starbucks', 'Chick-fil-A'].some(b => retailer.name.includes(b))) {
+        score += 3;
       }
+    } else if (safetyGrade === 'D' || safetyGrade === 'F') {
+      score -= 5; // High crime area - challenging for most retail
+      // But discount retailers may still work
+      if (retailer.category.toLowerCase().includes('discount')) {
+        score += 3; // Partial recovery for discount retail
+      }
+    }
+
+    // MARKET SATURATION SCORING (0-10 points)
+    // Boost retailers in undersupplied sectors
+    const retailerCategoryLower = retailer.category.toLowerCase();
+    if (undersuppliedSectors.some(s => retailerCategoryLower.includes(s.toLowerCase()))) {
+      score += 8; // Undersupplied sector - strong opportunity
+    }
+
+    // Sector-specific saturation adjustments
+    const isRetailCategory = ['retail', 'store', 'shop'].some(c => retailerCategoryLower.includes(c));
+    const isFoodCategory = ['restaurant', 'qsr', 'food', 'coffee', 'cafe'].some(c => retailerCategoryLower.includes(c));
+    const isHealthcareCategory = ['medical', 'health', 'pharmacy', 'clinic'].some(c => retailerCategoryLower.includes(c));
+
+    if (isRetailCategory) {
+      if (retailSaturation === 'low') {
+        score += 6; // Retail undersupplied
+      } else if (retailSaturation === 'high') {
+        score -= 4; // Retail oversupplied
+      }
+    }
+
+    if (isFoodCategory) {
+      if (foodSaturation === 'low') {
+        score += 6; // Food service undersupplied
+      } else if (foodSaturation === 'high') {
+        score -= 4; // Food service oversupplied - need differentiation
+      }
+    }
+
+    if (isHealthcareCategory) {
+      if (healthcareSaturation === 'low') {
+        score += 8; // Healthcare undersupplied - strong opportunity
+      }
+    }
+
+    // DEVELOPMENT MOMENTUM SCORING (0-5 points)
+    if (developmentTrend === 'growing') {
+      score += 5; // Growing area - new customers incoming
+    } else if (developmentTrend === 'declining') {
+      score -= 3; // Slowing growth - less attractive
     }
 
     // Only include if score is positive and meets minimum threshold
@@ -2425,55 +2592,13 @@ function generateTopRecommendations(
 }
 
 export async function POST(request: Request) {
-  // Declare variables at function scope so they're accessible in catch block
-  let requestData: {
-    nearbyBusinesses: Business[];
-    trafficData: TrafficInfo | null;
-    demographicsData: DemographicsInfo | null;
-    address: string;
-    environmentalRisk: EnvironmentalRiskInfo | null;
-    marketComps: MarketCompInfo[] | null;
-    validParcelAcres: number | null;
-  } = {
-    nearbyBusinesses: [],
-    trafficData: null,
-    demographicsData: null,
-    address: '',
-    environmentalRisk: null,
-    marketComps: null,
-    validParcelAcres: null
-  };
-
   try {
     const body: AnalyzeRequest = await request.json();
-    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence, selectedParcel } = body;
-
-    // Store in function-scoped variable for error handler access
-    requestData = {
-      nearbyBusinesses: nearbyBusinesses || [],
-      trafficData,
-      demographicsData,
-      address: address || '',
-      environmentalRisk,
-      marketComps,
-      validParcelAcres: null // Will be set below
-    };
-
-    // Extract actual parcel acreage if available (from county records)
-    // Ensure it's a number (could come as string from API)
-    console.log(`[Analyze] selectedParcel received:`, JSON.stringify(selectedParcel, null, 2));
-    console.log(`[Analyze] selectedParcel?.parcelInfo:`, JSON.stringify(selectedParcel?.parcelInfo, null, 2));
-    const rawAcres = selectedParcel?.parcelInfo?.acres;
-    console.log(`[Analyze] rawAcres:`, rawAcres, `type:`, typeof rawAcres);
-    const parsedAcres = rawAcres != null ? (typeof rawAcres === 'number' ? rawAcres : parseFloat(String(rawAcres))) : null;
-    const validParcelAcres = parsedAcres !== null && !isNaN(parsedAcres) ? parsedAcres : null;
-    requestData.validParcelAcres = validParcelAcres; // Store for error handler
-    console.log(`[Analyze] validParcelAcres:`, validParcelAcres);
+    const { images, address, nearbyBusinesses, trafficData, demographicsData, environmentalRisk, marketComps, locationIntelligence, enhancedData } = body;
 
     // Debug logging - track what data is received for each address
     console.log(`\n========== ANALYZE REQUEST ==========`);
     console.log(`[Analyze] Address: ${address}`);
-    console.log(`[Analyze] PARCEL ACRES: ${validParcelAcres || 'N/A'} (from county records)`);
     console.log(`[Analyze] Traffic VPD: ${trafficData?.estimatedVPD || 'N/A'}`);
     console.log(`[Analyze] Demographics: Pop=${demographicsData?.population || 'N/A'}, Income=$${demographicsData?.medianHouseholdIncome || 'N/A'}, Level=${demographicsData?.incomeLevel || 'N/A'}`);
     console.log(`[Analyze] Consumer Spending: $${demographicsData?.consumerSpending ? (demographicsData.consumerSpending / 1000000).toFixed(1) + 'M' : 'N/A'}`);
@@ -2489,7 +2614,7 @@ export async function POST(request: Request) {
     if (!apiKey) {
       console.error('GOOGLE_GEMINI_API_KEY not configured');
       return NextResponse.json({
-        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, validParcelAcres || 1.35, address, environmentalRisk, marketComps),
+        ...getMockAnalysis(nearbyBusinesses, trafficData, demographicsData, 1.35, address, environmentalRisk, marketComps),
         usingMockData: true,
         reason: 'API key not configured'
       });
@@ -2515,16 +2640,16 @@ export async function POST(request: Request) {
     let demographicsContext = '\n\nNo demographics data available.';
     if (demographicsData) {
       demographicsContext = `\n\nDemographics Data:
-- Median Household Income: $${demographicsData.medianHouseholdIncome?.toLocaleString() || 'N/A'}
-- Income Level: ${demographicsData.incomeLevel?.toUpperCase() || 'N/A'}
-- Consumer Profile: ${demographicsData.consumerProfile?.type || 'N/A'}
-- Profile Description: ${demographicsData.consumerProfile?.description || 'N/A'}
-- Population: ${demographicsData.population?.toLocaleString() || 'N/A'}
-- Median Age: ${demographicsData.medianAge || 'N/A'}
-- Education (Bachelor's+): ${demographicsData.educationBachelorsOrHigher || 'N/A'}%
-- Poverty Rate: ${demographicsData.povertyRate || 'N/A'}%
+- Median Household Income: $${demographicsData.medianHouseholdIncome.toLocaleString()}
+- Income Level: ${demographicsData.incomeLevel.toUpperCase()}
+- Consumer Profile: ${demographicsData.consumerProfile.type}
+- Profile Description: ${demographicsData.consumerProfile.description}
+- Population: ${demographicsData.population.toLocaleString()}
+- Median Age: ${demographicsData.medianAge}
+- Education (Bachelor's+): ${demographicsData.educationBachelorsOrHigher}%
+- Poverty Rate: ${demographicsData.povertyRate}%
 
-BUSINESSES THAT FIT THIS DEMOGRAPHIC: ${demographicsData.consumerProfile?.preferredBusinesses?.slice(0, 10).join(', ') || 'N/A'}
+BUSINESSES THAT FIT THIS DEMOGRAPHIC: ${demographicsData.consumerProfile.preferredBusinesses.slice(0, 10).join(', ')}
 
 INCOME-BASED TARGETING:
 - LOW income areas ($0-35k): Dollar General, Hardee's, Waffle House, Little Caesars, Check Cashing
@@ -2543,7 +2668,7 @@ INCOME-BASED TARGETING:
 
     if (trafficData) {
       // Initial recommendations for the prompt (will be recalculated with lot size after AI response)
-      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData, null, null, prelimStateCode, false, null, locationIntelligence);
+      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData, null, null, prelimStateCode, false, null, locationIntelligence, enhancedData);
 
       trafficContext = `\n\nTraffic Data:
 - Estimated VPD (Vehicles Per Day): ${trafficData.estimatedVPD.toLocaleString()}
@@ -2637,20 +2762,11 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     const analysis = JSON.parse(analysisText.trim());
 
-    // Use ACTUAL parcel acreage from county records if available, otherwise fall back to AI estimate
-    const aiEstimatedLotSize = parseLotSize(analysis.lotSizeEstimate);
-    const lotSizeAcres = validParcelAcres || aiEstimatedLotSize;
-
-    // Store both values for transparency
+    // Parse lot size from AI analysis
+    const lotSizeAcres = parseLotSize(analysis.lotSizeEstimate);
     if (lotSizeAcres !== null) {
       analysis.parsedLotSize = lotSizeAcres;
     }
-    if (validParcelAcres !== null && typeof validParcelAcres === 'number' && !isNaN(validParcelAcres)) {
-      analysis.validParcelAcres = validParcelAcres;
-      analysis.lotSizeEstimate = `${validParcelAcres.toFixed(2)} acres (from county records)`;
-    }
-
-    console.log(`[Analyze] Using lot size: ${lotSizeAcres} acres (source: ${validParcelAcres ? 'COUNTY RECORDS' : 'AI estimate'})`);
 
     // Detect district type for appropriate recommendations
     const districtInfo = detectDistrictType(
@@ -2696,11 +2812,12 @@ Return ONLY valid JSON, no markdown or explanation.`;
         stateCode,
         isCornerLot,
         buildingSqFt,
-        locationIntelligence
+        locationIntelligence,
+        enhancedData
       );
 
       // Add downtown-specific recommendations if in historic downtown
-      if (districtInfo?.type === 'historic_downtown') {
+      if (districtInfo.type === 'historic_downtown') {
         analysis.downtownRecommendations = DOWNTOWN_BUSINESSES;
       }
     }
@@ -2713,8 +2830,8 @@ Return ONLY valid JSON, no markdown or explanation.`;
       analysis.topRecommendations = topRecommendations;
     }
 
-    // Calculate comprehensive feasibility score
-    const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps);
+    // Calculate comprehensive feasibility score (with enhanced data if available)
+    const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps, enhancedData);
     analysis.feasibilityScore = feasibilityScore;
     // Override viabilityScore with our calculated score
     analysis.viabilityScore = feasibilityScore.overall;
@@ -2726,8 +2843,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       demographicsData?.incomeLevel || null,
       demographicsData?.population || null,
       stateCode,
-      demographicsData?.isCollegeTown || false,
-      nearbyBusinesses
+      demographicsData?.isCollegeTown || false
     );
     analysis.retailerMatches = retailerMatches;
 
@@ -2735,37 +2851,20 @@ Return ONLY valid JSON, no markdown or explanation.`;
   } catch (error) {
     console.error('Analysis error:', error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-    // Use actual request data in mock analysis (preserves lot size, traffic, demographics from request)
-    const mockAnalysis = getMockAnalysis(
-      requestData.nearbyBusinesses,
-      requestData.trafficData,
-      requestData.demographicsData,
-      requestData.validParcelAcres || 1.35,
-      requestData.address,
-      requestData.environmentalRisk,
-      requestData.marketComps
-    );
-
     if (process.env.NODE_ENV === 'development') {
       return NextResponse.json({
         error: 'Analysis failed',
-        details: errorMessage,
+        details: error instanceof Error ? error.message : 'Unknown error',
         usingMockData: true,
-        ...mockAnalysis
+        ...getMockAnalysis([], null)
       });
     }
 
-    return NextResponse.json({
-      error: errorMessage,
-      ...mockAnalysis,
-      usingMockData: true
-    });
+    return NextResponse.json({ ...getMockAnalysis([], null), usingMockData: true });
   }
 }
 
-function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = 1.35, address: string = '', environmentalRisk: EnvironmentalRiskInfo | null = null, marketComps: MarketCompInfo[] | null = null) {
+function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = 1.35, address: string = '', environmentalRisk: EnvironmentalRiskInfo | null = null, marketComps: MarketCompInfo[] | null = null, enhancedData: EnhancedDataInfo | null = null) {
   const vpd = trafficData?.estimatedVPD || 15000;
 
   // Extract state code from address FIRST
@@ -2776,8 +2875,8 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
   }
 
   const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData, lotSizeAcres, null, null);
-  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres, null, stateCode, false, null, null);
-  const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps);
+  const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres, null, stateCode, false, null, null, enhancedData);
+  const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps, enhancedData);
 
   const retailerMatches = calculateRetailerMatches(
     lotSizeAcres,
@@ -2786,8 +2885,7 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     demographicsData?.incomeLevel || null,
     demographicsData?.population || null,
     stateCode,
-    demographicsData?.isCollegeTown || false,
-    nearbyBusinesses
+    demographicsData?.isCollegeTown || false
   );
 
   // Build recommendation excluding existing businesses
@@ -2804,11 +2902,6 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     businessRec = `With an estimated ${vpd.toLocaleString()} VPD, this location suits local services. Consider: ${topRecs}. Focus on businesses serving the immediate community.`;
   }
 
-  // Use actual lot size if provided, otherwise fall back to estimate
-  const lotSizeDisplay = lotSizeAcres !== null && typeof lotSizeAcres === 'number' && !isNaN(lotSizeAcres) && lotSizeAcres !== 1.35
-    ? `${lotSizeAcres.toFixed(2)} acres (from county records)`
-    : 'Approximately 1.2 - 1.5 acres based on visual analysis';
-
   return {
     viabilityScore: feasibilityScore.overall,
     feasibilityScore,
@@ -2816,9 +2909,7 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     accessibility: 'Good visibility from main road. Multiple access points possible. Adequate space for parking configuration.',
     existingStructures: 'No significant existing structures visible. Possible remnants of previous foundation or utilities.',
     vegetation: 'Moderate vegetation coverage. Some tree clearing may be required. Landscaping opportunities present.',
-    lotSizeEstimate: lotSizeDisplay,
-    parsedLotSize: lotSizeAcres,
-    validParcelAcres: lotSizeAcres !== 1.35 ? lotSizeAcres : null,
+    lotSizeEstimate: 'Approximately 1.2 - 1.5 acres based on visual analysis',
     businessRecommendation: businessRec,
     constructionPotential: 'The site presents good construction potential with minimal grading required. Utilities appear accessible from the main road. Soil conditions should be verified through geotechnical survey.',
     keyFindings: [
