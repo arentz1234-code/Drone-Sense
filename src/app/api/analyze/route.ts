@@ -2888,7 +2888,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
-function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = 1.35, address: string = '', environmentalRisk: EnvironmentalRiskInfo | null = null, marketComps: MarketCompInfo[] | null = null, enhancedData: EnhancedDataInfo | null = null) {
+function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo | null, demographicsData: DemographicsInfo | null = null, lotSizeAcres: number | null = null, address: string = '', environmentalRisk: EnvironmentalRiskInfo | null = null, marketComps: MarketCompInfo[] | null = null, enhancedData: EnhancedDataInfo | null = null) {
   const vpd = trafficData?.estimatedVPD || 15000;
 
   // Extract state code from address FIRST
@@ -2933,7 +2933,7 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
     accessibility: 'Good visibility from main road. Multiple access points possible. Adequate space for parking configuration.',
     existingStructures: 'No significant existing structures visible. Possible remnants of previous foundation or utilities.',
     vegetation: 'Moderate vegetation coverage. Some tree clearing may be required. Landscaping opportunities present.',
-    lotSizeEstimate: 'Approximately 1.2 - 1.5 acres based on visual analysis',
+    lotSizeEstimate: lotSizeAcres ? `${lotSizeAcres.toFixed(2)} acres (from parcel data)` : 'Unable to determine - select a parcel on the map',
     businessRecommendation: businessRec,
     constructionPotential: 'The site presents good construction potential with minimal grading required. Utilities appear accessible from the main road. Soil conditions should be verified through geotechnical survey.',
     keyFindings: [
