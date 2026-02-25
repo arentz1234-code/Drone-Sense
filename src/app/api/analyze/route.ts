@@ -2674,16 +2674,16 @@ export async function POST(request: Request) {
     let demographicsContext = '\n\nNo demographics data available.';
     if (demographicsData) {
       demographicsContext = `\n\nDemographics Data:
-- Median Household Income: $${demographicsData.medianHouseholdIncome.toLocaleString()}
-- Income Level: ${demographicsData.incomeLevel.toUpperCase()}
-- Consumer Profile: ${demographicsData.consumerProfile.type}
-- Profile Description: ${demographicsData.consumerProfile.description}
-- Population: ${demographicsData.population.toLocaleString()}
-- Median Age: ${demographicsData.medianAge}
-- Education (Bachelor's+): ${demographicsData.educationBachelorsOrHigher}%
-- Poverty Rate: ${demographicsData.povertyRate}%
+- Median Household Income: $${demographicsData.medianHouseholdIncome?.toLocaleString() || 'N/A'}
+- Income Level: ${(demographicsData.incomeLevel || 'middle').toUpperCase()}
+- Consumer Profile: ${demographicsData.consumerProfile?.type || 'N/A'}
+- Profile Description: ${demographicsData.consumerProfile?.description || 'N/A'}
+- Population: ${demographicsData.population?.toLocaleString() || 'N/A'}
+- Median Age: ${demographicsData.medianAge || 'N/A'}
+- Education (Bachelor's+): ${demographicsData.educationBachelorsOrHigher || 'N/A'}%
+- Poverty Rate: ${demographicsData.povertyRate || 'N/A'}%
 
-BUSINESSES THAT FIT THIS DEMOGRAPHIC: ${demographicsData.consumerProfile.preferredBusinesses.slice(0, 10).join(', ')}
+BUSINESSES THAT FIT THIS DEMOGRAPHIC: ${demographicsData.consumerProfile?.preferredBusinesses?.slice(0, 10).join(', ') || 'N/A'}
 
 INCOME-BASED TARGETING:
 - LOW income areas ($0-35k): Dollar General, Hardee's, Waffle House, Little Caesars, Check Cashing
