@@ -840,8 +840,8 @@ function detectDistrictType(
   isCollegeTown: boolean
 ): DistrictInfo {
   const addressLower = address.toLowerCase();
-  const businessNames = nearbyBusinesses.map(b => b.name.toLowerCase()).join(' ');
-  const businessTypes = nearbyBusinesses.map(b => b.type.toLowerCase()).join(' ');
+  const businessNames = nearbyBusinesses.map(b => (b.name || '').toLowerCase()).join(' ');
+  const businessTypes = nearbyBusinesses.map(b => (b.type || '').toLowerCase()).join(' ');
 
   // Downtown/Historic District indicators
   const downtownKeywords = ['downtown', 'main st', 'main street', 'historic', 'town square', 'court square', 'city center', 'old town'];
@@ -1171,7 +1171,7 @@ function calculateFeasibilityScore(
     // Check for anchor stores (positive signal)
     const hasAnchor = nearbyBusinesses.some(b =>
       ['walmart', 'target', 'costco', 'home depot', 'lowes', 'publix', 'kroger'].some(
-        anchor => b.name.toLowerCase().includes(anchor)
+        anchor => (b.name || '').toLowerCase().includes(anchor)
       )
     );
     if (hasAnchor) {
@@ -1697,7 +1697,7 @@ function getExistingBusinessNames(nearbyBusinesses: Business[]): string[] {
 
 // Filter examples to exclude businesses that already exist nearby
 function filterExistingBusinesses(examples: string[], nearbyBusinesses: Business[]): string[] {
-  const existingNames = nearbyBusinesses.map(b => b.name.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const existingNames = nearbyBusinesses.map(b => (b.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
 
   return examples.filter(example => {
     const normalizedExample = example.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1961,7 +1961,7 @@ function calculateBusinessSuitability(
     const existingInArea = threshold.examples.filter(example => {
       const normalizedExample = example.toLowerCase().replace(/[^a-z0-9]/g, '');
       return nearbyBusinesses.some(b => {
-        const normalizedName = b.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normalizedName = (b.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         return normalizedName.includes(normalizedExample) || normalizedExample.includes(normalizedName);
       });
     });
@@ -2113,7 +2113,7 @@ function generateTopRecommendations(
 
   // Get list of existing business names (normalized for comparison)
   const existingNames = nearbyBusinesses.map(b =>
-    b.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+    (b.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')
   );
 
   // If historic downtown, add downtown-specific recommendations first
@@ -2658,11 +2658,11 @@ export async function POST(request: Request) {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Get list of existing businesses to exclude
-    const existingBusinessNames = nearbyBusinesses.map(b => b.name).join(', ');
+    const existingBusinessNames = nearbyBusinesses.map(b => b.name || 'Unknown').join(', ');
 
     // Prepare business context
     const businessContext = nearbyBusinesses.length > 0
-      ? `\n\nNearby businesses within scanning radius (ALREADY EXIST - DO NOT RECOMMEND THESE):\n${nearbyBusinesses.map(b => `- ${b.name} (${b.type}) - ${b.distance}`).join('\n')}`
+      ? `\n\nNearby businesses within scanning radius (ALREADY EXIST - DO NOT RECOMMEND THESE):\n${nearbyBusinesses.map(b => `- ${b.name || 'Unknown'} (${b.type || 'Unknown'}) - ${b.distance || 'N/A'}`).join('\n')}`
       : '\n\nNo nearby business data available.';
 
     // Prepare traffic context

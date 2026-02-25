@@ -5904,42 +5904,293 @@ export function doesTenantFitSite(
   return { fits: score >= 40, matchQuality, issues };
 }
 
+// District type detection from nearby businesses
+export type DistrictType =
+  | 'fashion_retail'      // Clothing boutiques, apparel stores
+  | 'downtown_retail'     // Mix of shops, restaurants, services
+  | 'dining_entertainment'// Restaurants, bars, entertainment
+  | 'medical_professional'// Medical offices, clinics, professional services
+  | 'industrial'          // Warehouses, manufacturing, building supply
+  | 'auto_corridor'       // Auto dealers, car wash, auto parts
+  | 'big_box_power'       // Big box stores, power centers
+  | 'neighborhood_retail' // Grocery, pharmacy, convenience
+  | 'mixed_suburban'      // Typical suburban mix
+  | 'unknown';
+
+// Keywords to identify business types from nearby business names/types
+const DISTRICT_KEYWORDS: Record<DistrictType, string[]> = {
+  fashion_retail: [
+    'boutique', 'clothing', 'apparel', 'fashion', 'dress', 'shoes', 'footwear',
+    'jewelry', 'accessories', 'bridal', 'menswear', 'womens', "women's", 'vintage',
+    'consignment', 'thrift', 'retail', 'shop', 'store', 'gallery', 'antique'
+  ],
+  downtown_retail: [
+    'gallery', 'gift', 'book', 'florist', 'wine', 'bakery', 'cafe', 'coffee',
+    'art', 'craft', 'home decor', 'furniture'
+  ],
+  dining_entertainment: [
+    'restaurant', 'grill', 'bar', 'pub', 'tavern', 'brewery', 'pizza', 'sushi',
+    'mexican', 'italian', 'thai', 'chinese', 'indian', 'steakhouse', 'seafood',
+    'cinema', 'theater', 'theatre', 'bowling', 'arcade', 'entertainment'
+  ],
+  medical_professional: [
+    'medical', 'dental', 'clinic', 'doctor', 'physician', 'hospital', 'urgent care',
+    'pharmacy', 'optometry', 'eye', 'chiropractic', 'physical therapy', 'law',
+    'attorney', 'accounting', 'insurance', 'financial', 'bank', 'credit union'
+  ],
+  industrial: [
+    'warehouse', 'distribution', 'manufacturing', 'industrial', 'supply',
+    'building supply', 'plumbing', 'electric', 'hvac', 'contractor', 'equipment',
+    'rental', 'lumber', 'concrete', 'steel', 'metal', 'welding'
+  ],
+  auto_corridor: [
+    'auto', 'car', 'vehicle', 'dealer', 'dealership', 'toyota', 'honda', 'ford',
+    'chevrolet', 'nissan', 'car wash', 'tire', 'autozone', "o'reilly", 'advance auto',
+    'oil change', 'jiffy lube', 'collision', 'body shop'
+  ],
+  big_box_power: [
+    'walmart', 'target', 'costco', 'sam\'s club', 'home depot', 'lowes', "lowe's",
+    'best buy', 'bed bath', 'kohls', "kohl's", 'marshalls', 'tjmaxx', 'ross',
+    'dick\'s sporting', 'academy', 'ulta', 'petsmart', 'petco'
+  ],
+  neighborhood_retail: [
+    'grocery', 'publix', 'kroger', 'safeway', 'aldi', 'lidl', 'food lion',
+    'cvs', 'walgreens', 'rite aid', 'dollar', 'family dollar', 'dollar general',
+    'convenience', 'gas station', 'shell', 'exxon', 'bp', 'chevron'
+  ],
+  mixed_suburban: [],
+  unknown: []
+};
+
+// Categories that fit each district type (boosted)
+const DISTRICT_CATEGORY_AFFINITY: Record<DistrictType, string[]> = {
+  fashion_retail: [
+    'DEPARTMENT / APPAREL / SHOES',
+    'SPECIALTY RETAIL / ELECTRONICS / PET / SPORTING',
+    'PERSONAL SERVICES / SALON / WIRELESS / SHIPPING',
+    'QSR — COFFEE / BAKERY / SMOOTHIE / DESSERT',
+    'CASUAL / FULL-SERVICE RESTAURANT'
+  ],
+  downtown_retail: [
+    'SPECIALTY RETAIL / ELECTRONICS / PET / SPORTING',
+    'DEPARTMENT / APPAREL / SHOES',
+    'QSR — COFFEE / BAKERY / SMOOTHIE / DESSERT',
+    'CASUAL / FULL-SERVICE RESTAURANT',
+    'PERSONAL SERVICES / SALON / WIRELESS / SHIPPING',
+    'BANK / FINANCIAL / TAX / INSURANCE'
+  ],
+  dining_entertainment: [
+    'CASUAL / FULL-SERVICE RESTAURANT',
+    'QSR — BURGER / CHICKEN / SANDWICH',
+    'QSR — MEXICAN / ASIAN / PIZZA / OTHER',
+    'QSR — COFFEE / BAKERY / SMOOTHIE / DESSERT',
+    'ENTERTAINMENT / RECREATION',
+    'FITNESS / WELLNESS / SPA'
+  ],
+  medical_professional: [
+    'PHARMACY / MEDICAL / DENTAL / WELLNESS',
+    'BANK / FINANCIAL / TAX / INSURANCE',
+    'OFFICE / COWORKING',
+    'PERSONAL SERVICES / SALON / WIRELESS / SHIPPING'
+  ],
+  industrial: [
+    'BUILDING SUPPLY / EQUIPMENT RENTAL / TRADE',
+    'INDUSTRIAL / WAREHOUSE / DISTRIBUTION / LOGISTICS',
+    'AUTO PARTS / SERVICE / CAR WASH / DEALERSHIP',
+    'HOME SERVICES / PEST CONTROL / SOLAR / HVAC'
+  ],
+  auto_corridor: [
+    'AUTO PARTS / SERVICE / CAR WASH / DEALERSHIP',
+    'CONVENIENCE STORE / FUEL',
+    'QSR — BURGER / CHICKEN / SANDWICH'
+  ],
+  big_box_power: [
+    'BIG BOX / WAREHOUSE RETAIL',
+    'GROCERY / SUPERMARKET',
+    'SPECIALTY RETAIL / ELECTRONICS / PET / SPORTING',
+    'DEPARTMENT / APPAREL / SHOES',
+    'FITNESS / WELLNESS / SPA'
+  ],
+  neighborhood_retail: [
+    'GROCERY / SUPERMARKET',
+    'PHARMACY / MEDICAL / DENTAL / WELLNESS',
+    'CONVENIENCE STORE / FUEL',
+    'DOLLAR / VALUE / THRIFT / RESALE',
+    'QSR — BURGER / CHICKEN / SANDWICH',
+    'BANK / FINANCIAL / TAX / INSURANCE'
+  ],
+  mixed_suburban: [], // No specific boost
+  unknown: []
+};
+
+// Categories that DON'T fit each district type (penalized heavily)
+const DISTRICT_CATEGORY_PENALTY: Record<DistrictType, string[]> = {
+  fashion_retail: [
+    'BUILDING SUPPLY / EQUIPMENT RENTAL / TRADE',
+    'INDUSTRIAL / WAREHOUSE / DISTRIBUTION / LOGISTICS',
+    'AGRICULTURE / RURAL / FARM EQUIPMENT',
+    'MANUFACTURED HOME / RV / BOAT / POWERSPORTS',
+    'HOME SERVICES / PEST CONTROL / SOLAR / HVAC',
+    'AUTO PARTS / SERVICE / CAR WASH / DEALERSHIP'
+  ],
+  downtown_retail: [
+    'BUILDING SUPPLY / EQUIPMENT RENTAL / TRADE',
+    'INDUSTRIAL / WAREHOUSE / DISTRIBUTION / LOGISTICS',
+    'AGRICULTURE / RURAL / FARM EQUIPMENT',
+    'MANUFACTURED HOME / RV / BOAT / POWERSPORTS',
+    'BIG BOX / WAREHOUSE RETAIL'
+  ],
+  dining_entertainment: [
+    'BUILDING SUPPLY / EQUIPMENT RENTAL / TRADE',
+    'INDUSTRIAL / WAREHOUSE / DISTRIBUTION / LOGISTICS',
+    'AGRICULTURE / RURAL / FARM EQUIPMENT'
+  ],
+  medical_professional: [
+    'BUILDING SUPPLY / EQUIPMENT RENTAL / TRADE',
+    'INDUSTRIAL / WAREHOUSE / DISTRIBUTION / LOGISTICS',
+    'AGRICULTURE / RURAL / FARM EQUIPMENT',
+    'ENTERTAINMENT / RECREATION'
+  ],
+  industrial: [
+    'DEPARTMENT / APPAREL / SHOES',
+    'SPECIALTY RETAIL / ELECTRONICS / PET / SPORTING',
+    'ENTERTAINMENT / RECREATION'
+  ],
+  auto_corridor: [],
+  big_box_power: [
+    'BUILDING SUPPLY / EQUIPMENT RENTAL / TRADE',
+    'INDUSTRIAL / WAREHOUSE / DISTRIBUTION / LOGISTICS',
+    'AGRICULTURE / RURAL / FARM EQUIPMENT'
+  ],
+  neighborhood_retail: [
+    'BUILDING SUPPLY / EQUIPMENT RENTAL / TRADE',
+    'INDUSTRIAL / WAREHOUSE / DISTRIBUTION / LOGISTICS'
+  ],
+  mixed_suburban: [],
+  unknown: []
+};
+
+/**
+ * Detect the district type from nearby businesses
+ */
+export function detectDistrictType(
+  nearbyBusinesses: Array<{ name: string; type?: string; distance?: number }>
+): { type: DistrictType; confidence: number; breakdown: Record<DistrictType, number> } {
+  const scores: Record<DistrictType, number> = {
+    fashion_retail: 0,
+    downtown_retail: 0,
+    dining_entertainment: 0,
+    medical_professional: 0,
+    industrial: 0,
+    auto_corridor: 0,
+    big_box_power: 0,
+    neighborhood_retail: 0,
+    mixed_suburban: 0,
+    unknown: 0
+  };
+
+  for (const biz of nearbyBusinesses) {
+    const searchText = `${biz.name || ''} ${biz.type || ''}`.toLowerCase();
+
+    // Weight closer businesses more heavily
+    const distanceWeight = biz.distance !== undefined
+      ? Math.max(0.5, 1 - (biz.distance / 2)) // Full weight within 0.5mi, decreasing to 0.5 at 1mi+
+      : 1;
+
+    for (const [district, keywords] of Object.entries(DISTRICT_KEYWORDS) as [DistrictType, string[]][]) {
+      for (const keyword of keywords) {
+        if (searchText.includes(keyword.toLowerCase())) {
+          scores[district] += distanceWeight;
+          break; // Only count once per business per district
+        }
+      }
+    }
+  }
+
+  // Find the dominant district type
+  let maxScore = 0;
+  let dominantType: DistrictType = 'unknown';
+  let totalScore = 0;
+
+  for (const [district, score] of Object.entries(scores) as [DistrictType, number][]) {
+    totalScore += score;
+    if (score > maxScore) {
+      maxScore = score;
+      dominantType = district;
+    }
+  }
+
+  // Calculate confidence (how dominant is the top type?)
+  const confidence = totalScore > 0 ? Math.min(1, maxScore / Math.max(3, totalScore * 0.4)) : 0;
+
+  // If no clear pattern, use mixed_suburban
+  if (confidence < 0.3 || maxScore < 2) {
+    dominantType = nearbyBusinesses.length > 5 ? 'mixed_suburban' : 'unknown';
+  }
+
+  return { type: dominantType, confidence, breakdown: scores };
+}
+
 // Get top recommendations for a site
 export function getTopRecommendations(
   lotAcres: number,
   vpd?: number | null,
   population?: number | null,
   hhi?: number | null,
-  limit: number = 10
+  limit: number = 10,
+  nearbyBusinesses?: Array<{ name: string; type?: string; distance?: number }>
 ): SETenantRequirement[] {
   const matches = findMatchingTenantsBySite(lotAcres, vpd, population, hhi);
-  
+
+  // Detect district type if nearby businesses provided
+  const district = nearbyBusinesses && nearbyBusinesses.length > 0
+    ? detectDistrictType(nearbyBusinesses)
+    : null;
+
+  const affinityCategories = district ? DISTRICT_CATEGORY_AFFINITY[district.type] : [];
+  const penaltyCategories = district ? DISTRICT_CATEGORY_PENALTY[district.type] : [];
+
   // Score and sort matches
   const scored = matches.map(tenant => {
     let score = 100;
-    
+
     // Bonus for ideal lot size match
     if (tenant.typicalLotAcres) {
       const lotDiff = Math.abs(tenant.typicalLotAcres - lotAcres) / tenant.typicalLotAcres;
       score -= lotDiff * 20;
     }
-    
+
     // Bonus for meeting VPD requirements well
     if (vpd && tenant.preferredVPD && vpd >= tenant.preferredVPD) {
       score += 10;
     } else if (vpd && tenant.minVPD && vpd >= tenant.minVPD) {
       score += 5;
     }
-    
+
+    // District-based category adjustments (significant impact)
+    if (district && district.confidence > 0.3) {
+      const confidenceWeight = Math.min(1, district.confidence * 1.5);
+
+      // Major boost for categories that fit the district
+      if (affinityCategories.includes(tenant.category)) {
+        score += 25 * confidenceWeight;
+      }
+
+      // Major penalty for categories that don't fit
+      if (penaltyCategories.includes(tenant.category)) {
+        score -= 40 * confidenceWeight; // Strong penalty to push these down
+      }
+    }
+
     return { tenant, score };
   });
-  
+
   scored.sort((a, b) => b.score - a.score);
-  
+
   // Return diverse recommendations (limit per category)
   const result: SETenantRequirement[] = [];
   const categoryCount: Record<string, number> = {};
-  
+
   for (const { tenant } of scored) {
     const catCount = categoryCount[tenant.category] || 0;
     if (catCount < 2) {
@@ -5948,7 +6199,7 @@ export function getTopRecommendations(
     }
     if (result.length >= limit) break;
   }
-  
+
   return result;
 }
 
