@@ -684,14 +684,14 @@ export default function HomePage() {
             </div>
 
             {/* Address Input Section */}
-            <div className="terminal-card">
+            <div className="terminal-card" style={{ overflow: 'visible' }}>
               <div className="terminal-header">
                 <div className="terminal-dot red"></div>
                 <div className="terminal-dot yellow"></div>
                 <div className="terminal-dot green"></div>
                 <span className="terminal-title">location_input.module</span>
               </div>
-              <div className="terminal-body">
+              <div className="terminal-body" style={{ overflow: 'visible' }}>
                 <AddressInput
                   address={address}
                   setAddress={setAddress}

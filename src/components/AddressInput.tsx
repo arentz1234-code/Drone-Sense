@@ -107,8 +107,8 @@ export default function AddressInput({
     <div>
       <h3 className="font-semibold text-[var(--text-primary)] mb-4">Property Location</h3>
 
-      <div className="space-y-4">
-        <div className="relative">
+      <div className="space-y-4 overflow-visible">
+        <div className="relative" style={{ overflow: 'visible' }}>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <input
@@ -126,11 +126,12 @@ export default function AddressInput({
               {showDropdown && recentSearches.length > 0 && (
                 <div
                   ref={dropdownRef}
-                  className="absolute top-full left-0 right-0 mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-lg z-50 overflow-hidden address-dropdown-mobile"
+                  className="absolute top-full left-0 right-0 mt-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl address-dropdown-mobile"
                   style={{
                     maxHeight: 'min(40vh, 300px)',
                     overflowY: 'auto',
                     WebkitOverflowScrolling: 'touch',
+                    zIndex: 9999,
                   }}
                 >
                   <div className="p-2 border-b border-[var(--border-color)] flex items-center justify-between">
