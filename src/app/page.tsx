@@ -28,6 +28,20 @@ import {
 // Import enhanced data fetcher
 import { fetchEnhancedData, EnhancedDataResult } from '@/lib/fetchEnhancedData';
 
+// Safe JSON parsing helper - handles empty responses gracefully
+async function safeJsonParse<T>(response: Response): Promise<T | null> {
+  const text = await response.text();
+  if (!text || text.trim() === '') {
+    return null;
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    console.error('Failed to parse JSON response:', text.substring(0, 200));
+    return null;
+  }
+}
+
 // Lazy load new components
 import dynamic from 'next/dynamic';
 
@@ -270,8 +284,12 @@ export default function HomePage() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setDemographicsData(prev => prev ? { ...prev, ...data } : data);
+        const data = await safeJsonParse<ExtendedDemographics>(response);
+        if (data) {
+          setDemographicsData(prev => prev ? { ...prev, ...data } : data);
+        } else {
+          setDataErrors(prev => ({ ...prev, demographics: 'Demographics returned empty response.' }));
+        }
       } else {
         setDataErrors(prev => ({ ...prev, demographics: 'Failed to load demographics data. Check your connection and try again.' }));
       }
@@ -299,8 +317,10 @@ export default function HomePage() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setEnvironmentalRisk(data);
+        const data = await safeJsonParse<EnvironmentalRisk>(response);
+        if (data) {
+          setEnvironmentalRisk(data);
+        }
       } else {
         setDataErrors(prev => ({ ...prev, environmental: 'Failed to load environmental risk data. Check your connection and try again.' }));
       }
@@ -328,8 +348,8 @@ export default function HomePage() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setMarketComps(data.comps || []);
+        const data = await safeJsonParse<{ comps?: MarketComp[] }>(response);
+        setMarketComps(data?.comps || []);
       } else {
         setDataErrors(prev => ({ ...prev, marketComps: 'Failed to load market comparables. Check your connection and try again.' }));
       }
@@ -360,8 +380,8 @@ export default function HomePage() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setBusinesses(data.businesses || []);
+        const data = await safeJsonParse<{ businesses?: Business[] }>(response);
+        setBusinesses(data?.businesses || []);
       } else {
         setDataErrors(prev => ({ ...prev, businesses: 'Failed to load nearby businesses. Check your connection and try again.' }));
       }
@@ -389,8 +409,10 @@ export default function HomePage() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        setTrafficData(data);
+        const data = await safeJsonParse<TrafficInfo>(response);
+        if (data) {
+          setTrafficData(data);
+        }
       } else {
         setDataErrors(prev => ({ ...prev, traffic: 'Failed to load traffic data. Check your connection and try again.' }));
       }
@@ -469,8 +491,10 @@ export default function HomePage() {
         });
 
         if (response.ok) {
-          const data = await response.json();
-          setRetailerMatches(data);
+          const data = await safeJsonParse<RetailerMatchResult>(response);
+          if (data) {
+            setRetailerMatches(data);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch retailer matches:', err);
@@ -551,12 +575,15 @@ export default function HomePage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        const reason = data.error || 'Unknown error';
+        const data = await safeJsonParse<{ error?: string }>(response);
+        const reason = data?.error || 'Server returned an error';
         throw new Error(`Analysis failed: ${reason}. Check your connection and try again.`);
       }
 
-      const result = await response.json();
+      const result = await safeJsonParse<AnalysisResult>(response);
+      if (!result) {
+        throw new Error('Server returned empty response. Please try again.');
+      }
       setAnalysis(result);
 
       // Update history with feasibility score after analysis completes
