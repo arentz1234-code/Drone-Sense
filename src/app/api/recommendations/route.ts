@@ -549,12 +549,14 @@ function generateSuggestedUses(
   }
 
   // Get top recommendations using SE CRE data with all site criteria
+  // Pass nearby businesses to enable district-aware recommendations
   const topMatches = getTopRecommendations(
     lotSizeAcres,
     vpd,
     population,
     medianIncome,
-    15 // Get more matches to filter
+    15, // Get more matches to filter
+    nearbyBusinesses.map(b => ({ name: b.name, type: b.type }))
   );
 
   if (topMatches.length === 0) {

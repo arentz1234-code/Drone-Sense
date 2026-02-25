@@ -54,6 +54,42 @@ export async function POST(request: Request) {
       }
     }
 
+    // Try TomTom Geocoding API (very accurate for commercial addresses)
+    const tomtomApiKey = process.env.TOMTOM_API_KEY;
+
+    if (tomtomApiKey) {
+      try {
+        const tomtomUrl = `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(address)}.json?key=${tomtomApiKey}&countrySet=US&limit=1`;
+
+        const tomtomResponse = await fetch(tomtomUrl);
+
+        if (tomtomResponse.ok) {
+          const tomtomData = await tomtomResponse.json();
+
+          if (tomtomData.results && tomtomData.results.length > 0) {
+            const result = tomtomData.results[0];
+            const position = result.position;
+
+            // TomTom provides match type - prefer Point Address or Address Range
+            const matchType = result.type;
+            const isGoodMatch = matchType === 'Point Address' || matchType === 'Address Range' || matchType === 'Street';
+
+            if (isGoodMatch || (result.matchConfidence && result.matchConfidence.score >= 0.5)) {
+              return NextResponse.json({
+                lat: position.lat,
+                lng: position.lon,
+                formattedAddress: result.address?.freeformAddress || address,
+                source: 'tomtom',
+                matchType: matchType,
+              });
+            }
+          }
+        }
+      } catch (tomtomError) {
+        console.log('TomTom geocoder error, falling back:', tomtomError);
+      }
+    }
+
     // Try US Census Geocoder (free and very accurate for US addresses)
     try {
       const censusUrl = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(address)}&benchmark=Public_AR_Current&format=json`;

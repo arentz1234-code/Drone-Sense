@@ -129,6 +129,80 @@ interface OSMData {
 }
 
 /**
+ * Calculate angle between two points relative to horizontal
+ */
+function calculateBearing(from: [number, number], to: [number, number]): number {
+  const dLon = to[0] - from[0];
+  const dLat = to[1] - from[1];
+  return Math.atan2(dLon, dLat) * 180 / Math.PI;
+}
+
+/**
+ * Check if a road segment is roughly perpendicular to parcel edge (potential entrance)
+ */
+function isPerpendicularToEdge(
+  roadPoint: [number, number],
+  roadDirection: number,
+  parcelEdgeStart: [number, number],
+  parcelEdgeEnd: [number, number]
+): boolean {
+  const edgeDirection = calculateBearing(parcelEdgeStart, parcelEdgeEnd);
+  const angleDiff = Math.abs(roadDirection - edgeDirection);
+  const normalizedDiff = angleDiff % 180;
+  // Check if roughly perpendicular (70-110 degrees)
+  return normalizedDiff >= 70 && normalizedDiff <= 110;
+}
+
+/**
+ * Find the nearest point on the parcel boundary to a given point
+ */
+function findNearestEdge(
+  point: [number, number],
+  parcelBoundary: Array<[number, number]>
+): { start: [number, number]; end: [number, number]; distance: number } | null {
+  let nearest: { start: [number, number]; end: [number, number]; distance: number } | null = null;
+
+  for (let i = 0; i < parcelBoundary.length - 1; i++) {
+    const start = parcelBoundary[i];
+    const end = parcelBoundary[i + 1];
+
+    // Calculate distance from point to line segment
+    const A = point[0] - start[0];
+    const B = point[1] - start[1];
+    const C = end[0] - start[0];
+    const D = end[1] - start[1];
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+
+    if (lenSq !== 0) param = dot / lenSq;
+
+    let xx, yy;
+    if (param < 0) {
+      xx = start[0];
+      yy = start[1];
+    } else if (param > 1) {
+      xx = end[0];
+      yy = end[1];
+    } else {
+      xx = start[0] + param * C;
+      yy = start[1] + param * D;
+    }
+
+    const dx = point[0] - xx;
+    const dy = point[1] - yy;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (!nearest || distance < nearest.distance) {
+      nearest = { start, end, distance };
+    }
+  }
+
+  return nearest;
+}
+
+/**
  * Find all access points by checking road intersections and proximity to parcel boundary
  */
 async function findAccessPoints(
@@ -211,140 +285,251 @@ async function findAccessPoints(
     const seenCoords = new Set<string>();
     const seenRoads = new Map<string, number>(); // Track best distance per road
 
-    // Process each road
-    for (const road of allRoads) {
+    // First pass: Identify service roads (driveways) that connect main roads to the parcel
+    // These are the most accurate indicators of actual entrance locations
+    const serviceRoads = allRoads.filter(r => r.tags?.highway === 'service');
+    const mainRoads = allRoads.filter(r => r.tags?.highway !== 'service');
+
+    // Track which main roads have service road connections
+    const mainRoadEntrances = new Map<string, { coords: [number, number]; distance: number }[]>();
+
+    // Find where service roads connect main roads to the parcel
+    for (const serviceRoad of serviceRoads) {
+      const serviceCoords = serviceRoad.geometry;
+      if (serviceCoords.length < 2) continue;
+
+      // Check if service road enters the parcel
+      let entersParcel = false;
+      let entryPoint: { lat: number; lon: number } | null = null;
+
+      for (let i = 0; i < serviceCoords.length; i++) {
+        const geom = serviceCoords[i];
+        const point = turf.point([geom.lon, geom.lat]);
+        const isInside = turf.booleanPointInPolygon(point, parcelPolygon);
+
+        if (isInside && !entersParcel) {
+          // This is where the service road enters the parcel
+          entersParcel = true;
+          // Use the previous point (just outside) as the entrance, or current if first
+          entryPoint = i > 0 ? serviceCoords[i - 1] : geom;
+        }
+      }
+
+      // Also check start/end points for being near parcel boundary
+      const startPoint = serviceCoords[0];
+      const endPoint = serviceCoords[serviceCoords.length - 1];
+
+      for (const endpoint of [startPoint, endPoint]) {
+        const point = turf.point([endpoint.lon, endpoint.lat]);
+        let distToBoundary: number;
+        try {
+          distToBoundary = turf.pointToLineDistance(point, parcelLine as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
+        } catch {
+          continue;
+        }
+
+        // If endpoint is near parcel boundary (within 15m), this is likely a driveway entrance
+        if (distToBoundary <= 15) {
+          // Find which main road this service road connects to
+          for (const mainRoad of mainRoads) {
+            const mainRoadName = mainRoad.tags?.name || mainRoad.tags?.ref;
+            if (!mainRoadName) continue;
+
+            // Check if service road starts/ends near this main road
+            for (const mainGeom of mainRoad.geometry) {
+              const dx = endpoint.lon - mainGeom.lon;
+              const dy = endpoint.lat - mainGeom.lat;
+              const distToMain = Math.sqrt(dx * dx + dy * dy) * 111000; // Approx meters
+
+              if (distToMain <= 25) {
+                // This service road connects this main road to the parcel
+                const entrances = mainRoadEntrances.get(mainRoadName) || [];
+                // Use the other endpoint (the one near the parcel) as the entrance
+                const nearParcelEndpoint = endpoint === startPoint ? endPoint : startPoint;
+                entrances.push({
+                  coords: [nearParcelEndpoint.lat, nearParcelEndpoint.lon],
+                  distance: distToBoundary
+                });
+                mainRoadEntrances.set(mainRoadName, entrances);
+                console.log(`[AccessPoints] Found driveway from ${mainRoadName} entering parcel`);
+              }
+            }
+          }
+        }
+      }
+
+      // If service road enters parcel, mark the entry point
+      if (entersParcel && entryPoint) {
+        const coordKey = `${entryPoint.lat.toFixed(5)},${entryPoint.lon.toFixed(5)}`;
+        if (!seenCoords.has(coordKey)) {
+          seenCoords.add(coordKey);
+
+          // Find which main road this connects to
+          let connectedRoadName = 'Unnamed Road';
+          for (const mainRoad of mainRoads) {
+            const mainRoadName = mainRoad.tags?.name || mainRoad.tags?.ref;
+            if (!mainRoadName) continue;
+
+            for (const mainGeom of mainRoad.geometry) {
+              for (const serviceGeom of serviceCoords) {
+                const dx = serviceGeom.lon - mainGeom.lon;
+                const dy = serviceGeom.lat - mainGeom.lat;
+                const dist = Math.sqrt(dx * dx + dy * dy) * 111000;
+                if (dist <= 20) {
+                  connectedRoadName = mainRoadName;
+                  break;
+                }
+              }
+              if (connectedRoadName !== 'Unnamed Road') break;
+            }
+            if (connectedRoadName !== 'Unnamed Road') break;
+          }
+
+          if (connectedRoadName !== 'Unnamed Road') {
+            seenRoads.set(connectedRoadName, 0);
+            accessPoints.push({
+              coordinates: [entryPoint.lat, entryPoint.lon],
+              roadName: connectedRoadName,
+              type: 'entrance',
+              roadType: 'service',
+              distance: 0,
+            });
+            console.log(`[AccessPoints] Driveway entrance from ${connectedRoadName}`);
+          }
+        }
+      }
+    }
+
+    // Process main roads - look for actual entrance points
+    for (const road of mainRoads) {
       const roadCoords = road.geometry.map(g => [g.lon, g.lat] as [number, number]);
       const roadLine = turf.lineString(roadCoords);
       const roadName = road.tags?.name || road.tags?.ref || 'Unnamed Road';
       const roadType = road.tags?.highway || 'road';
 
-      // Skip internal parking/service roads unless they're the only option
-      const isServiceRoad = roadType === 'service';
+      // If we already found a driveway entrance for this road, use that
+      if (seenRoads.has(roadName)) continue;
+
+      // Check if we found service road connections for this road
+      const driveways = mainRoadEntrances.get(roadName);
+      if (driveways && driveways.length > 0) {
+        // Use the closest driveway entrance
+        driveways.sort((a, b) => a.distance - b.distance);
+        const best = driveways[0];
+        const coordKey = `${best.coords[0].toFixed(5)},${best.coords[1].toFixed(5)}`;
+
+        if (!seenCoords.has(coordKey)) {
+          seenCoords.add(coordKey);
+          seenRoads.set(roadName, best.distance);
+          accessPoints.push({
+            coordinates: best.coords,
+            roadName,
+            type: 'entrance',
+            roadType,
+            distance: best.distance,
+          });
+          console.log(`[AccessPoints] Using driveway entrance for ${roadName}`);
+          continue;
+        }
+      }
 
       // Method 1: Check for direct intersection with parcel boundary
+      // AND check if road direction is perpendicular (indicates entrance)
       try {
         const intersections = turf.lineIntersect(roadLine, parcelLine as GeoJSON.Feature<GeoJSON.LineString>);
 
+        let bestIntersection: { coords: [number, number]; isPerpendicular: boolean } | null = null;
+
         for (const intersection of intersections.features) {
           const [lng, lat] = intersection.geometry.coordinates;
-          const coordKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
 
-          if (seenCoords.has(coordKey)) continue;
+          // Find the road direction at this point
+          let roadDirection = 0;
+          for (let i = 0; i < road.geometry.length - 1; i++) {
+            const g1 = road.geometry[i];
+            const g2 = road.geometry[i + 1];
+            const d1 = Math.abs(g1.lat - lat) + Math.abs(g1.lon - lng);
+            const d2 = Math.abs(g2.lat - lat) + Math.abs(g2.lon - lng);
+            if (d1 < 0.0001 || d2 < 0.0001) {
+              roadDirection = calculateBearing([g1.lon, g1.lat], [g2.lon, g2.lat]);
+              break;
+            }
+          }
 
-          // Check if this road already has a better (closer) access point
-          const existingDist = seenRoads.get(roadName);
-          if (existingDist !== undefined && existingDist <= 0) continue;
+          // Find nearest parcel edge
+          const nearestEdge = findNearestEdge([lat, lng], parcelBoundary);
+          const isPerpendicular = nearestEdge ?
+            isPerpendicularToEdge([lat, lng], roadDirection, nearestEdge.start, nearestEdge.end) : false;
 
-          seenCoords.add(coordKey);
-          seenRoads.set(roadName, 0); // Distance 0 = direct intersection
+          if (!bestIntersection || isPerpendicular) {
+            bestIntersection = { coords: [lat, lng], isPerpendicular };
+          }
+        }
 
-          accessPoints.push({
-            coordinates: [lat, lng],
-            roadName,
-            type: 'access',
-            roadType,
-            distance: 0,
-          });
-
-          console.log(`[AccessPoints] Direct intersection: ${roadName} (${roadType})`);
+        if (bestIntersection) {
+          const coordKey = `${bestIntersection.coords[0].toFixed(5)},${bestIntersection.coords[1].toFixed(5)}`;
+          if (!seenCoords.has(coordKey)) {
+            seenCoords.add(coordKey);
+            seenRoads.set(roadName, 0);
+            accessPoints.push({
+              coordinates: bestIntersection.coords,
+              roadName,
+              type: 'access',
+              roadType,
+              distance: 0,
+            });
+            console.log(`[AccessPoints] Direct intersection: ${roadName} (${roadType})${bestIntersection.isPerpendicular ? ' [perpendicular]' : ''}`);
+          }
         }
       } catch (err) {
         // Intersection check failed, continue with proximity check
       }
 
-      // Method 2: Check for road segments inside or very close to parcel
-      for (let i = 0; i < road.geometry.length; i++) {
-        const geom = road.geometry[i];
-        const point = turf.point([geom.lon, geom.lat]);
-
-        // Check if point is inside parcel
-        const isInside = turf.booleanPointInPolygon(point, parcelPolygon);
-
-        // Check distance to parcel boundary
-        let distance: number;
-        try {
-          distance = turf.pointToLineDistance(point, parcelLine as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
-        } catch {
-          continue;
-        }
-
-        // For points inside, use negative distance to prioritize them
-        const effectiveDistance = isInside ? -distance : distance;
-
-        // Include if inside parcel or within 20 meters of boundary
-        if (isInside || distance <= 20) {
-          const coordKey = `${geom.lat.toFixed(5)},${geom.lon.toFixed(5)}`;
-          if (seenCoords.has(coordKey)) continue;
-
-          // Check if this road already has a better access point
-          const existingDist = seenRoads.get(roadName);
-          if (existingDist !== undefined && existingDist <= effectiveDistance) continue;
-
-          // Skip service roads if we already have a non-service road access
-          if (isServiceRoad && seenRoads.size > 0) {
-            const hasPublicRoad = Array.from(seenRoads.keys()).some(name => {
-              const ap = accessPoints.find(a => a.roadName === name);
-              return ap && ap.roadType !== 'service';
-            });
-            if (hasPublicRoad) continue;
-          }
-
-          seenCoords.add(coordKey);
-          seenRoads.set(roadName, effectiveDistance);
-
-          accessPoints.push({
-            coordinates: [geom.lat, geom.lon],
-            roadName,
-            type: 'access',
-            roadType,
-            distance: Math.max(0, distance),
-          });
-
-          console.log(`[AccessPoints] ${isInside ? 'Inside parcel' : 'Proximity'}: ${roadName} (${roadType}) - ${Math.round(distance)}m`);
-        }
-      }
-
-      // Method 3: Find nearest point on road to parcel (for roads that don't touch)
+      // Method 2: For roads that don't intersect, find the point closest to parcel
+      // that is also perpendicular to the parcel edge (likely entrance)
       if (!seenRoads.has(roadName)) {
-        let minDistance = Infinity;
-        let nearestPoint: [number, number] | null = null;
+        let bestCandidate: { coords: [number, number]; distance: number; isPerpendicular: boolean } | null = null;
 
-        // Sample points along the parcel boundary
-        for (const [pLat, pLng] of parcelBoundary) {
-          const parcelPoint = turf.point([pLng, pLat]);
+        for (let i = 0; i < road.geometry.length - 1; i++) {
+          const geom = road.geometry[i];
+          const nextGeom = road.geometry[i + 1];
+          const point = turf.point([geom.lon, geom.lat]);
+
+          let distance: number;
           try {
-            const nearestOnRoad = turf.nearestPointOnLine(roadLine, parcelPoint);
-            const dist = turf.distance(parcelPoint, nearestOnRoad, { units: 'meters' });
-
-            if (dist < minDistance) {
-              minDistance = dist;
-              nearestPoint = nearestOnRoad.geometry.coordinates as [number, number];
-            }
+            distance = turf.pointToLineDistance(point, parcelLine as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
           } catch {
             continue;
           }
+
+          if (distance <= 30) {
+            const roadDirection = calculateBearing([geom.lon, geom.lat], [nextGeom.lon, nextGeom.lat]);
+            const nearestEdge = findNearestEdge([geom.lat, geom.lon], parcelBoundary);
+            const isPerpendicular = nearestEdge ?
+              isPerpendicularToEdge([geom.lat, geom.lon], roadDirection, nearestEdge.start, nearestEdge.end) : false;
+
+            // Prioritize perpendicular points, then by distance
+            if (!bestCandidate ||
+                (isPerpendicular && !bestCandidate.isPerpendicular) ||
+                (isPerpendicular === bestCandidate.isPerpendicular && distance < bestCandidate.distance)) {
+              bestCandidate = { coords: [geom.lat, geom.lon], distance, isPerpendicular };
+            }
+          }
         }
 
-        // Include if within 30 meters (potential access from adjacent lot)
-        if (nearestPoint && minDistance <= 30) {
-          const coordKey = `${nearestPoint[1].toFixed(5)},${nearestPoint[0].toFixed(5)}`;
-
+        if (bestCandidate) {
+          const coordKey = `${bestCandidate.coords[0].toFixed(5)},${bestCandidate.coords[1].toFixed(5)}`;
           if (!seenCoords.has(coordKey)) {
-            // Skip service roads for distant access
-            if (!isServiceRoad || allRoads.filter(r => r.tags?.highway !== 'service').length === 0) {
-              seenCoords.add(coordKey);
-              seenRoads.set(roadName, minDistance);
-
-              accessPoints.push({
-                coordinates: [nearestPoint[1], nearestPoint[0]],
-                roadName,
-                type: 'access',
-                roadType,
-                distance: minDistance,
-              });
-
-              console.log(`[AccessPoints] Nearest point: ${roadName} (${roadType}) - ${Math.round(minDistance)}m`);
-            }
+            seenCoords.add(coordKey);
+            seenRoads.set(roadName, bestCandidate.distance);
+            accessPoints.push({
+              coordinates: bestCandidate.coords,
+              roadName,
+              type: 'access',
+              roadType,
+              distance: bestCandidate.distance,
+            });
+            console.log(`[AccessPoints] Proximity: ${roadName} (${roadType}) - ${Math.round(bestCandidate.distance)}m${bestCandidate.isPerpendicular ? ' [perpendicular]' : ''}`);
           }
         }
       }

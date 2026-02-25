@@ -5,6 +5,70 @@ import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, Environmen
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
 import { calculateFeasibilityScore, getScoreLabelAndIcon } from '@/utils/feasibilityScore';
 
+// Score circle component with hover tooltip
+function ScoreCircle({
+  score,
+  label,
+  details,
+  colorClass,
+}: {
+  score: number;
+  label: string;
+  details: string;
+  colorClass: string;
+}) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const strokeColor = score >= 7 ? '#22c55e' : score >= 5 ? '#eab308' : '#ef4444';
+  const { icon, label: scoreLabel } = getScoreLabelAndIcon(score);
+
+  return (
+    <div
+      className="text-center relative cursor-help"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      <div className="relative w-16 h-16 mx-auto mb-2">
+        <svg className="w-16 h-16 transform -rotate-90">
+          <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
+          <circle
+            cx="32" cy="32" r="28" fill="none"
+            stroke={strokeColor}
+            strokeWidth="6"
+            strokeDasharray={`${score * 17.6} 176`}
+            strokeLinecap="round"
+          />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
+          {score}
+        </span>
+      </div>
+      <p className={`text-xs font-medium ${colorClass}`}>{label}</p>
+      <p className="text-xs text-[var(--text-muted)] mt-1">
+        <span aria-hidden="true">{icon}</span>
+        {' '}{scoreLabel}
+      </p>
+
+      {/* Hover Tooltip */}
+      {showTooltip && details && (
+        <div className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 p-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-xl">
+          <div className="text-left">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`text-sm font-semibold ${colorClass}`}>{label}</span>
+              <span className="text-sm font-bold" style={{ color: strokeColor }}>{score}/10</span>
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{details}</p>
+          </div>
+          {/* Arrow */}
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px">
+            <div className="border-8 border-transparent border-t-[var(--border-color)]"></div>
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -mt-[1px] border-8 border-transparent border-t-[var(--bg-primary)]"></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ParcelInfo {
   acres?: number;
   sqft?: number;
@@ -228,196 +292,68 @@ export default function AnalysisReport({
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
             {/* Traffic Score */}
-            <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-2">
-                <svg className="w-16 h-16 transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
-                  <circle
-                    cx="32" cy="32" r="28" fill="none"
-                    stroke={feasibilityScore.breakdown.trafficScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.trafficScore >= 5 ? '#eab308' : '#ef4444'}
-                    strokeWidth="6"
-                    strokeDasharray={`${feasibilityScore.breakdown.trafficScore * 17.6} 176`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {feasibilityScore.breakdown.trafficScore}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-[var(--accent-cyan)]">Traffic</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.trafficScore).icon}</span>
-                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.trafficScore).label}
-              </p>
-            </div>
+            <ScoreCircle
+              score={feasibilityScore.breakdown.trafficScore}
+              label="Traffic"
+              details={feasibilityScore.details?.traffic || 'Traffic volume assessment based on VPD data'}
+              colorClass="text-[var(--accent-cyan)]"
+            />
 
             {/* Demographics Score */}
-            <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-2">
-                <svg className="w-16 h-16 transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
-                  <circle
-                    cx="32" cy="32" r="28" fill="none"
-                    stroke={feasibilityScore.breakdown.demographicsScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.demographicsScore >= 5 ? '#eab308' : '#ef4444'}
-                    strokeWidth="6"
-                    strokeDasharray={`${feasibilityScore.breakdown.demographicsScore * 17.6} 176`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {feasibilityScore.breakdown.demographicsScore}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-[var(--accent-green)]">Demographics</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.demographicsScore).icon}</span>
-                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.demographicsScore).label}
-              </p>
-            </div>
+            <ScoreCircle
+              score={feasibilityScore.breakdown.demographicsScore}
+              label="Demographics"
+              details={feasibilityScore.details?.demographics || 'Population and income analysis'}
+              colorClass="text-[var(--accent-green)]"
+            />
 
             {/* Competition Score */}
-            <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-2">
-                <svg className="w-16 h-16 transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
-                  <circle
-                    cx="32" cy="32" r="28" fill="none"
-                    stroke={feasibilityScore.breakdown.competitionScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.competitionScore >= 5 ? '#eab308' : '#ef4444'}
-                    strokeWidth="6"
-                    strokeDasharray={`${feasibilityScore.breakdown.competitionScore * 17.6} 176`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {feasibilityScore.breakdown.competitionScore}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-[var(--accent-orange)]">Competition</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.competitionScore).icon}</span>
-                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.competitionScore).label}
-              </p>
-            </div>
+            <ScoreCircle
+              score={feasibilityScore.breakdown.competitionScore}
+              label="Competition"
+              details={feasibilityScore.details?.competition || 'Nearby business competition analysis'}
+              colorClass="text-[var(--accent-orange)]"
+            />
 
             {/* Access Score */}
-            <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-2">
-                <svg className="w-16 h-16 transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
-                  <circle
-                    cx="32" cy="32" r="28" fill="none"
-                    stroke={feasibilityScore.breakdown.accessScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.accessScore >= 5 ? '#eab308' : '#ef4444'}
-                    strokeWidth="6"
-                    strokeDasharray={`${feasibilityScore.breakdown.accessScore * 17.6} 176`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {feasibilityScore.breakdown.accessScore}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-[var(--accent-blue)]">Access</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.accessScore).icon}</span>
-                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.accessScore).label}
-              </p>
-            </div>
-
-            {/* Environmental Score */}
-            <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-2">
-                <svg className="w-16 h-16 transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
-                  <circle
-                    cx="32" cy="32" r="28" fill="none"
-                    stroke={feasibilityScore.breakdown.environmentalScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.environmentalScore >= 5 ? '#eab308' : '#ef4444'}
-                    strokeWidth="6"
-                    strokeDasharray={`${feasibilityScore.breakdown.environmentalScore * 17.6} 176`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {feasibilityScore.breakdown.environmentalScore}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-[var(--accent-purple)]">Environmental</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.environmentalScore).icon}</span>
-                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.environmentalScore).label}
-              </p>
-            </div>
+            <ScoreCircle
+              score={feasibilityScore.breakdown.accessScore}
+              label="Access"
+              details={feasibilityScore.details?.access || 'Road access and visibility assessment'}
+              colorClass="text-[var(--accent-blue)]"
+            />
 
             {/* Market Score */}
-            <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-2">
-                <svg className="w-16 h-16 transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
-                  <circle
-                    cx="32" cy="32" r="28" fill="none"
-                    stroke={feasibilityScore.breakdown.marketScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.marketScore >= 5 ? '#eab308' : '#ef4444'}
-                    strokeWidth="6"
-                    strokeDasharray={`${feasibilityScore.breakdown.marketScore * 17.6} 176`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {feasibilityScore.breakdown.marketScore}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-[var(--accent-red)]">Market</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.marketScore).icon}</span>
-                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.marketScore).label}
-              </p>
-            </div>
+            <ScoreCircle
+              score={feasibilityScore.breakdown.marketScore}
+              label="Market"
+              details={feasibilityScore.details?.market || 'Market conditions and property values'}
+              colorClass="text-[var(--accent-red)]"
+            />
+
+            {/* Environmental Score */}
+            <ScoreCircle
+              score={feasibilityScore.breakdown.environmentalScore}
+              label="Environmental"
+              details={feasibilityScore.details?.environmental || 'Environmental risk factors'}
+              colorClass="text-[var(--accent-purple)]"
+            />
 
             {/* Economic Score */}
-            <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-2">
-                <svg className="w-16 h-16 transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
-                  <circle
-                    cx="32" cy="32" r="28" fill="none"
-                    stroke={feasibilityScore.breakdown.economicScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.economicScore >= 5 ? '#eab308' : '#ef4444'}
-                    strokeWidth="6"
-                    strokeDasharray={`${feasibilityScore.breakdown.economicScore * 17.6} 176`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {feasibilityScore.breakdown.economicScore}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-emerald-400">Economic</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.economicScore).icon}</span>
-                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.economicScore).label}
-              </p>
-            </div>
+            <ScoreCircle
+              score={feasibilityScore.breakdown.economicScore}
+              label="Economic"
+              details={feasibilityScore.details?.economic || 'Economic growth and spending patterns'}
+              colorClass="text-emerald-400"
+            />
 
             {/* Site Score */}
-            <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-2">
-                <svg className="w-16 h-16 transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" fill="none" stroke="var(--bg-secondary)" strokeWidth="6" />
-                  <circle
-                    cx="32" cy="32" r="28" fill="none"
-                    stroke={feasibilityScore.breakdown.siteScore >= 7 ? '#22c55e' : feasibilityScore.breakdown.siteScore >= 5 ? '#eab308' : '#ef4444'}
-                    strokeWidth="6"
-                    strokeDasharray={`${feasibilityScore.breakdown.siteScore * 17.6} 176`}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
-                  {feasibilityScore.breakdown.siteScore}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-amber-400">Site</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                <span aria-hidden="true">{getScoreLabelAndIcon(feasibilityScore.breakdown.siteScore).icon}</span>
-                {' '}{getScoreLabelAndIcon(feasibilityScore.breakdown.siteScore).label}
-              </p>
-            </div>
+            <ScoreCircle
+              score={feasibilityScore.breakdown.siteScore}
+              label="Site"
+              details={feasibilityScore.details?.site || 'Lot size and site characteristics'}
+              colorClass="text-amber-400"
+            />
           </div>
 
           {/* Details */}

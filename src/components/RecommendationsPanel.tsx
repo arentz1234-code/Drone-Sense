@@ -136,12 +136,22 @@ export default function RecommendationsPanel({
       ap.roadType?.includes('primary')
     );
 
-    // Format nearby businesses
-    const nearbyBusinesses = businesses.map(b => ({
-      name: b.name,
-      type: b.type || 'business',
-      distance: b.distance || 0,
-    }));
+    // Format nearby businesses - parse distance string to number
+    const nearbyBusinesses = businesses.map(b => {
+      // Parse distance like "0.3 mi" or "1.2 miles" to number
+      let distanceNum = 0;
+      if (typeof b.distance === 'string') {
+        const match = b.distance.match(/[\d.]+/);
+        if (match) distanceNum = parseFloat(match[0]);
+      } else if (typeof b.distance === 'number') {
+        distanceNum = b.distance;
+      }
+      return {
+        name: b.name,
+        type: b.type || 'business',
+        distance: distanceNum,
+      };
+    });
 
     // Flood risk
     const floodRisk = environmentalRisk?.floodZone?.risk as 'low' | 'medium' | 'high' | null;
