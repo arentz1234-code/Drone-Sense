@@ -4,8 +4,8 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import Header from '@/components/Header';
 
 export const metadata: Metadata = {
-  title: 'Drone Sense - AI Site Analysis Terminal',
-  description: 'AI-powered drone site analysis for commercial development',
+  title: 'Feasora.ai - AI Site Analysis Platform',
+  description: 'AI-powered site analysis for commercial real estate development',
 };
 
 export default function RootLayout({

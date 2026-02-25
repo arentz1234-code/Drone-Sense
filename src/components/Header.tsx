@@ -50,14 +50,22 @@ export default function Header() {
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity">
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-              <svg className="w-5 h-5 md:w-6 md:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            <div className="relative">
+              <svg className="w-8 h-8 md:w-10 md:h-10 text-[#00D4FF]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" fill="currentColor" />
+                <line x1="12" y1="2" x2="12" y2="6" />
+                <line x1="12" y1="18" x2="12" y2="22" />
+                <line x1="2" y1="12" x2="6" y2="12" />
+                <line x1="18" y1="12" x2="22" y2="12" />
               </svg>
             </div>
             <div>
-              <h1 className="text-base md:text-lg font-bold text-[var(--text-primary)]">DRONE SENSE</h1>
-              <p className="text-[10px] md:text-xs text-[var(--text-muted)] hidden sm:block">AI Site Analysis Terminal v1.0</p>
+              <h1 className="text-base md:text-lg font-bold text-[var(--text-primary)]">
+                Feasora<span className="text-[#00D4FF]">.ai</span>
+              </h1>
+              <p className="text-[10px] md:text-xs text-[var(--text-muted)] hidden sm:block">AI Site Analysis Platform</p>
             </div>
           </Link>
 

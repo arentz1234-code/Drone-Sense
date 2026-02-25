@@ -105,7 +105,7 @@ export default function PDFReportGenerator({
       doc.setTextColor(...textWhite);
       doc.setFontSize(32);
       doc.setFont('helvetica', 'bold');
-      doc.text('DRONE SENSE', pageWidth / 2, 50, { align: 'center' });
+      doc.text('FEASORA.AI', pageWidth / 2, 50, { align: 'center' });
 
       doc.setFontSize(14);
       doc.setTextColor(...textMuted);
@@ -197,7 +197,7 @@ export default function PDFReportGenerator({
       doc.setTextColor(...primaryColor);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      doc.text('DRONE SENSE | Site Analysis Report', margin, 8);
+      doc.text('FEASORA.AI | Site Analysis Report', margin, 8);
       doc.setTextColor(...textMuted);
       doc.text(address.substring(0, 50) + (address.length > 50 ? '...' : ''), pageWidth - margin, 8, { align: 'right' });
 
@@ -936,14 +936,14 @@ export default function PDFReportGenerator({
         doc.text('Confidential - For authorized use only', margin, pageHeight - 5);
         doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
         doc.setTextColor(...primaryColor);
-        doc.text('DRONE SENSE', pageWidth / 2, pageHeight - 5, { align: 'center' });
+        doc.text('FEASORA.AI', pageWidth / 2, pageHeight - 5, { align: 'center' });
       }
 
       setProgress(100);
       setCurrentStep('Complete!');
 
       // Save PDF
-      const fileName = `DroneSense-Report-${address.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 30)}-${new Date().toISOString().split('T')[0]}.pdf`;
+      const fileName = `Feasora-Report-${address.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 30)}-${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(fileName);
 
       setTimeout(() => {

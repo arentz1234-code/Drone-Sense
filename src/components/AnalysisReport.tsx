@@ -213,7 +213,7 @@ export default function AnalysisReport({
 
     // Create a printable version
     const printContent = `
-      DRONE SENSE - SITE ANALYSIS REPORT
+      FEASORA.AI - SITE ANALYSIS REPORT
       ===================================
 
       Property: ${address}
