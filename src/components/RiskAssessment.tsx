@@ -100,7 +100,7 @@ export default function RiskAssessment({ coordinates, environmentalRisk }: RiskA
             </h4>
             <span className={getRiskIndicatorClass(environmentalRisk.floodZone.risk)}>
               <span aria-hidden="true">{getRiskIcon(environmentalRisk.floodZone.risk)}</span>{' '}
-              {environmentalRisk.floodZone.risk.toUpperCase()}
+              {(environmentalRisk.floodZone.risk || 'UNKNOWN').toUpperCase()}
             </span>
           </div>
           <div className="space-y-2 text-sm">

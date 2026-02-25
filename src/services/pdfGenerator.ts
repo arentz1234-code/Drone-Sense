@@ -285,7 +285,7 @@ ${reportData.coordinates ? `Coordinates: ${reportData.coordinates.lat.toFixed(6)
   const sections = reportData.sections.map(section => {
     const divider = '='.repeat(80);
     return `${divider}
-${section.title.toUpperCase()}
+${(section.title || 'SECTION').toUpperCase()}
 ${divider}
 
 ${section.content}

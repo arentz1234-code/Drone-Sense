@@ -838,7 +838,7 @@ export default function MapView({
                     ? 'bg-yellow-500/20 text-yellow-400'
                     : 'bg-green-500/20 text-green-400'
                 }`}>
-                  {environmentalRisk.floodZone.risk.toUpperCase()} RISK
+                  {(environmentalRisk.floodZone.risk || 'UNKNOWN').toUpperCase()} RISK
                 </span>
               </div>
               <p className="text-xs text-[var(--text-muted)] mt-1">{environmentalRisk.floodZone.description}</p>

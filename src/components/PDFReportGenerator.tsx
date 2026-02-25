@@ -599,7 +599,7 @@ export default function PDFReportGenerator({
           margin: { left: margin, right: margin },
           head: [['Risk Category', 'Status', 'Details']],
           body: [
-            ['Flood Zone', `${env.floodZone.zone} (${env.floodZone.risk.toUpperCase()})`, env.floodZone.description],
+            ['Flood Zone', `${env.floodZone.zone} (${(env.floodZone.risk || 'UNKNOWN').toUpperCase()})`, env.floodZone.description],
             ['Wetlands', env.wetlands.present ? 'PRESENT' : 'None', env.wetlands.present ? 'Within 500m of property' : 'No wetlands detected'],
             ['Brownfields', env.brownfields.present ? `${env.brownfields.count} site(s)` : 'None', env.brownfields.present ? 'Within 1 mile' : 'No contaminated sites'],
             ['Superfund Sites', env.superfund.present ? `${env.superfund.count} site(s)` : 'None', env.superfund.present ? 'Requires review' : 'No superfund sites nearby'],

@@ -180,7 +180,7 @@ export default function LocationIntelligence({ coordinates, onDataLoaded }: Loca
                   ? 'bg-purple-500/20 text-purple-400'
                   : 'bg-yellow-500/20 text-yellow-400'
             }`}>
-              {daytimePopulation.populationType.charAt(0).toUpperCase() + daytimePopulation.populationType.slice(1)}
+              {(daytimePopulation.populationType || 'Unknown').charAt(0).toUpperCase() + (daytimePopulation.populationType || 'unknown').slice(1)}
             </span>
           </div>
 

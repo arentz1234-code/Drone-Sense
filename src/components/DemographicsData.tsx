@@ -184,7 +184,7 @@ export default function DemographicsData({ coordinates, onDataLoad }: Demographi
                 {formatIncome(demographics.medianHouseholdIncome)}
               </p>
               <p className={`text-sm font-medium mt-1 ${getIncomeLevelColor(demographics.incomeLevel)}`}>
-                {demographics.incomeLevel.replace('-', ' ').toUpperCase()} INCOME AREA
+                {(demographics.incomeLevel || 'MIDDLE').replace('-', ' ').toUpperCase()} INCOME AREA
                 {demographics.isCollegeTown && (
                   <span className="text-purple-400 ml-2">(Student-skewed)</span>
                 )}
