@@ -2724,14 +2724,19 @@ INCOME-BASED TARGETING:
       prelimStateCode = prelimStateMatch[1];
     }
 
-    if (trafficData) {
+    // Calculate effective VPD early - use actual VPD or fall back to 15000 if 0 or missing
+    const prelimEffectiveVPD = (trafficData?.estimatedVPD && trafficData.estimatedVPD > 0)
+      ? trafficData.estimatedVPD
+      : 15000;
+
+    if (trafficData || prelimEffectiveVPD > 0) {
       // Initial recommendations for the prompt (will be recalculated with lot size after AI response)
-      topRecommendations = generateTopRecommendations(trafficData.estimatedVPD, nearbyBusinesses, demographicsData, null, null, prelimStateCode, false, null, locationIntelligence, enhancedData);
+      topRecommendations = generateTopRecommendations(prelimEffectiveVPD, nearbyBusinesses, demographicsData, null, null, prelimStateCode, false, null, locationIntelligence, enhancedData);
 
       trafficContext = `\n\nTraffic Data:
-- Estimated VPD (Vehicles Per Day): ${trafficData.estimatedVPD.toLocaleString()}
-- VPD Range: ${trafficData.vpdRange}
-- Road Type: ${trafficData.roadType}
+- Estimated VPD (Vehicles Per Day): ${prelimEffectiveVPD.toLocaleString()}${trafficData?.estimatedVPD === 0 ? ' (estimated default)' : ''}
+- VPD Range: ${trafficData?.vpdRange || 'N/A'}
+- Road Type: ${trafficData?.roadType || 'Unknown'}
 
 VPD Guidelines for Business Types:
 - Big Box Stores (Walmart, Target): 25,000-35,000+ VPD ideal
@@ -2883,10 +2888,16 @@ Return ONLY valid JSON, no markdown or explanation.`;
     const buildingSqFt = analysis.estimatedLotSize ?
       Math.round(analysis.estimatedLotSize * 43560 * 0.25) : null; // Assume 25% coverage
 
-    if (trafficData) {
-      console.log(`[Analyze] Calling calculateBusinessSuitability with VPD=${trafficData.estimatedVPD}`);
+    // Use actual VPD or fall back to 15000 if 0 or missing
+    const effectiveVPD = (trafficData?.estimatedVPD && trafficData.estimatedVPD > 0)
+      ? trafficData.estimatedVPD
+      : 15000;
+
+    console.log(`[Analyze] Effective VPD for analysis: ${effectiveVPD} (raw: ${trafficData?.estimatedVPD})`);
+
+    if (trafficData || effectiveVPD > 0) {
       businessSuitability = calculateBusinessSuitability(
-        trafficData.estimatedVPD,
+        effectiveVPD,
         nearbyBusinesses,
         demographicsData,
         finalLotSizeAcres,
@@ -2894,7 +2905,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
         locationIntelligence
       );
       topRecommendations = generateTopRecommendations(
-        trafficData.estimatedVPD,
+        effectiveVPD,
         nearbyBusinesses,
         demographicsData,
         finalLotSizeAcres,
@@ -2928,7 +2939,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     const retailerMatches = calculateRetailerMatches(
       finalLotSizeAcres,
-      trafficData?.estimatedVPD || null,
+      effectiveVPD,
       demographicsData?.medianHouseholdIncome || null,
       demographicsData?.incomeLevel || null,
       demographicsData?.population || null,
