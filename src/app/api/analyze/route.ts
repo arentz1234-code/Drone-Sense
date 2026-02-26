@@ -2169,11 +2169,30 @@ function generateTopRecommendations(
 
     // ============ HARD FILTERS - SKIP IF SITE DOESN'T FIT ============
 
-    // HARD FILTER 1: Lot size too small - SKIP entirely
+    // HARD FILTER 1a: Lot size too small - SKIP entirely
     if (lotSizeAcres !== null && lotSizeAcres > 0) {
       if (lotSizeAcres < retailer.minLotSize * 0.7) {
         // Lot is more than 30% below minimum - impossible to fit
         continue;
+      }
+    }
+
+    // HARD FILTER 1b: Lot size way too big for small-footprint businesses - SKIP entirely
+    // An 18-acre lot should NOT suggest businesses that need 0.5-2 acres
+    if (lotSizeAcres !== null && lotSizeAcres > 0 && retailer.maxLotSize) {
+      // Skip if lot is more than 3x larger than the retailer's max lot size
+      if (lotSizeAcres > retailer.maxLotSize * 3) {
+        continue;
+      }
+      // More aggressive filtering for very large lots
+      if (lotSizeAcres >= 15 && retailer.maxLotSize < 5) {
+        continue; // 15+ acre lot: skip businesses with max <5 acres
+      }
+      if (lotSizeAcres >= 10 && retailer.maxLotSize < 3) {
+        continue; // 10+ acre lot: skip businesses with max <3 acres
+      }
+      if (lotSizeAcres >= 5 && retailer.maxLotSize < 1.5) {
+        continue; // 5+ acre lot: skip businesses with max <1.5 acres
       }
     }
 
