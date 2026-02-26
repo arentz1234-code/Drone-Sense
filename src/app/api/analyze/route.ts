@@ -2884,6 +2884,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       Math.round(analysis.estimatedLotSize * 43560 * 0.25) : null; // Assume 25% coverage
 
     if (trafficData) {
+      console.log(`[Analyze] Calling calculateBusinessSuitability with VPD=${trafficData.estimatedVPD}`);
       businessSuitability = calculateBusinessSuitability(
         trafficData.estimatedVPD,
         nearbyBusinesses,
