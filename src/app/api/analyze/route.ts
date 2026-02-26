@@ -1765,22 +1765,30 @@ function calculateBusinessSuitability(
       continue;
     }
 
-    // CRITICAL: Skip small-footprint businesses on large lots
-    // These concepts are poor use of land - an 18-acre lot shouldn't suggest a 0.25-acre hair salon
+    // CRITICAL: For large lots, only show businesses that NEED large lots
+    // Filter based on MINIMUM lot requirement - small businesses shouldn't show on large lots
     if (lotSizeAcres !== null && threshold.lotSize) {
-      // Skip if lot is 4x+ larger than the concept's ideal size
-      if (lotSizeAcres > threshold.lotSize.ideal * 4) {
+      // For very large lots (15+ acres): only show businesses needing 8+ acres minimum
+      if (lotSizeAcres >= 15 && threshold.lotSize.min < 8) {
         continue;
       }
-      // More aggressive filtering for very large lots
-      if (lotSizeAcres >= 15 && threshold.lotSize.ideal < 5) {
-        continue; // 15+ acre lot: skip concepts needing <5 acres
+      // For large lots (10-15 acres): only show businesses needing 5+ acres minimum
+      if (lotSizeAcres >= 10 && lotSizeAcres < 15 && threshold.lotSize.min < 5) {
+        continue;
       }
-      if (lotSizeAcres >= 10 && threshold.lotSize.ideal < 3) {
-        continue; // 10+ acre lot: skip concepts needing <3 acres
+      // For medium-large lots (7-10 acres): only show businesses needing 3+ acres minimum
+      if (lotSizeAcres >= 7 && lotSizeAcres < 10 && threshold.lotSize.min < 3) {
+        continue;
       }
-      if (lotSizeAcres >= 5 && threshold.lotSize.ideal < 1) {
-        continue; // 5+ acre lot: skip concepts needing <1 acre
+      // For medium lots (5-7 acres): only show businesses needing 2+ acres minimum
+      if (lotSizeAcres >= 5 && lotSizeAcres < 7 && threshold.lotSize.min < 2) {
+        continue;
+      }
+      // For small lots (<5 acres): strict matching - must be within range
+      if (lotSizeAcres < 5) {
+        if (lotSizeAcres < threshold.lotSize.min * 0.8) {
+          continue; // Lot too small
+        }
       }
     }
 
@@ -2177,22 +2185,36 @@ function generateTopRecommendations(
       }
     }
 
-    // HARD FILTER 1b: Lot size way too big for small-footprint businesses - SKIP entirely
-    // An 18-acre lot should NOT suggest businesses that need 0.5-2 acres
-    if (lotSizeAcres !== null && lotSizeAcres > 0 && retailer.maxLotSize) {
-      // Skip if lot is more than 3x larger than the retailer's max lot size
-      if (lotSizeAcres > retailer.maxLotSize * 3) {
+    // HARD FILTER 1b: For large lots, only show businesses that NEED large lots
+    // Small lots need strict matching; large lots should show large-footprint businesses
+    // Key: Filter based on MINIMUM lot requirement - if a business only needs 0.5 acres,
+    // it shouldn't be suggested for an 18-acre lot
+    if (lotSizeAcres !== null && lotSizeAcres > 0) {
+      // For very large lots (15+ acres): only show businesses that need 8+ acres minimum
+      if (lotSizeAcres >= 15 && retailer.minLotSize < 8) {
         continue;
       }
-      // More aggressive filtering for very large lots
-      if (lotSizeAcres >= 15 && retailer.maxLotSize < 5) {
-        continue; // 15+ acre lot: skip businesses with max <5 acres
+      // For large lots (10-15 acres): only show businesses that need 5+ acres minimum
+      if (lotSizeAcres >= 10 && lotSizeAcres < 15 && retailer.minLotSize < 5) {
+        continue;
       }
-      if (lotSizeAcres >= 10 && retailer.maxLotSize < 3) {
-        continue; // 10+ acre lot: skip businesses with max <3 acres
+      // For medium-large lots (7-10 acres): only show businesses that need 3+ acres minimum
+      if (lotSizeAcres >= 7 && lotSizeAcres < 10 && retailer.minLotSize < 3) {
+        continue;
       }
-      if (lotSizeAcres >= 5 && retailer.maxLotSize < 1.5) {
-        continue; // 5+ acre lot: skip businesses with max <1.5 acres
+      // For medium lots (5-7 acres): only show businesses that need 2+ acres minimum
+      if (lotSizeAcres >= 5 && lotSizeAcres < 7 && retailer.minLotSize < 2) {
+        continue;
+      }
+      // For small-medium lots (3-5 acres): looser matching, show 1+ acre businesses
+      if (lotSizeAcres >= 3 && lotSizeAcres < 5 && retailer.minLotSize < 1) {
+        continue;
+      }
+      // For small lots (<3 acres): strict matching - lot must be within retailer's range
+      if (lotSizeAcres < 3) {
+        if (lotSizeAcres < retailer.minLotSize * 0.8 || lotSizeAcres > retailer.maxLotSize * 1.5) {
+          continue;
+        }
       }
     }
 
