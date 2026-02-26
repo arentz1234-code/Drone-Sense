@@ -1765,6 +1765,25 @@ function calculateBusinessSuitability(
       continue;
     }
 
+    // CRITICAL: Skip small-footprint businesses on large lots
+    // These concepts are poor use of land - an 18-acre lot shouldn't suggest a 0.25-acre hair salon
+    if (lotSizeAcres !== null && threshold.lotSize) {
+      // Skip if lot is 4x+ larger than the concept's ideal size
+      if (lotSizeAcres > threshold.lotSize.ideal * 4) {
+        continue;
+      }
+      // More aggressive filtering for very large lots
+      if (lotSizeAcres >= 15 && threshold.lotSize.ideal < 5) {
+        continue; // 15+ acre lot: skip concepts needing <5 acres
+      }
+      if (lotSizeAcres >= 10 && threshold.lotSize.ideal < 3) {
+        continue; // 10+ acre lot: skip concepts needing <3 acres
+      }
+      if (lotSizeAcres >= 5 && threshold.lotSize.ideal < 1) {
+        continue; // 5+ acre lot: skip concepts needing <1 acre
+      }
+    }
+
     let score = 0;
     let reasoning = '';
     let lotSizeIssue: string | undefined;
@@ -1802,10 +1821,15 @@ function calculateBusinessSuitability(
 
     // Check lot size fit
     if (lotSizeAcres !== null && threshold.lotSize) {
-      if (lotSizeAcres >= threshold.lotSize.ideal) {
-        // Lot is ideal size or larger - bonus
+      const lotRatio = lotSizeAcres / threshold.lotSize.ideal;
+
+      if (lotRatio >= 1 && lotRatio <= 2) {
+        // Lot is ideal size or up to 2x - this is the sweet spot
         score = Math.min(10, score + 1);
-        reasoning += `. Lot size (${lotSizeAcres.toFixed(2)} acres) is ideal for this concept`;
+        reasoning += `. Lot size (${lotSizeAcres.toFixed(2)} acres) is ideal for this concept (needs ${threshold.lotSize.ideal} acres)`;
+      } else if (lotRatio > 2 && lotRatio <= 4) {
+        // Lot is 2-4x larger than needed - acceptable but not optimal
+        reasoning += `. Lot size (${lotSizeAcres.toFixed(2)} acres) exceeds need (${threshold.lotSize.ideal} acres ideal)`;
       } else if (lotSizeAcres >= threshold.lotSize.min) {
         // Lot meets minimum - no change to score
         reasoning += `. Lot size (${lotSizeAcres.toFixed(2)} acres) meets minimum requirements`;
