@@ -2638,7 +2638,7 @@ export async function POST(request: Request) {
 
   try {
     const body: AnalyzeRequest = await request.json();
-    const { images, selectedParcel, locationIntelligence } = body;
+    const { images, selectedParcel, locationIntelligence, accessPoints } = body;
 
     // Assign to outer scope variables
     nearbyBusinesses = body.nearbyBusinesses || [];
@@ -2649,6 +2649,11 @@ export async function POST(request: Request) {
     marketComps = body.marketComps || null;
     enhancedData = body.enhancedData || null;
 
+    // Calculate best VPD from access points (FDOT data) if available
+    const accessPointsVPD = accessPoints && accessPoints.length > 0
+      ? Math.max(...accessPoints.map((ap: { vpd?: number; estimatedVpd?: number }) => ap.vpd || ap.estimatedVpd || 0))
+      : 0;
+
     // Extract lot size from parcel info
     lotSizeAcres = selectedParcel?.parcelInfo?.acres || null;
 
@@ -2658,6 +2663,7 @@ export async function POST(request: Request) {
     console.log(`[Analyze] Lot Size: ${lotSizeAcres ? lotSizeAcres.toFixed(2) + ' acres' : 'N/A'}`);
     console.log(`[Analyze] Zoning: ${selectedParcel?.parcelInfo?.zoning || 'N/A'}`);
     console.log(`[Analyze] Traffic VPD: ${trafficData?.estimatedVPD || 'N/A'}`);
+    console.log(`[Analyze] Access Points VPD: ${accessPointsVPD || 'N/A'}`);
     console.log(`[Analyze] Demographics: Pop=${demographicsData?.population || 'N/A'}, Income=$${demographicsData?.medianHouseholdIncome || 'N/A'}, Level=${demographicsData?.incomeLevel || 'N/A'}`);
     console.log(`[Analyze] Consumer Spending: $${demographicsData?.consumerSpending ? (demographicsData.consumerSpending / 1000000).toFixed(1) + 'M' : 'N/A'}`);
     console.log(`[Analyze] Highway Access: ${locationIntelligence?.highwayAccess?.distanceMiles?.toFixed(1) || 'N/A'} miles`);
@@ -2724,17 +2730,21 @@ INCOME-BASED TARGETING:
       prelimStateCode = prelimStateMatch[1];
     }
 
-    // Calculate effective VPD early - use actual VPD or fall back to 15000 if 0 or missing
-    const prelimEffectiveVPD = (trafficData?.estimatedVPD && trafficData.estimatedVPD > 0)
-      ? trafficData.estimatedVPD
-      : 15000;
+    // Calculate effective VPD early - prioritize access points VPD (FDOT), then trafficData, then fallback to 15000
+    const prelimEffectiveVPD = accessPointsVPD > 0
+      ? accessPointsVPD
+      : (trafficData?.estimatedVPD && trafficData.estimatedVPD > 0)
+        ? trafficData.estimatedVPD
+        : 15000;
 
-    if (trafficData || prelimEffectiveVPD > 0) {
+    console.log(`[Analyze] Using effective VPD: ${prelimEffectiveVPD} (accessPoints: ${accessPointsVPD}, trafficData: ${trafficData?.estimatedVPD || 0})`);
+
+    if (prelimEffectiveVPD > 0) {
       // Initial recommendations for the prompt (will be recalculated with lot size after AI response)
       topRecommendations = generateTopRecommendations(prelimEffectiveVPD, nearbyBusinesses, demographicsData, null, null, prelimStateCode, false, null, locationIntelligence, enhancedData);
 
       trafficContext = `\n\nTraffic Data:
-- Estimated VPD (Vehicles Per Day): ${prelimEffectiveVPD.toLocaleString()}${trafficData?.estimatedVPD === 0 ? ' (estimated default)' : ''}
+- Estimated VPD (Vehicles Per Day): ${prelimEffectiveVPD.toLocaleString()}${accessPointsVPD > 0 ? ' (from FDOT access points)' : trafficData?.estimatedVPD === 0 ? ' (estimated default)' : ''}
 - VPD Range: ${trafficData?.vpdRange || 'N/A'}
 - Road Type: ${trafficData?.roadType || 'Unknown'}
 
@@ -2888,14 +2898,16 @@ Return ONLY valid JSON, no markdown or explanation.`;
     const buildingSqFt = analysis.estimatedLotSize ?
       Math.round(analysis.estimatedLotSize * 43560 * 0.25) : null; // Assume 25% coverage
 
-    // Use actual VPD or fall back to 15000 if 0 or missing
-    const effectiveVPD = (trafficData?.estimatedVPD && trafficData.estimatedVPD > 0)
-      ? trafficData.estimatedVPD
-      : 15000;
+    // Use access points VPD (FDOT) first, then trafficData, then fallback to 15000
+    const effectiveVPD = accessPointsVPD > 0
+      ? accessPointsVPD
+      : (trafficData?.estimatedVPD && trafficData.estimatedVPD > 0)
+        ? trafficData.estimatedVPD
+        : 15000;
 
-    console.log(`[Analyze] Effective VPD for analysis: ${effectiveVPD} (raw: ${trafficData?.estimatedVPD})`);
+    console.log(`[Analyze] Effective VPD for analysis: ${effectiveVPD} (accessPoints: ${accessPointsVPD}, trafficData: ${trafficData?.estimatedVPD})`);
 
-    if (trafficData || effectiveVPD > 0) {
+    if (effectiveVPD > 0) {
       businessSuitability = calculateBusinessSuitability(
         effectiveVPD,
         nearbyBusinesses,

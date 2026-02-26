@@ -556,6 +556,7 @@ export default function HomePage() {
           coordinates: selectedParcel?.isConfirmed ? selectedParcel.coordinates : coordinates,
           nearbyBusinesses: businesses,
           trafficData,
+          accessPoints,  // Include access points for accurate VPD
           demographicsData,
           environmentalRisk,
           marketComps,
