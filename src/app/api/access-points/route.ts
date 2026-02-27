@@ -502,7 +502,7 @@ async function findAccessPoints(
             continue;
           }
 
-          if (distance <= 20) { // Only roads within 20m of parcel boundary
+          if (distance <= 35) { // Roads within 35m of parcel boundary (increased for corner lots)
             const roadDirection = calculateBearing([geom.lon, geom.lat], [nextGeom.lon, nextGeom.lat]);
             const nearestEdge = findNearestEdge([geom.lat, geom.lon], parcelBoundary);
             const isPerpendicular = nearestEdge ?
@@ -530,6 +530,56 @@ async function findAccessPoints(
               distance: bestCandidate.distance,
             });
             console.log(`[AccessPoints] Proximity: ${roadName} (${roadType}) - ${Math.round(bestCandidate.distance)}m${bestCandidate.isPerpendicular ? ' [perpendicular]' : ''}`);
+          }
+        }
+      }
+
+      // Method 3: For corner lots, check if road runs alongside any parcel edge
+      // This catches roads that run parallel to the parcel but don't intersect or come within proximity
+      if (!seenRoads.has(roadName)) {
+        const roadLineCoords = road.geometry.map(g => [g.lon, g.lat] as [number, number]);
+        if (roadLineCoords.length >= 2) {
+          const roadLine = turf.lineString(roadLineCoords);
+
+          // Check each parcel edge for parallel/adjacent roads
+          for (let i = 0; i < parcelBoundary.length - 1; i++) {
+            const edgeStart = parcelBoundary[i];
+            const edgeEnd = parcelBoundary[i + 1];
+            const edgeLine = turf.lineString([[edgeStart[1], edgeStart[0]], [edgeEnd[1], edgeEnd[0]]]);
+
+            // Find distance from edge midpoint to road
+            const edgeMidpoint = turf.midpoint(
+              turf.point([edgeStart[1], edgeStart[0]]),
+              turf.point([edgeEnd[1], edgeEnd[0]])
+            );
+
+            try {
+              const distToRoad = turf.pointToLineDistance(edgeMidpoint, roadLine, { units: 'meters' });
+
+              // If road is within 50m of any parcel edge, it's likely providing access
+              if (distToRoad <= 50 && distToRoad > 0) {
+                // Find the closest point on the road to the edge midpoint
+                const nearestOnRoad = turf.nearestPointOnLine(roadLine, edgeMidpoint);
+                const [lng, lat] = nearestOnRoad.geometry.coordinates;
+
+                const coordKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+                if (!seenCoords.has(coordKey)) {
+                  seenCoords.add(coordKey);
+                  seenRoads.set(roadName, distToRoad);
+                  accessPoints.push({
+                    coordinates: [lat, lng],
+                    roadName,
+                    type: 'access',
+                    roadType,
+                    distance: distToRoad,
+                  });
+                  console.log(`[AccessPoints] Adjacent road: ${roadName} (${roadType}) - ${Math.round(distToRoad)}m from parcel edge`);
+                  break; // Found access for this road, move to next
+                }
+              }
+            } catch {
+              // Ignore geometry errors
+            }
           }
         }
       }
@@ -642,8 +692,9 @@ export async function POST(request: Request) {
     }
 
     // Calculate search radius based on parcel size (larger parcels need larger radius)
+    // Minimum 150m to ensure we catch corner lot situations where roads are nearby but not touching
     const parcelDiagonal = Math.sqrt(parcelAreaSqMeters);
-    const searchRadius = Math.max(100, Math.min(300, parcelDiagonal * 1.5));
+    const searchRadius = Math.max(150, Math.min(350, parcelDiagonal * 2));
 
     console.log(`[AccessPoints] Processing parcel with ${parcelBoundary.length} vertices (${Math.round(parcelAreaSqMeters)} sq m) at ${coordinates.lat},${coordinates.lng}, radius: ${Math.round(searchRadius)}m`);
 
