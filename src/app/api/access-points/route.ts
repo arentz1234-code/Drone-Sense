@@ -485,100 +485,54 @@ async function findAccessPoints(
         // Intersection check failed, continue with proximity check
       }
 
-      // Method 2: For roads that don't intersect, find the point closest to parcel
-      // that is also perpendicular to the parcel edge (likely entrance)
-      if (!seenRoads.has(roadName)) {
-        let bestCandidate: { coords: [number, number]; distance: number; isPerpendicular: boolean } | null = null;
-
-        for (let i = 0; i < road.geometry.length - 1; i++) {
-          const geom = road.geometry[i];
-          const nextGeom = road.geometry[i + 1];
-          const point = turf.point([geom.lon, geom.lat]);
-
-          let distance: number;
-          try {
-            distance = turf.pointToLineDistance(point, parcelLine as GeoJSON.Feature<GeoJSON.LineString>, { units: 'meters' });
-          } catch {
-            continue;
-          }
-
-          if (distance <= 35) { // Roads within 35m of parcel boundary (increased for corner lots)
-            const roadDirection = calculateBearing([geom.lon, geom.lat], [nextGeom.lon, nextGeom.lat]);
-            const nearestEdge = findNearestEdge([geom.lat, geom.lon], parcelBoundary);
-            const isPerpendicular = nearestEdge ?
-              isPerpendicularToEdge([geom.lat, geom.lon], roadDirection, nearestEdge.start, nearestEdge.end) : false;
-
-            // Prioritize perpendicular points, then by distance
-            if (!bestCandidate ||
-                (isPerpendicular && !bestCandidate.isPerpendicular) ||
-                (isPerpendicular === bestCandidate.isPerpendicular && distance < bestCandidate.distance)) {
-              bestCandidate = { coords: [geom.lat, geom.lon], distance, isPerpendicular };
-            }
-          }
-        }
-
-        if (bestCandidate) {
-          const coordKey = `${bestCandidate.coords[0].toFixed(5)},${bestCandidate.coords[1].toFixed(5)}`;
-          if (!seenCoords.has(coordKey)) {
-            seenCoords.add(coordKey);
-            seenRoads.set(roadName, bestCandidate.distance);
-            accessPoints.push({
-              coordinates: bestCandidate.coords,
-              roadName,
-              type: 'access',
-              roadType,
-              distance: bestCandidate.distance,
-            });
-            console.log(`[AccessPoints] Proximity: ${roadName} (${roadType}) - ${Math.round(bestCandidate.distance)}m${bestCandidate.isPerpendicular ? ' [perpendicular]' : ''}`);
-          }
-        }
-      }
-
-      // Method 3: For corner lots, check if road runs alongside any parcel edge
-      // This catches roads that run parallel to the parcel but don't intersect or come within proximity
+      // Method 2: For roads that don't directly intersect, find the closest point ON THE PARCEL BOUNDARY
+      // where the road comes closest - this ensures the marker is always on the parcel edge
       if (!seenRoads.has(roadName)) {
         const roadLineCoords = road.geometry.map(g => [g.lon, g.lat] as [number, number]);
         if (roadLineCoords.length >= 2) {
           const roadLine = turf.lineString(roadLineCoords);
 
-          // Check each parcel edge for parallel/adjacent roads
+          // For each edge of the parcel, find the closest point to the road
+          let bestEdgePoint: { coords: [number, number]; distance: number } | null = null;
+
           for (let i = 0; i < parcelBoundary.length - 1; i++) {
             const edgeStart = parcelBoundary[i];
             const edgeEnd = parcelBoundary[i + 1];
-            const edgeLine = turf.lineString([[edgeStart[1], edgeStart[0]], [edgeEnd[1], edgeEnd[0]]]);
 
-            // Find distance from edge midpoint to road
-            const edgeMidpoint = turf.midpoint(
-              turf.point([edgeStart[1], edgeStart[0]]),
-              turf.point([edgeEnd[1], edgeEnd[0]])
-            );
+            // Check multiple points along this edge
+            for (let t = 0; t <= 1; t += 0.1) {
+              const pointLat = edgeStart[0] + t * (edgeEnd[0] - edgeStart[0]);
+              const pointLng = edgeStart[1] + t * (edgeEnd[1] - edgeStart[1]);
+              const edgePoint = turf.point([pointLng, pointLat]);
 
-            try {
-              const distToRoad = turf.pointToLineDistance(edgeMidpoint, roadLine, { units: 'meters' });
+              try {
+                const distToRoad = turf.pointToLineDistance(edgePoint, roadLine, { units: 'meters' });
 
-              // If road is within 50m of any parcel edge, it's likely providing access
-              if (distToRoad <= 50 && distToRoad > 0) {
-                // Find the closest point on the road to the edge midpoint
-                const nearestOnRoad = turf.nearestPointOnLine(roadLine, edgeMidpoint);
-                const [lng, lat] = nearestOnRoad.geometry.coordinates;
-
-                const coordKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
-                if (!seenCoords.has(coordKey)) {
-                  seenCoords.add(coordKey);
-                  seenRoads.set(roadName, distToRoad);
-                  accessPoints.push({
-                    coordinates: [lat, lng],
-                    roadName,
-                    type: 'access',
-                    roadType,
-                    distance: distToRoad,
-                  });
-                  console.log(`[AccessPoints] Adjacent road: ${roadName} (${roadType}) - ${Math.round(distToRoad)}m from parcel edge`);
-                  break; // Found access for this road, move to next
+                // Only consider if road is within 25m of this parcel edge point
+                if (distToRoad <= 25) {
+                  if (!bestEdgePoint || distToRoad < bestEdgePoint.distance) {
+                    bestEdgePoint = { coords: [pointLat, pointLng], distance: distToRoad };
+                  }
                 }
+              } catch {
+                continue;
               }
-            } catch {
-              // Ignore geometry errors
+            }
+          }
+
+          if (bestEdgePoint) {
+            const coordKey = `${bestEdgePoint.coords[0].toFixed(5)},${bestEdgePoint.coords[1].toFixed(5)}`;
+            if (!seenCoords.has(coordKey)) {
+              seenCoords.add(coordKey);
+              seenRoads.set(roadName, bestEdgePoint.distance);
+              accessPoints.push({
+                coordinates: bestEdgePoint.coords,
+                roadName,
+                type: 'access',
+                roadType,
+                distance: bestEdgePoint.distance,
+              });
+              console.log(`[AccessPoints] Edge point: ${roadName} (${roadType}) - ${Math.round(bestEdgePoint.distance)}m from road`);
             }
           }
         }
