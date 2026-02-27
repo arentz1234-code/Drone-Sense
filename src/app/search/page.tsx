@@ -120,6 +120,14 @@ function getAssetClass(zoning?: string): AssetClass {
   return 'Other';
 }
 
+// Quick search presets
+const QUICK_PRESETS = [
+  { label: 'High Traffic Retail', minScore: 7, propertyType: 'commercial' as const, businessType: 'fast_food' },
+  { label: 'Development Sites', minScore: 5, propertyType: 'vacant' as const, businessType: null },
+  { label: 'Medical/Office', minScore: 6, propertyType: 'commercial' as const, businessType: 'medical_clinic' },
+  { label: 'All Properties', minScore: 1, propertyType: 'all' as const, businessType: null },
+];
+
 export default function SearchPage() {
   // Filter state
   const [filters, setFilters] = useState<SearchFilters>({
@@ -145,12 +153,26 @@ export default function SearchPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [activePreset, setActivePreset] = useState<string | null>(null);
 
   // Compare state
   const [compareList, setCompareList] = useState<QuickFeasibility[]>([]);
 
   // Favorites hook
   const { favorites, isFavorite, toggleFavorite } = useSearchFavorites();
+
+  // Count active filters
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.minAcres !== null) count++;
+    if (filters.maxAcres !== null) count++;
+    if (filters.zoningTypes.length > 0) count++;
+    if (filters.minRoadFrontage) count++;
+    if (filters.cornerLotOnly) count++;
+    if (filters.businessType) count++;
+    if (filters.minScore > 1 || filters.maxScore < 10) count++;
+    return count;
+  }, [filters]);
 
   // Load persisted results from sessionStorage on mount
   useEffect(() => {
@@ -211,13 +233,41 @@ export default function SearchPage() {
     setCompareList([]);
     setError(null);
     setCollapsedClasses(new Set());
+    setActivePreset(null);
     sessionStorage.removeItem('batchSearchResults');
     sessionStorage.removeItem('batchSearchFilters');
     sessionStorage.removeItem('batchSearchCompareList');
   }, []);
 
+  // Apply quick preset
+  const applyPreset = useCallback((preset: typeof QUICK_PRESETS[0]) => {
+    setFilters(prev => ({
+      ...prev,
+      minScore: preset.minScore,
+      propertyType: preset.propertyType,
+      businessType: preset.businessType,
+    }));
+    setActivePreset(preset.label);
+
+    // Auto-apply business requirements if applicable
+    if (preset.businessType) {
+      const requirements = getBusinessRequirement(preset.businessType);
+      if (requirements) {
+        setFilters(prev => ({
+          ...prev,
+          minAcres: requirements.minAcres,
+          maxAcres: requirements.maxAcres,
+          zoningTypes: requirements.zoning,
+          minRoadFrontage: requirements.minRoadFrontage || null,
+          cornerLotOnly: requirements.preferCornerLot || false,
+        }));
+      }
+    }
+  }, []);
+
   // Update filters when business type changes
   const handleBusinessTypeChange = useCallback((businessType: string | null) => {
+    setActivePreset(null);
     if (!businessType) {
       setFilters(prev => ({
         ...prev,
@@ -243,6 +293,7 @@ export default function SearchPage() {
 
   // Handle zoning type toggle
   const handleZoningToggle = useCallback((zoningCode: string) => {
+    setActivePreset(null);
     setFilters(prev => ({
       ...prev,
       zoningTypes: prev.zoningTypes.includes(zoningCode)
@@ -443,6 +494,14 @@ export default function SearchPage() {
     return 'text-red-400 bg-red-400/20 border-red-400/50';
   };
 
+  // Score badge style
+  const getScoreBadgeStyle = (score: number) => {
+    if (score >= 8) return 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-green-500/25';
+    if (score >= 6) return 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-cyan-500/25';
+    if (score >= 4) return 'bg-gradient-to-br from-yellow-500 to-orange-500 text-white shadow-yellow-500/25';
+    return 'bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-red-500/25';
+  };
+
   // Export to CSV
   const exportToCSV = useCallback(() => {
     if (!results) return;
@@ -478,33 +537,56 @@ export default function SearchPage() {
   const businessTypeOptions = getBusinessTypeOptions();
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8">
+    <div className="min-h-screen bg-[var(--bg-primary)] flex flex-col">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-4 mb-2">
-          <Link href="/" className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </Link>
-          <h2 className="text-2xl font-bold">Property Search</h2>
+      <div className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)] flex-shrink-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/" className="flex items-center gap-3 group">
+                {/* Feasora Logo - Radar style */}
+                <div className="w-10 h-10 flex items-center justify-center">
+                  <svg viewBox="0 0 32 32" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {/* Outer circle */}
+                    <circle cx="16" cy="16" r="11" stroke="#00D4FF" strokeWidth="2" fill="none"/>
+                    {/* Middle circle */}
+                    <circle cx="16" cy="16" r="7" stroke="#00D4FF" strokeWidth="2" fill="none"/>
+                    {/* Inner circle */}
+                    <circle cx="16" cy="16" r="3.5" stroke="#00D4FF" strokeWidth="1.5" fill="none"/>
+                    {/* Center dot */}
+                    <circle cx="16" cy="16" r="1.5" fill="#00D4FF"/>
+                    {/* Radar sweep line */}
+                    <line x1="16" y1="16" x2="24" y2="8" stroke="#00D4FF" strokeWidth="2" strokeLinecap="round"/>
+                    {/* Detection dot on sweep */}
+                    <circle cx="21" cy="11" r="1.5" fill="#00D4FF"/>
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-[var(--text-primary)] group-hover:text-[var(--accent-cyan)] transition-colors">Property Search</h1>
+                  <p className="text-sm text-[var(--text-muted)]">Feasora.ai</p>
+                </div>
+              </Link>
+            </div>
+            {results && (
+              <button
+                onClick={resetSearch}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                New Search
+              </button>
+            )}
+          </div>
         </div>
-        <p className="text-[var(--text-secondary)]">
-          Search for properties within a radius - click the map or enter an address
-        </p>
       </div>
 
-      {/* Search Form */}
-      <div className="terminal-card mb-8">
-        <div className="terminal-header">
-          <div className="terminal-dot red"></div>
-          <div className="terminal-dot yellow"></div>
-          <div className="terminal-dot green"></div>
-          <span className="terminal-title">search_area.module</span>
-        </div>
-        <div className="terminal-body">
-          {/* Map Selector */}
-          <div className="mb-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 flex flex-col">
+        {/* Main Search Card */}
+        <div className="bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-color)] overflow-hidden mb-6">
+          {/* Map Section */}
+          <div className="p-4 sm:p-6">
             <SearchMapSelector
               center={filters.center}
               radiusMiles={filters.radiusMiles}
@@ -514,365 +596,357 @@ export default function SearchPage() {
             />
           </div>
 
-          {/* Filter Controls */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            {/* Score Range */}
-            <div>
-              <label className="block text-sm text-[var(--text-muted)] mb-2">
-                Score Range: {filters.minScore} - {filters.maxScore}
-              </label>
-              <div className="flex gap-2 items-center">
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  step="0.5"
-                  value={filters.minScore}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value) || 1;
-                    setFilters(prev => ({ ...prev, minScore: Math.min(val, prev.maxScore) }));
-                  }}
-                  className="w-16 px-2 py-1.5 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-center text-sm"
-                />
-                <span className="text-[var(--text-muted)]">to</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  step="0.5"
-                  value={filters.maxScore}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value) || 10;
-                    setFilters(prev => ({ ...prev, maxScore: Math.max(val, prev.minScore) }));
-                  }}
-                  className="w-16 px-2 py-1.5 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-center text-sm"
-                />
-              </div>
-              <p className="text-xs text-[var(--text-muted)] mt-1">e.g., 2-5 for mid-range</p>
-            </div>
-
-            {/* Property Type */}
-            <div>
-              <label className="block text-sm text-[var(--text-muted)] mb-2">Property Type</label>
-              <select
-                value={filters.propertyType}
-                onChange={(e) => setFilters(prev => ({ ...prev, propertyType: e.target.value as 'all' | 'vacant' | 'commercial' }))}
-                className="w-full px-4 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)]"
-              >
-                <option value="all">All Properties</option>
-                <option value="vacant">Vacant Land</option>
-                <option value="commercial">Commercial</option>
-              </select>
-            </div>
-
-            {/* Business Type Preset */}
-            <div>
-              <label className="block text-sm text-[var(--text-muted)] mb-2">Business Type</label>
-              <select
-                value={filters.businessType || ''}
-                onChange={(e) => handleBusinessTypeChange(e.target.value || null)}
-                className="w-full px-4 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)]"
-              >
-                <option value="">No preset</option>
-                {businessTypeOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Search Button */}
-            <div className="flex items-end gap-2">
-              <button
-                onClick={handleSearch}
-                disabled={loading || !filters.center}
-                className="flex-1 btn-primary flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Searching...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    Search Area
-                  </>
-                )}
-              </button>
-              {results && (
+          {/* Quick Presets */}
+          <div className="px-4 sm:px-6 pb-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-[var(--text-muted)] font-medium">Quick:</span>
+              {QUICK_PRESETS.map((preset) => (
                 <button
-                  onClick={resetSearch}
-                  disabled={loading}
-                  className="btn-secondary flex items-center justify-center gap-2 px-4"
-                  title="Clear results and start new search"
+                  key={preset.label}
+                  onClick={() => applyPreset(preset)}
+                  className={`px-3 py-1.5 text-xs rounded-full border transition-all ${
+                    activePreset === preset.label
+                      ? 'bg-[var(--accent-cyan)] text-black border-[var(--accent-cyan)]'
+                      : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-color)] hover:border-[var(--accent-cyan)]/50'
+                  }`}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Reset
+                  {preset.label}
                 </button>
-              )}
+              ))}
             </div>
           </div>
 
-          {/* Advanced Filters Toggle */}
-          <button
-            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            className="flex items-center gap-2 text-sm text-[var(--accent-cyan)] hover:text-[var(--accent-cyan)]/80 mb-4"
-          >
-            <svg
-              className={`w-4 h-4 transition-transform ${showAdvancedFilters ? 'rotate-90' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            Advanced Filters
-            {(filters.minAcres || filters.maxAcres || filters.zoningTypes.length > 0 || filters.minRoadFrontage || filters.cornerLotOnly) && (
-              <span className="px-1.5 py-0.5 bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)] rounded text-xs">
-                Active
-              </span>
-            )}
-          </button>
-
-          {/* Advanced Filters Panel */}
-          {showAdvancedFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-[var(--bg-tertiary)] rounded-lg mb-4">
-              {/* Min/Max Acreage */}
+          {/* Filter Controls */}
+          <div className="border-t border-[var(--border-color)] bg-[var(--bg-tertiary)]/50 p-4 sm:p-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-4">
+              {/* Score Range */}
               <div>
-                <label className="block text-sm text-[var(--text-muted)] mb-2">Acreage Range</label>
-                <div className="flex gap-2">
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">
+                  Min Score
+                </label>
+                <div className="flex items-center gap-2">
                   <input
-                    type="number"
-                    value={filters.minAcres ?? ''}
-                    onChange={(e) => setFilters(prev => ({ ...prev, minAcres: e.target.value ? parseFloat(e.target.value) : null }))}
-                    placeholder="Min"
-                    step="0.1"
-                    min="0"
-                    className="w-1/2 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-sm"
+                    type="range"
+                    min="1"
+                    max="10"
+                    step="0.5"
+                    value={filters.minScore}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setFilters(prev => ({ ...prev, minScore: Math.min(val, prev.maxScore) }));
+                      setActivePreset(null);
+                    }}
+                    className="flex-1 accent-[var(--accent-cyan)] h-2"
                   />
-                  <input
-                    type="number"
-                    value={filters.maxAcres ?? ''}
-                    onChange={(e) => setFilters(prev => ({ ...prev, maxAcres: e.target.value ? parseFloat(e.target.value) : null }))}
-                    placeholder="Max"
-                    step="0.1"
-                    min="0"
-                    className="w-1/2 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-sm"
-                  />
+                  <span className="text-sm font-bold text-[var(--accent-cyan)] w-8 text-right">{filters.minScore}</span>
                 </div>
               </div>
 
-              {/* Road Frontage */}
+              {/* Property Type */}
               <div>
-                <label className="block text-sm text-[var(--text-muted)] mb-2">
-                  Min Road Frontage: {filters.minRoadFrontage ?? 0} ft
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="500"
-                  step="25"
-                  value={filters.minRoadFrontage ?? 0}
-                  onChange={(e) => setFilters(prev => ({ ...prev, minRoadFrontage: parseInt(e.target.value) || null }))}
-                  className="w-full accent-[var(--accent-cyan)]"
-                />
-                <div className="flex justify-between text-xs text-[var(--text-muted)]">
-                  <span>0</span>
-                  <span>500 ft</span>
-                </div>
-              </div>
-
-              {/* Corner Lot */}
-              <div className="flex items-center">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={filters.cornerLotOnly}
-                    onChange={(e) => setFilters(prev => ({ ...prev, cornerLotOnly: e.target.checked }))}
-                    className="w-4 h-4 accent-[var(--accent-cyan)]"
-                  />
-                  <span className="text-sm text-[var(--text-secondary)]">Corner Lot Only</span>
-                </label>
-              </div>
-
-              {/* Clear Filters */}
-              <div className="flex items-center justify-end">
-                <button
-                  onClick={() => setFilters(prev => ({
-                    ...prev,
-                    minAcres: null,
-                    maxAcres: null,
-                    zoningTypes: [],
-                    minRoadFrontage: null,
-                    cornerLotOnly: false,
-                    businessType: null,
-                  }))}
-                  className="text-sm text-red-400 hover:text-red-300"
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Property Type</label>
+                <select
+                  value={filters.propertyType}
+                  onChange={(e) => {
+                    setFilters(prev => ({ ...prev, propertyType: e.target.value as 'all' | 'vacant' | 'commercial' }));
+                    setActivePreset(null);
+                  }}
+                  className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-sm"
                 >
-                  Clear Filters
+                  <option value="all">All Types</option>
+                  <option value="vacant">Vacant Land</option>
+                  <option value="commercial">Commercial</option>
+                </select>
+              </div>
+
+              {/* Business Type Preset */}
+              <div>
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Business Type</label>
+                <select
+                  value={filters.businessType || ''}
+                  onChange={(e) => handleBusinessTypeChange(e.target.value || null)}
+                  className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-sm"
+                >
+                  <option value="">Any Business</option>
+                  {businessTypeOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search Button */}
+              <div className="flex items-end">
+                <button
+                  onClick={handleSearch}
+                  disabled={loading || !filters.center}
+                  className="w-full py-2.5 px-4 bg-[var(--accent-cyan)] hover:bg-[var(--accent-cyan)]/90 disabled:bg-[var(--bg-tertiary)] disabled:text-[var(--text-muted)] text-black font-semibold rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-[var(--accent-cyan)]/20 disabled:shadow-none"
+                >
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span className="hidden sm:inline">Searching...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <span className="hidden sm:inline">Search Area</span>
+                      <span className="sm:hidden">Search</span>
+                    </>
+                  )}
                 </button>
               </div>
+            </div>
 
-              {/* Zoning Types - Full Width */}
-              <div className="md:col-span-2 lg:col-span-4">
-                <label className="block text-sm text-[var(--text-muted)] mb-2">Zoning Types</label>
-                <div className="flex flex-wrap gap-2">
-                  {ZONING_TYPES.map(zone => (
-                    <label
-                      key={zone.code}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
-                        filters.zoningTypes.includes(zone.code)
-                          ? 'bg-[var(--accent-cyan)]/20 border border-[var(--accent-cyan)] text-[var(--accent-cyan)]'
-                          : 'bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent-cyan)]/50'
-                      }`}
-                    >
+            {/* Advanced Filters Toggle */}
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className="flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--accent-cyan)] transition-colors"
+            >
+              <svg
+                className={`w-4 h-4 transition-transform ${showAdvancedFilters ? 'rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              <span>Advanced Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="px-2 py-0.5 bg-[var(--accent-cyan)] text-black rounded-full text-xs font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            {/* Advanced Filters Panel */}
+            {showAdvancedFilters && (
+              <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                  {/* Min/Max Acreage */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Acreage Range</label>
+                    <div className="flex gap-2">
                       <input
-                        type="checkbox"
-                        checked={filters.zoningTypes.includes(zone.code)}
-                        onChange={() => handleZoningToggle(zone.code)}
-                        className="hidden"
+                        type="number"
+                        value={filters.minAcres ?? ''}
+                        onChange={(e) => {
+                          setFilters(prev => ({ ...prev, minAcres: e.target.value ? parseFloat(e.target.value) : null }));
+                          setActivePreset(null);
+                        }}
+                        placeholder="Min"
+                        step="0.1"
+                        min="0"
+                        className="w-1/2 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-sm"
                       />
-                      {zone.code}
+                      <input
+                        type="number"
+                        value={filters.maxAcres ?? ''}
+                        onChange={(e) => {
+                          setFilters(prev => ({ ...prev, maxAcres: e.target.value ? parseFloat(e.target.value) : null }));
+                          setActivePreset(null);
+                        }}
+                        placeholder="Max"
+                        step="0.1"
+                        min="0"
+                        className="w-1/2 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--accent-cyan)] text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Road Frontage */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">
+                      Min Frontage: {filters.minRoadFrontage ?? 0} ft
                     </label>
-                  ))}
+                    <input
+                      type="range"
+                      min="0"
+                      max="500"
+                      step="25"
+                      value={filters.minRoadFrontage ?? 0}
+                      onChange={(e) => {
+                        setFilters(prev => ({ ...prev, minRoadFrontage: parseInt(e.target.value) || null }));
+                        setActivePreset(null);
+                      }}
+                      className="w-full accent-[var(--accent-cyan)] h-2"
+                    />
+                  </div>
+
+                  {/* Corner Lot */}
+                  <div className="flex items-center">
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <div className={`w-10 h-6 rounded-full p-1 transition-colors ${filters.cornerLotOnly ? 'bg-[var(--accent-cyan)]' : 'bg-[var(--bg-tertiary)]'}`}>
+                        <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${filters.cornerLotOnly ? 'translate-x-4' : ''}`} />
+                      </div>
+                      <span className="text-sm text-[var(--text-secondary)]">Corner Lot Only</span>
+                    </label>
+                  </div>
+
+                  {/* Clear Filters */}
+                  <div className="flex items-center justify-end">
+                    <button
+                      onClick={() => {
+                        setFilters(prev => ({
+                          ...prev,
+                          minAcres: null,
+                          maxAcres: null,
+                          zoningTypes: [],
+                          minRoadFrontage: null,
+                          cornerLotOnly: false,
+                          businessType: null,
+                        }));
+                        setActivePreset(null);
+                      }}
+                      className="text-sm text-red-400 hover:text-red-300 flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Clear Filters
+                    </button>
+                  </div>
+                </div>
+
+                {/* Zoning Types */}
+                <div>
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Zoning Types</label>
+                  <div className="flex flex-wrap gap-2">
+                    {ZONING_TYPES.map(zone => (
+                      <button
+                        key={zone.code}
+                        onClick={() => handleZoningToggle(zone.code)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          filters.zoningTypes.includes(zone.code)
+                            ? 'bg-[var(--accent-cyan)] text-black'
+                            : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--border-color)] hover:border-[var(--accent-cyan)]/50'
+                        }`}
+                        title={zone.label}
+                      >
+                        {zone.code}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Progress Bar */}
-          {loading && (
-            <div className="mt-4">
-              <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[var(--accent-cyan)] transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <p className="text-xs text-[var(--text-muted)] mt-1 text-center">
-                {progress < 30
-                  ? `Scanning ${filters.radiusMiles >= 1 ? 'grid cells in' : ''} ${Number.isInteger(filters.radiusMiles) ? filters.radiusMiles : filters.radiusMiles.toFixed(1)} mile radius...`
-                  : progress < 80
-                    ? 'Analyzing properties with real traffic data...'
-                    : 'Finalizing results...'}
-              </p>
-              {filters.radiusMiles >= 1 && progress < 30 && (
-                <p className="text-xs text-[var(--text-muted)] mt-1 text-center opacity-70">
-                  Larger areas take longer - scanning multiple zones
+            {/* Progress Bar */}
+            {loading && (
+              <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
+                <div className="h-2 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-[var(--accent-cyan)] to-cyan-400 transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-[var(--text-muted)] mt-2 text-center">
+                  {progress < 30
+                    ? `Scanning ${filters.radiusMiles >= 1 ? 'grid cells in' : ''} ${Number.isInteger(filters.radiusMiles) ? filters.radiusMiles : filters.radiusMiles.toFixed(1)} mile radius...`
+                    : progress < 80
+                      ? 'Analyzing properties with real traffic data...'
+                      : 'Finalizing results...'}
                 </p>
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {/* Error */}
-          {error && (
-            <div className="mt-4 p-3 bg-red-900/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
-              {error}
-            </div>
-          )}
+            {/* Error */}
+            {error && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {error}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Results */}
-      {results && (
-        <>
-          {/* Results Header */}
-          <div className="terminal-card mb-4">
-            <div className="terminal-header">
-              <div className="terminal-dot red"></div>
-              <div className="terminal-dot yellow"></div>
-              <div className="terminal-dot green"></div>
-              <span className="terminal-title">search_results.output</span>
-            </div>
-            <div className="terminal-body">
-              <div className="flex flex-wrap items-center justify-between gap-4">
+        {/* Results */}
+        {results && (
+          <div className="flex-1 flex flex-col">
+            {/* Results Header - Sticky */}
+            <div className="sticky top-0 z-20 bg-[var(--bg-primary)] py-3 -mx-4 sm:-mx-6 px-4 sm:px-6 border-b border-[var(--border-color)] flex-shrink-0">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 {/* Stats */}
-                <div className="flex items-center gap-6">
-                  <div>
-                    <p className="text-2xl font-bold text-[var(--accent-cyan)]">{sortedResults.length}</p>
-                    <p className="text-xs text-[var(--text-muted)]">Matching Properties</p>
-                  </div>
-                  <div>
-                    <p className="text-lg text-[var(--text-secondary)]">{results.totalParcels}</p>
-                    <p className="text-xs text-[var(--text-muted)]">Total in {results.searchArea}</p>
-                  </div>
-                  <div>
-                    <p className="text-lg text-[var(--text-secondary)]">{(results.searchTime / 1000).toFixed(1)}s</p>
-                    <p className="text-xs text-[var(--text-muted)]">Search Time</p>
+                <div className="flex items-center gap-4 sm:gap-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-lg bg-[var(--accent-cyan)]/20 flex items-center justify-center">
+                      <span className="text-lg font-bold text-[var(--accent-cyan)]">{sortedResults.length}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text-primary)]">Properties</p>
+                      <p className="text-xs text-[var(--text-muted)]">in {results.searchArea}</p>
+                    </div>
                   </div>
                   {compareList.length > 0 && (
-                    <div>
-                      <p className="text-lg text-purple-400">{compareList.length}/4</p>
-                      <p className="text-xs text-[var(--text-muted)]">In Compare</p>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 rounded-lg">
+                      <span className="text-sm font-medium text-purple-400">{compareList.length}/4 comparing</span>
                     </div>
                   )}
                 </div>
 
                 {/* Controls */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {/* View Mode Toggle */}
                   <div className="flex items-center bg-[var(--bg-tertiary)] rounded-lg p-1">
-                    <button
-                      onClick={() => setViewMode('grid')}
-                      className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                        viewMode === 'grid'
-                          ? 'bg-[var(--accent-cyan)] text-black'
-                          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                      }`}
-                    >
-                      Grid
-                    </button>
-                    <button
-                      onClick={() => setViewMode('map')}
-                      className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                        viewMode === 'map'
-                          ? 'bg-[var(--accent-cyan)] text-black'
-                          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                      }`}
-                    >
-                      Map
-                    </button>
-                    <button
-                      onClick={() => setViewMode('compare')}
-                      className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                        viewMode === 'compare'
-                          ? 'bg-[var(--accent-cyan)] text-black'
-                          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                      }`}
-                    >
-                      Compare
-                      {compareList.length > 0 && (
-                        <span className="ml-1.5 px-1.5 py-0.5 bg-purple-500 text-white rounded-full text-xs">
-                          {compareList.length}
-                        </span>
-                      )}
-                    </button>
+                    {[
+                      { mode: 'grid' as ViewMode, icon: (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                        </svg>
+                      )},
+                      { mode: 'map' as ViewMode, icon: (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                        </svg>
+                      )},
+                      { mode: 'compare' as ViewMode, icon: (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      )},
+                    ].map(({ mode, icon }) => (
+                      <button
+                        key={mode}
+                        onClick={() => setViewMode(mode)}
+                        className={`p-2 rounded transition-colors ${
+                          viewMode === mode
+                            ? 'bg-[var(--accent-cyan)] text-black'
+                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                        }`}
+                        title={mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      >
+                        {icon}
+                        {mode === 'compare' && compareList.length > 0 && (
+                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 text-white rounded-full text-xs flex items-center justify-center">
+                            {compareList.length}
+                          </span>
+                        )}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Sort Controls */}
                   {viewMode === 'grid' && (
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-[var(--text-muted)]">Sort:</label>
+                    <div className="hidden sm:flex items-center gap-2">
                       <select
                         value={sortField}
                         onChange={(e) => setSortField(e.target.value as SortField)}
-                        className="px-2 py-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded text-sm"
+                        className="px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg text-sm focus:outline-none focus:border-[var(--accent-cyan)]"
                       >
-                        <option value="score">Feasibility Score</option>
+                        <option value="score">Score</option>
                         <option value="lotSize">Lot Size</option>
-                        <option value="vpd">Est. VPD</option>
+                        <option value="vpd">VPD</option>
                         <option value="address">Address</option>
                       </select>
                       <button
                         onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-                        className="p-1 hover:bg-[var(--bg-tertiary)] rounded"
+                        className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
                         title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
                       >
                         <svg className={`w-4 h-4 transition-transform ${sortDirection === 'asc' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -885,49 +959,45 @@ export default function SearchPage() {
                   {/* Export Button */}
                   <button
                     onClick={exportToCSV}
-                    className="btn-secondary flex items-center gap-2 text-sm"
+                    className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    title="Export to CSV"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    Export CSV
                   </button>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* View Content */}
-          {viewMode === 'map' && (
-            <div className="mb-8">
-              <MapResults
-                results={sortedResults}
-                compareList={compareList.map(p => p.parcelId)}
-                onAddToCompare={addToCompare}
-                favoriteIds={favorites.map(f => f.parcelId)}
-                onToggleFavorite={toggleFavorite}
-              />
-            </div>
-          )}
+            {/* View Content */}
+            <div className="mt-6 flex-1 flex flex-col">
+              {viewMode === 'map' && (
+                <div className="rounded-xl overflow-hidden border border-[var(--border-color)]">
+                  <MapResults
+                    results={sortedResults}
+                    compareList={compareList.map(p => p.parcelId)}
+                    onAddToCompare={addToCompare}
+                    favoriteIds={favorites.map(f => f.parcelId)}
+                    onToggleFavorite={toggleFavorite}
+                  />
+                </div>
+              )}
 
-          {viewMode === 'compare' && (
-            <div className="mb-8">
-              <PropertyCompare
-                properties={compareList}
-                onRemove={removeFromCompare}
-                onClear={clearCompare}
-              />
-            </div>
-          )}
+              {viewMode === 'compare' && (
+                <PropertyCompare
+                  properties={compareList}
+                  onRemove={removeFromCompare}
+                  onClear={clearCompare}
+                />
+              )}
 
-          {viewMode === 'grid' && (
-            <div className="space-y-4">
-              {groupedResults.length > 0 ? (
-                <>
-                  {/* Asset Class Summary Bar */}
-                  <div className="terminal-card">
-                    <div className="terminal-body">
-                      <div className="flex flex-wrap gap-2">
+              {viewMode === 'grid' && (
+                <div className="space-y-4 flex-1 flex flex-col">
+                  {groupedResults.length > 0 ? (
+                    <>
+                      {/* Asset Class Summary Bar */}
+                      <div className="flex flex-wrap gap-2 pb-4">
                         {groupedResults.map(([assetClass, items]) => {
                           const config = ASSET_CLASS_CONFIG[assetClass];
                           const isCollapsed = collapsedClasses.has(assetClass);
@@ -942,7 +1012,7 @@ export default function SearchPage() {
                               }`}
                             >
                               <span>{config.icon}</span>
-                              <span className="font-medium">{assetClass}</span>
+                              <span className="font-medium hidden sm:inline">{assetClass}</span>
                               <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${
                                 isCollapsed ? 'bg-[var(--bg-secondary)]' : 'bg-black/20'
                               }`}>
@@ -952,178 +1022,243 @@ export default function SearchPage() {
                           );
                         })}
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Asset Class Sections */}
-                  {groupedResults.map(([assetClass, items]) => {
-                    const config = ASSET_CLASS_CONFIG[assetClass];
-                    const isCollapsed = collapsedClasses.has(assetClass);
-                    const avgScore = items.reduce((sum, p) => sum + p.score, 0) / items.length;
-                    const topScore = items[0]?.score || 0;
+                      {/* Asset Class Sections */}
+                      {groupedResults.map(([assetClass, items]) => {
+                        const config = ASSET_CLASS_CONFIG[assetClass];
+                        const isCollapsed = collapsedClasses.has(assetClass);
+                        const avgScore = items.reduce((sum, p) => sum + p.score, 0) / items.length;
+                        const topScore = items[0]?.score || 0;
 
-                    return (
-                      <div key={assetClass} className="terminal-card">
-                        {/* Asset Class Header */}
-                        <button
-                          onClick={() => toggleAssetClass(assetClass)}
-                          className="w-full terminal-body flex items-center justify-between cursor-pointer hover:bg-[var(--bg-tertiary)]/50 transition-colors rounded-t-lg"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="text-2xl">{config.icon}</span>
-                            <div className="text-left">
-                              <h3 className="text-lg font-bold">{assetClass}</h3>
-                              <p className="text-xs text-[var(--text-muted)]">
-                                {items.length} {items.length === 1 ? 'property' : 'properties'} &middot; Avg Score: {avgScore.toFixed(1)} &middot; Top: {topScore.toFixed(1)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className={`px-3 py-1 rounded-full border text-sm font-bold ${config.color}`}>
-                              {items.length}
-                            </span>
-                            <svg
-                              className={`w-5 h-5 text-[var(--text-muted)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
-                              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        return (
+                          <div key={assetClass} className="bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-color)] overflow-hidden">
+                            {/* Asset Class Header */}
+                            <button
+                              onClick={() => toggleAssetClass(assetClass)}
+                              className="w-full p-4 flex items-center justify-between cursor-pointer hover:bg-[var(--bg-tertiary)]/50 transition-colors"
                             >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </div>
-                        </button>
+                              <div className="flex items-center gap-3">
+                                <span className="text-2xl">{config.icon}</span>
+                                <div className="text-left">
+                                  <h3 className="text-lg font-bold text-[var(--text-primary)]">{assetClass}</h3>
+                                  <p className="text-xs text-[var(--text-muted)]">
+                                    {items.length} {items.length === 1 ? 'property' : 'properties'} &middot; Avg: {avgScore.toFixed(1)} &middot; Top: {topScore.toFixed(1)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className={`px-3 py-1 rounded-full border text-sm font-bold ${config.color}`}>
+                                  {items.length}
+                                </span>
+                                <svg
+                                  className={`w-5 h-5 text-[var(--text-muted)] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                            </button>
 
-                        {/* Properties Grid */}
-                        {!isCollapsed && (
-                          <div className="terminal-body border-t border-[var(--border-color)]">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {items.map((property) => {
-                                const isInCompare = compareList.some(p => p.parcelId === property.parcelId);
-                                const isFav = isFavorite(property.parcelId);
+                            {/* Properties Grid */}
+                            {!isCollapsed && (
+                              <div className="p-4 pt-0 border-t border-[var(--border-color)]">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
+                                  {items.map((property) => {
+                                    const isInCompare = compareList.some(p => p.parcelId === property.parcelId);
+                                    const isFav = isFavorite(property.parcelId);
 
-                                return (
-                                  <div
-                                    key={property.parcelId}
-                                    className={`p-4 bg-[var(--bg-tertiary)] rounded-lg border transition-colors ${
-                                      isInCompare
-                                        ? 'border-purple-500/50'
-                                        : 'border-[var(--border-color)] hover:border-[var(--accent-cyan)]/50'
-                                    }`}
-                                  >
-                                    <div className="flex items-start justify-between mb-3">
-                                      <div className="flex-1 min-w-0">
-                                        <p className="font-medium text-sm truncate" title={property.address}>
-                                          {property.address}
-                                        </p>
-                                        <p className="text-xs text-[var(--text-muted)]">ID: {property.parcelId}</p>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          onClick={() => toggleFavorite(property)}
-                                          className={`p-1 rounded transition-colors ${
-                                            isFav
-                                              ? 'text-red-400 hover:text-red-300'
-                                              : 'text-[var(--text-muted)] hover:text-red-400'
-                                          }`}
-                                          title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                                        >
-                                          <svg className="w-5 h-5" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                                          </svg>
-                                        </button>
-                                        <div className={`px-2 py-1 rounded border text-sm font-bold ${getScoreColor(property.score)}`}>
+                                    return (
+                                      <div
+                                        key={property.parcelId}
+                                        className={`group relative bg-[var(--bg-tertiary)] rounded-xl border transition-all hover:shadow-lg ${
+                                          isInCompare
+                                            ? 'border-purple-500/50 shadow-purple-500/10'
+                                            : 'border-[var(--border-color)] hover:border-[var(--accent-cyan)]/50'
+                                        }`}
+                                      >
+                                        {/* Score Badge - Top Right */}
+                                        <div className={`absolute -top-2 -right-2 w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg shadow-lg ${getScoreBadgeStyle(property.score)}`}>
                                           {property.score.toFixed(1)}
                                         </div>
-                                      </div>
-                                    </div>
 
-                                    <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                                      <div>
-                                        <span className="text-[var(--text-muted)]">Lot Size:</span>
-                                        <p className="font-medium">{property.lotSizeAcres?.toFixed(2) || 'N/A'} acres</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[var(--text-muted)]">Est. VPD:</span>
-                                        <p className="font-medium">{property.estimatedVPD?.toLocaleString() || 'N/A'}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[var(--text-muted)]">Zoning:</span>
-                                        <p className="font-medium">{property.zoning || 'N/A'}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[var(--text-muted)]">Nearby Businesses:</span>
-                                        <p className="font-medium">{property.nearbyBusinesses ?? 'N/A'}</p>
-                                      </div>
-                                    </div>
+                                        <div className="p-4">
+                                          {/* Header */}
+                                          <div className="pr-10 mb-2">
+                                            <p className="font-medium text-sm text-[var(--text-primary)] truncate" title={property.address}>
+                                              {property.address}
+                                            </p>
+                                            {/* Property Context Badges */}
+                                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                                              {/* Property Type */}
+                                              {property.propertyType && property.propertyType !== 'Unknown' && (
+                                                <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
+                                                  property.propertyType.toLowerCase().includes('vacant')
+                                                    ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                                                    : property.propertyType.toLowerCase().includes('parking')
+                                                    ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                                                    : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                                }`}>
+                                                  {property.propertyType}
+                                                </span>
+                                              )}
+                                              {/* Occupancy Status */}
+                                              {property.occupancyStatus && property.occupancyStatus !== 'unknown' && (
+                                                <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded flex items-center gap-1 ${
+                                                  property.occupancyStatus === 'occupied'
+                                                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                                    : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                                                }`}>
+                                                  <span className={`w-1.5 h-1.5 rounded-full ${
+                                                    property.occupancyStatus === 'occupied' ? 'bg-green-400' : 'bg-orange-400'
+                                                  }`}></span>
+                                                  {property.occupancyStatus === 'occupied' ? 'Occupied' : 'Vacant'}
+                                                </span>
+                                              )}
+                                              {/* Building Info */}
+                                              {property.buildingSqFt && property.buildingSqFt > 0 && (
+                                                <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                                                  {(property.buildingSqFt / 1000).toFixed(1)}k SF
+                                                </span>
+                                              )}
+                                              {/* Year Built */}
+                                              {property.yearBuilt && property.yearBuilt > 1900 && (
+                                                <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                                                  {property.yearBuilt}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
 
-                                    {/* Score Breakdown - 7 factors */}
-                                    <div className="grid grid-cols-7 gap-0.5 mb-3">
-                                      {[
-                                        { label: 'VPD', value: property.factors.trafficScore, title: 'Traffic/VPD Score' },
-                                        { label: 'Demo', value: property.factors.demographicsScore ?? 5, title: 'Demographics Score' },
-                                        { label: 'Biz', value: property.factors.businessDensity, title: 'Business Density' },
-                                        { label: 'Zone', value: property.factors.zoningScore, title: 'Zoning Score' },
-                                        { label: 'Road', value: property.factors.accessScore, title: 'Road Access Score' },
-                                        { label: 'Lot', value: property.factors.lotSizeScore ?? 5, title: 'Lot Size Score' },
-                                        { label: 'Env', value: property.factors.environmentalScore ?? 7, title: 'Environmental Score' },
-                                      ].map((factor) => (
-                                        <div
-                                          key={factor.label}
-                                          className="text-center p-1 bg-[var(--bg-secondary)] rounded"
-                                          title={`${factor.title}: ${factor.value.toFixed(1)}/10`}
-                                        >
-                                          <div className="text-[7px] text-[var(--text-muted)] uppercase leading-tight">{factor.label}</div>
-                                          <div className="text-[10px] font-bold">{factor.value.toFixed(0)}</div>
+                                          {/* Stats Grid */}
+                                          <div className="grid grid-cols-2 gap-2 mb-3">
+                                            <div className="bg-[var(--bg-secondary)] rounded-lg p-2">
+                                              <p className="text-[10px] text-[var(--text-muted)]">Lot Size</p>
+                                              <p className="font-semibold text-sm">{property.lotSizeAcres?.toFixed(2) || '—'} ac</p>
+                                            </div>
+                                            <div className="bg-[var(--bg-secondary)] rounded-lg p-2">
+                                              <p className="text-[10px] text-[var(--text-muted)]">Est. VPD</p>
+                                              <p className="font-semibold text-sm">{property.estimatedVPD?.toLocaleString() || '—'}</p>
+                                            </div>
+                                            <div className="bg-[var(--bg-secondary)] rounded-lg p-2">
+                                              <p className="text-[10px] text-[var(--text-muted)]">Zoning</p>
+                                              <p className="font-semibold text-sm truncate" title={property.zoning}>{property.zoning || '—'}</p>
+                                            </div>
+                                            <div className="bg-[var(--bg-secondary)] rounded-lg p-2">
+                                              <p className="text-[10px] text-[var(--text-muted)]">Nearby Biz</p>
+                                              <p className="font-semibold text-sm">{property.nearbyBusinesses ?? '—'}</p>
+                                            </div>
+                                          </div>
+
+                                          {/* Score Breakdown Mini - All 10 factors */}
+                                          <div className="grid grid-cols-5 gap-0.5 mb-3">
+                                            {[
+                                              { label: 'VPD', value: property.factors.trafficScore, title: 'Traffic/VPD Score' },
+                                              { label: 'Demo', value: property.factors.demographicsScore ?? 5, title: 'Demographics Score' },
+                                              { label: 'Comp', value: property.factors.competitionScore ?? property.factors.businessDensity, title: 'Competition/Business Density' },
+                                              { label: 'Road', value: property.factors.accessScore, title: 'Road Access Score' },
+                                              { label: 'Env', value: property.factors.environmentalScore ?? 7, title: 'Environmental Score' },
+                                              { label: 'Mkt', value: property.factors.marketScore ?? 5, title: 'Market Comps Score' },
+                                              { label: 'Walk', value: property.factors.walkabilityScore ?? 5, title: 'Walkability Score' },
+                                              { label: 'Safe', value: property.factors.safetyScore ?? 5, title: 'Safety/Crime Score' },
+                                              { label: 'Dev', value: property.factors.developmentScore ?? 5, title: 'Development Momentum' },
+                                              { label: 'Sat', value: property.factors.saturationScore ?? 5, title: 'Market Saturation' },
+                                            ].map((factor) => {
+                                              const val = typeof factor.value === 'number' ? factor.value : 5;
+                                              const colorClass = val >= 7 ? 'text-green-400' : val >= 5 ? 'text-yellow-400' : 'text-red-400';
+                                              return (
+                                                <div
+                                                  key={factor.label}
+                                                  className="text-center py-1 bg-[var(--bg-secondary)] rounded"
+                                                  title={`${factor.title}: ${val.toFixed(1)}/10`}
+                                                >
+                                                  <div className="text-[8px] text-[var(--text-muted)] uppercase leading-tight">{factor.label}</div>
+                                                  <div className={`text-[10px] font-bold ${colorClass}`}>{val.toFixed(0)}</div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+
+                                          {/* Actions */}
+                                          <div className="flex gap-2">
+                                            <Link
+                                              href={`/?lat=${property.coordinates.lat}&lng=${property.coordinates.lng}&address=${encodeURIComponent(property.address)}`}
+                                              className="flex-1 py-2 text-center text-sm font-medium bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)] rounded-lg hover:bg-[var(--accent-cyan)]/30 transition-colors"
+                                            >
+                                              Analyze
+                                            </Link>
+                                            <button
+                                              onClick={() => isInCompare ? removeFromCompare(property.parcelId) : addToCompare(property)}
+                                              disabled={!isInCompare && compareList.length >= 4}
+                                              className={`px-3 py-2 rounded-lg transition-colors ${
+                                                isInCompare
+                                                  ? 'bg-purple-500/20 text-purple-400'
+                                                  : compareList.length >= 4
+                                                  ? 'bg-[var(--bg-secondary)] text-[var(--text-muted)] cursor-not-allowed'
+                                                  : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'
+                                              }`}
+                                              title={isInCompare ? 'Remove from compare' : compareList.length >= 4 ? 'Max 4 properties' : 'Add to compare'}
+                                            >
+                                              {isInCompare ? '−' : '+'}
+                                            </button>
+                                            <button
+                                              onClick={() => toggleFavorite(property)}
+                                              className={`px-3 py-2 rounded-lg transition-colors ${
+                                                isFav
+                                                  ? 'bg-red-500/20 text-red-400'
+                                                  : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-red-400'
+                                              }`}
+                                              title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                                            >
+                                              <svg className="w-4 h-4" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                              </svg>
+                                            </button>
+                                          </div>
                                         </div>
-                                      ))}
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex gap-2">
-                                      <Link
-                                        href={`/?lat=${property.coordinates.lat}&lng=${property.coordinates.lng}&address=${encodeURIComponent(property.address)}`}
-                                        className="flex-1 text-center py-1.5 text-xs bg-[var(--accent-cyan)]/20 text-[var(--accent-cyan)] rounded hover:bg-[var(--accent-cyan)]/30 transition-colors"
-                                      >
-                                        View Analysis
-                                      </Link>
-                                      <button
-                                        onClick={() => isInCompare ? removeFromCompare(property.parcelId) : addToCompare(property)}
-                                        disabled={!isInCompare && compareList.length >= 4}
-                                        className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                                          isInCompare
-                                            ? 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
-                                            : compareList.length >= 4
-                                            ? 'bg-[var(--bg-secondary)] text-[var(--text-muted)] cursor-not-allowed'
-                                            : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'
-                                        }`}
-                                        title={isInCompare ? 'Remove from compare' : compareList.length >= 4 ? 'Max 4 properties' : 'Add to compare'}
-                                      >
-                                        {isInCompare ? '- Compare' : '+ Compare'}
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <div className="text-center py-16">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
+                        <svg className="w-8 h-8 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                       </div>
-                    );
-                  })}
-                </>
-              ) : (
-                <div className="terminal-card">
-                  <div className="terminal-body text-center py-12 text-[var(--text-muted)]">
-                    <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p>No properties found matching your criteria</p>
-                    <p className="text-sm mt-2">Try adjusting your filters or increasing the search radius</p>
-                  </div>
+                      <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">No properties found</h3>
+                      <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
+                        Try adjusting your filters or increasing the search radius to find more properties.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </>
-      )}
+          </div>
+        )}
+
+        {/* Empty State - No Search Yet */}
+        {!results && !loading && (
+          <div className="text-center py-12">
+            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
+              <svg className="w-10 h-10 text-[var(--accent-cyan)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">Ready to search</h3>
+            <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
+              Click on the map or enter an address to set your search center, then click &quot;Search Area&quot; to find properties.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
