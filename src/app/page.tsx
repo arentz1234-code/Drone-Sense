@@ -180,6 +180,7 @@ export default function HomePage() {
   const [retailerMatches, setRetailerMatches] = useState<RetailerMatchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUploadExpanded, setImageUploadExpanded] = useState(false);
 
   // Enhanced data sources (Walk Score, Crime, Building Permits, Isochrone, Vacancy)
   const [enhancedData, setEnhancedData] = useState<EnhancedDataResult | null>(null);
@@ -669,82 +670,182 @@ export default function HomePage() {
       {/* Overview Tab */}
       <TabPanel id="overview" activeTab={activeTab}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Left Column */}
-          <div className="space-y-6">
-            {/* Photo Upload Section */}
-            <div className="terminal-card">
-              <div className="terminal-header">
-                <div className="terminal-dot red"></div>
-                <div className="terminal-dot yellow"></div>
-                <div className="terminal-dot green"></div>
-                <span className="terminal-title">image_upload.module</span>
-              </div>
-              <div className="terminal-body">
-                <PhotoUpload images={images} setImages={setImages} />
-              </div>
-            </div>
-
-            {/* Address Input Section */}
-            <div className="terminal-card" style={{ overflow: 'visible' }}>
-              <div className="terminal-header">
-                <div className="terminal-dot red"></div>
-                <div className="terminal-dot yellow"></div>
-                <div className="terminal-dot green"></div>
-                <span className="terminal-title">location_input.module</span>
-              </div>
-              <div className="terminal-body" style={{ overflow: 'visible' }}>
-                <AddressInput
-                  address={address}
-                  setAddress={setAddress}
-                  coordinates={coordinates}
-                  setCoordinates={setCoordinates}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column */}
-          <div className="space-y-6">
-            {/* Saved Properties */}
-            <div className="terminal-card">
-              <div className="terminal-header">
-                <div className="terminal-dot red"></div>
-                <div className="terminal-dot yellow"></div>
-                <div className="terminal-dot green"></div>
-                <span className="terminal-title">saved_properties.module</span>
-              </div>
-              <div className="terminal-body">
-                <SavedProperties
-                  currentProperty={getCurrentPropertyData()}
-                  onLoadProperty={handleLoadProperty}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Property Map Section - Full Width */}
-        <div className="mb-8">
-          <div className="terminal-card relative">
+          {/* Left Column - Property Location (Address + Map combined) */}
+          <div className="terminal-card" style={{ overflow: 'visible' }}>
             <div className="terminal-header">
               <div className="terminal-dot red"></div>
               <div className="terminal-dot yellow"></div>
               <div className="terminal-dot green"></div>
-              <span className="terminal-title">property_map.module</span>
+              <span className="terminal-title">property_location.module</span>
             </div>
-            <div className="terminal-body">
-              <MapView
-                coordinates={coordinates}
+            <div className="terminal-body space-y-4" style={{ overflow: 'visible' }}>
+              <AddressInput
                 address={address}
-                environmentalRisk={environmentalRisk}
-                selectedParcel={selectedParcel}
-                onParcelSelect={setSelectedParcel}
-                onCoordinatesChange={setCoordinates}
-                onAddressChange={setAddress}
-                onAccessPointsChange={setAccessPoints}
-                onParcelDataChange={setParcelData}
-                interactiveMode={true}
+                setAddress={setAddress}
+                coordinates={coordinates}
+                setCoordinates={setCoordinates}
               />
+              <div className="border-t border-[var(--border-primary)] pt-4">
+                <MapView
+                  coordinates={coordinates}
+                  address={address}
+                  environmentalRisk={environmentalRisk}
+                  selectedParcel={selectedParcel}
+                  onParcelSelect={setSelectedParcel}
+                  onCoordinatesChange={setCoordinates}
+                  onAddressChange={setAddress}
+                  onAccessPointsChange={setAccessPoints}
+                  onParcelDataChange={setParcelData}
+                  interactiveMode={true}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Quick Site Stats */}
+          <div className="space-y-6">
+            {/* Quick Stats Panel */}
+            <div className="terminal-card">
+              <div className="terminal-header">
+                <div className="terminal-dot red"></div>
+                <div className="terminal-dot yellow"></div>
+                <div className="terminal-dot green"></div>
+                <span className="terminal-title">site_stats.module</span>
+              </div>
+              <div className="terminal-body">
+                {coordinates ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Lot Size */}
+                    <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                      <div className="text-xs text-[var(--text-muted)] mb-1">Lot Size</div>
+                      <div className="text-lg font-semibold text-[var(--text-primary)]">
+                        {selectedParcel?.parcelInfo?.acres
+                          ? `${selectedParcel.parcelInfo.acres.toFixed(2)} ac`
+                          : parcelData?.parcelInfo?.acres
+                            ? `${parcelData.parcelInfo.acres.toFixed(2)} ac`
+                            : '—'}
+                      </div>
+                    </div>
+
+                    {/* Traffic VPD */}
+                    <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                      <div className="text-xs text-[var(--text-muted)] mb-1">Daily Traffic</div>
+                      <div className="text-lg font-semibold text-[var(--text-primary)]">
+                        {accessPoints.length > 0
+                          ? `${Math.max(...accessPoints.map(ap => ap.vpd || ap.estimatedVpd || 0)).toLocaleString()} VPD`
+                          : trafficData?.estimatedVPD
+                            ? `${trafficData.estimatedVPD.toLocaleString()} VPD`
+                            : '—'}
+                      </div>
+                    </div>
+
+                    {/* Population */}
+                    <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                      <div className="text-xs text-[var(--text-muted)] mb-1">Population (3mi)</div>
+                      <div className="text-lg font-semibold text-[var(--text-primary)]">
+                        {demographicsData?.population
+                          ? demographicsData.population.toLocaleString()
+                          : '—'}
+                      </div>
+                    </div>
+
+                    {/* Median Income */}
+                    <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                      <div className="text-xs text-[var(--text-muted)] mb-1">Median Income</div>
+                      <div className="text-lg font-semibold text-[var(--text-primary)]">
+                        {demographicsData?.medianHouseholdIncome
+                          ? `$${(demographicsData.medianHouseholdIncome / 1000).toFixed(0)}K`
+                          : '—'}
+                      </div>
+                    </div>
+
+                    {/* Zoning */}
+                    <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                      <div className="text-xs text-[var(--text-muted)] mb-1">Zoning</div>
+                      <div className="text-lg font-semibold text-[var(--text-primary)]">
+                        {selectedParcel?.parcelInfo?.zoning || parcelData?.parcelInfo?.zoning || '—'}
+                      </div>
+                    </div>
+
+                    {/* Nearby Businesses */}
+                    <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                      <div className="text-xs text-[var(--text-muted)] mb-1">Nearby Businesses</div>
+                      <div className="text-lg font-semibold text-[var(--text-primary)]">
+                        {businesses.length > 0 ? businesses.length : '—'}
+                      </div>
+                    </div>
+
+                    {/* Access Points */}
+                    <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                      <div className="text-xs text-[var(--text-muted)] mb-1">Access Points</div>
+                      <div className="text-lg font-semibold text-[var(--text-primary)]">
+                        {accessPoints.length > 0 ? accessPoints.length : '—'}
+                      </div>
+                    </div>
+
+                    {/* Risk Level */}
+                    <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                      <div className="text-xs text-[var(--text-muted)] mb-1">Env. Risk</div>
+                      <div className={`text-lg font-semibold ${
+                        environmentalRisk?.overallRiskScore !== undefined
+                          ? environmentalRisk.overallRiskScore <= 30 ? 'text-green-400'
+                            : environmentalRisk.overallRiskScore <= 60 ? 'text-yellow-400'
+                            : 'text-red-400'
+                          : 'text-[var(--text-primary)]'
+                      }`}>
+                        {environmentalRisk?.overallRiskScore !== undefined
+                          ? environmentalRisk.overallRiskScore <= 30 ? 'Low'
+                            : environmentalRisk.overallRiskScore <= 60 ? 'Medium'
+                            : 'High'
+                          : '—'}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-[var(--text-muted)]">
+                    <svg className="w-10 h-10 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <p className="text-sm">Enter an address to see site stats</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Collapsible Photo Upload Section */}
+            <div className="terminal-card">
+              <div
+                className="terminal-header cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors"
+                onClick={() => setImageUploadExpanded(!imageUploadExpanded)}
+              >
+                <div className="terminal-dot red"></div>
+                <div className="terminal-dot yellow"></div>
+                <div className="terminal-dot green"></div>
+                <span className="terminal-title">image_upload.module</span>
+                <div className="ml-auto flex items-center gap-2">
+                  {images.length > 0 && (
+                    <span className="text-xs text-[var(--text-muted)]">{images.length} image{images.length !== 1 ? 's' : ''}</span>
+                  )}
+                  <svg
+                    className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${imageUploadExpanded ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+              {imageUploadExpanded && (
+                <div className="terminal-body">
+                  <PhotoUpload images={images} setImages={setImages} />
+                </div>
+              )}
+              {!imageUploadExpanded && images.length === 0 && (
+                <div className="px-4 py-3 text-sm text-[var(--text-muted)] border-t border-[var(--border-primary)]">
+                  Click to expand and upload drone imagery (optional)
+                </div>
+              )}
             </div>
           </div>
         </div>
