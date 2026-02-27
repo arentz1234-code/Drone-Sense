@@ -214,11 +214,43 @@ function parseCensusData(
     ? getCollegeTownProfile(medianAge, collegeEnrollmentPercent)
     : getConsumerProfile(medianHouseholdIncome, educationBachelorsOrHigher, medianAge);
 
+  // Calculate discretionary income (income after necessities)
+  // Based on Bureau of Labor Statistics Consumer Expenditure Survey:
+  // - Lower income: ~15% discretionary (85% goes to necessities)
+  // - Moderate income: ~25% discretionary
+  // - Middle income: ~35% discretionary
+  // - Upper-middle income: ~45% discretionary
+  // - High income: ~55% discretionary
+  let discretionaryPercent = 0.25; // default
+  if (incomeLevel === 'low') {
+    discretionaryPercent = 0.15;
+  } else if (incomeLevel === 'moderate') {
+    discretionaryPercent = 0.25;
+  } else if (incomeLevel === 'middle') {
+    discretionaryPercent = 0.35;
+  } else if (incomeLevel === 'upper-middle') {
+    discretionaryPercent = 0.45;
+  } else if (incomeLevel === 'high') {
+    discretionaryPercent = 0.55;
+  }
+
+  // Adjust for college towns - students have higher discretionary spending
+  // (parents/loans cover necessities, most income is discretionary)
+  if (isCollegeTown) {
+    discretionaryPercent = Math.min(0.70, discretionaryPercent + 0.20);
+  }
+
+  const discretionaryIncome = Math.round(medianHouseholdIncome * discretionaryPercent);
+  const discretionaryIncomePerCapita = Math.round(perCapitaIncome * discretionaryPercent);
+
   return {
     population,
     medianHouseholdIncome,
     perCapitaIncome,
     incomeLevel,
+    discretionaryIncome,
+    discretionaryIncomePerCapita,
+    discretionaryPercent: Math.round(discretionaryPercent * 100),
     povertyRate: Math.round(povertyRate * 10) / 10,
     medianAge,
     householdSize: Math.round(householdSize * 10) / 10,

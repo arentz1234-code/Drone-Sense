@@ -57,6 +57,7 @@ export interface FeasibilityScore {
   breakdown: {
     trafficScore: number;
     demographicsScore: number;
+    discretionaryScore: number; // NEW: Discretionary income score
     competitionScore: number;
     accessScore: number;
     environmentalScore: number;
@@ -72,6 +73,7 @@ export interface FeasibilityScore {
   details: {
     traffic: string;
     demographics: string;
+    discretionary: string; // NEW: Discretionary income detail
     competition: string;
     access: string;
     environmental: string;
@@ -146,6 +148,10 @@ interface DemographicsInfo {
   medianHouseholdIncome: number;
   perCapitaIncome: number;
   incomeLevel: 'low' | 'moderate' | 'middle' | 'upper-middle' | 'high';
+  // Discretionary income - money left after necessities (housing, food, taxes, healthcare)
+  discretionaryIncome?: number; // Annual discretionary income per household
+  discretionaryIncomePerCapita?: number; // Per person
+  discretionaryPercent?: number; // Percentage of income that is discretionary
   povertyRate: number;
   medianAge: number;
   educationBachelorsOrHigher: number;
@@ -1094,12 +1100,18 @@ function calculateFeasibilityScore(
   }
 
   // DEMOGRAPHICS SCORE (0-10)
+  // New: Includes discretionary income as a key factor
+  let discretionaryScore = 5;
+  let discretionaryDetail = 'Discretionary income data not available';
+
   if (demographicsData) {
     const income = demographicsData.medianHouseholdIncome;
     const employment = demographicsData.employmentRate;
     const population = demographicsData.population;
     const isCollegeTown = demographicsData.isCollegeTown || false;
     const collegePercent = demographicsData.collegeEnrollmentPercent || 0;
+    const discretionaryIncome = demographicsData.discretionaryIncome || 0;
+    const discretionaryPercent = demographicsData.discretionaryPercent || 25;
 
     // Income scoring - adjusted for college towns
     let incomeScore = 5;
@@ -1121,6 +1133,31 @@ function calculateFeasibilityScore(
       else if (income >= 50000) incomeScore = 7;
       else if (income >= 35000) incomeScore = 5;
       else incomeScore = 4;
+    }
+
+    // DISCRETIONARY INCOME SCORING (0-10)
+    // This measures spending power for non-essential goods/services
+    // Critical for retail, restaurants, entertainment, fitness, etc.
+    if (discretionaryIncome > 0) {
+      if (discretionaryIncome >= 50000) {
+        discretionaryScore = 10;
+        discretionaryDetail = `Excellent discretionary income: $${discretionaryIncome.toLocaleString()}/yr (${discretionaryPercent}% of income) - Strong spending power`;
+      } else if (discretionaryIncome >= 35000) {
+        discretionaryScore = 9;
+        discretionaryDetail = `Very good discretionary income: $${discretionaryIncome.toLocaleString()}/yr (${discretionaryPercent}%) - High spending capacity`;
+      } else if (discretionaryIncome >= 25000) {
+        discretionaryScore = 8;
+        discretionaryDetail = `Good discretionary income: $${discretionaryIncome.toLocaleString()}/yr (${discretionaryPercent}%) - Solid retail market`;
+      } else if (discretionaryIncome >= 18000) {
+        discretionaryScore = 7;
+        discretionaryDetail = `Moderate discretionary income: $${discretionaryIncome.toLocaleString()}/yr (${discretionaryPercent}%) - Value-conscious consumers`;
+      } else if (discretionaryIncome >= 12000) {
+        discretionaryScore = 5;
+        discretionaryDetail = `Limited discretionary income: $${discretionaryIncome.toLocaleString()}/yr (${discretionaryPercent}%) - Budget-focused market`;
+      } else {
+        discretionaryScore = 3;
+        discretionaryDetail = `Low discretionary income: $${discretionaryIncome.toLocaleString()}/yr (${discretionaryPercent}%) - Essential services focus`;
+      }
     }
 
     // Employment bonus - lower for college towns since students aren't employed
@@ -1365,23 +1402,26 @@ function calculateFeasibilityScore(
   );
 
   // Use different weights based on whether enhanced data is available
+  // NEW: Discretionary income is a key factor for retail/restaurant viability
   const weights = hasEnhancedData ? {
-    traffic: 0.18,        // 18% - traffic is critical
-    demographics: 0.15,   // 15% - demographics matter
+    traffic: 0.16,        // 16% - traffic is critical
+    demographics: 0.12,   // 12% - demographics matter
+    discretionary: 0.10,  // 10% - NEW: discretionary spending power
     competition: 0.10,    // 10% - market validation
-    access: 0.10,         // 10% - visibility/access
-    environmental: 0.10,  // 10% - environmental risk
+    access: 0.09,         // 9% - visibility/access
+    environmental: 0.08,  // 8% - environmental risk
     market: 0.07,         // 7% - market comps validation
     walkability: 0.08,    // 8% - pedestrian traffic potential
-    safety: 0.08,         // 8% - crime/safety impact
-    development: 0.07,    // 7% - development momentum
+    safety: 0.07,         // 7% - crime/safety impact
+    development: 0.06,    // 6% - development momentum
     saturation: 0.07      // 7% - market opportunity
   } : {
-    traffic: 0.25,        // 25% - traffic is critical
-    demographics: 0.20,   // 20% - demographics matter
-    competition: 0.15,    // 15% - market validation
-    access: 0.15,         // 15% - visibility/access
-    environmental: 0.15,  // 15% - environmental risk
+    traffic: 0.22,        // 22% - traffic is critical
+    demographics: 0.18,   // 18% - demographics matter
+    discretionary: 0.12,  // 12% - NEW: discretionary spending power
+    competition: 0.13,    // 13% - market validation
+    access: 0.13,         // 13% - visibility/access
+    environmental: 0.12,  // 12% - environmental risk
     market: 0.10,         // 10% - market comps validation
     walkability: 0,
     safety: 0,
@@ -1392,6 +1432,7 @@ function calculateFeasibilityScore(
   const overall = Math.round(
     (trafficScore * weights.traffic +
     demographicsScore * weights.demographics +
+    discretionaryScore * weights.discretionary +
     competitionScore * weights.competition +
     accessScore * weights.access +
     environmentalScore * weights.environmental +
@@ -1414,6 +1455,7 @@ function calculateFeasibilityScore(
     breakdown: {
       trafficScore,
       demographicsScore,
+      discretionaryScore, // NEW: Discretionary income score
       competitionScore,
       accessScore,
       environmentalScore,
@@ -1429,6 +1471,7 @@ function calculateFeasibilityScore(
     details: {
       traffic: trafficDetail,
       demographics: demographicsDetail,
+      discretionary: discretionaryDetail, // NEW: Discretionary income detail
       competition: competitionDetail,
       environmental: environmentalDetail,
       market: marketDetail,
