@@ -231,6 +231,8 @@ interface AnalyzeRequest {
       address?: string;
     };
   } | null;
+  // Access points with VPD data
+  accessPoints?: { vpd?: number; estimatedVpd?: number }[];
 }
 
 // VPD thresholds, income preferences, and lot size requirements for different business types
@@ -1037,7 +1039,8 @@ function calculateFeasibilityScore(
   nearbyBusinesses: Business[],
   environmentalRisk: EnvironmentalRiskInfo | null,
   marketComps: MarketCompInfo[] | null,
-  enhancedData?: EnhancedDataInfo | null
+  enhancedData?: EnhancedDataInfo | null,
+  accessPointsVPD?: number // Fallback VPD from access points when trafficData is unavailable
 ): FeasibilityScore {
   let trafficScore = 5; // Default middle score
   let demographicsScore = 5;
@@ -1064,8 +1067,15 @@ function calculateFeasibilityScore(
   let saturationDetail = 'Market saturation data not available';
 
   // TRAFFIC SCORE (0-10)
-  if (trafficData) {
-    const vpd = trafficData.estimatedVPD;
+  // Use trafficData.estimatedVPD first, then fall back to accessPointsVPD
+  const vpd = (trafficData?.estimatedVPD && trafficData.estimatedVPD > 0)
+    ? trafficData.estimatedVPD
+    : (accessPointsVPD && accessPointsVPD > 0) ? accessPointsVPD : 0;
+  const vpdSource = (trafficData?.estimatedVPD && trafficData.estimatedVPD > 0)
+    ? 'traffic'
+    : (accessPointsVPD && accessPointsVPD > 0) ? 'access_points' : 'none';
+
+  if (vpd > 0) {
     if (vpd >= 30000) {
       trafficScore = 10;
       trafficDetail = `Excellent traffic: ${vpd.toLocaleString()} VPD supports all business types`;
@@ -1086,7 +1096,14 @@ function calculateFeasibilityScore(
       trafficDetail = `Low traffic: ${vpd.toLocaleString()} VPD - local service only`;
     }
 
-    // Bonus for road type
+    // Add source indicator if using access points VPD
+    if (vpdSource === 'access_points') {
+      trafficDetail += ' (from road access data)';
+    }
+  }
+
+  // Bonus for road type (if traffic data available)
+  if (trafficData) {
     if (trafficData.roadType.includes('Major') || trafficData.roadType.includes('Motorway')) {
       accessScore = Math.min(10, accessScore + 2);
       accessDetail = `${trafficData.roadType} with high visibility`;
@@ -3028,7 +3045,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
     }
 
     // Calculate comprehensive feasibility score (with enhanced data if available)
-    const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps, enhancedData);
+    const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps, enhancedData, accessPointsVPD);
     analysis.feasibilityScore = feasibilityScore;
     // Override viabilityScore with our calculated score
     analysis.viabilityScore = feasibilityScore.overall;
@@ -3079,7 +3096,7 @@ function getMockAnalysis(nearbyBusinesses: Business[], trafficData: TrafficInfo 
 
   const businessSuitability = calculateBusinessSuitability(vpd, nearbyBusinesses, demographicsData, lotSizeAcres, null, null);
   const topRecommendations = generateTopRecommendations(vpd, nearbyBusinesses, demographicsData, lotSizeAcres, null, stateCode, false, null, null, enhancedData);
-  const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps, enhancedData);
+  const feasibilityScore = calculateFeasibilityScore(trafficData, demographicsData, nearbyBusinesses, environmentalRisk, marketComps, enhancedData, vpd);
 
   const retailerMatches = calculateRetailerMatches(
     lotSizeAcres,

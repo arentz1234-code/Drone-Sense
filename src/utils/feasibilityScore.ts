@@ -19,6 +19,7 @@ export function calculateFeasibilityScore(
 ): FeasibilityScore {
   let trafficScore = 5;
   let demographicsScore = 5;
+  let discretionaryScore = 5;
   let competitionScore = 5;
   let accessScore = 5;
   let environmentalScore = 5;
@@ -28,6 +29,7 @@ export function calculateFeasibilityScore(
 
   let trafficDetail = 'No traffic data available';
   let demographicsDetail = 'No demographics data available';
+  let discretionaryDetail = 'Discretionary income data not available';
   let competitionDetail = 'No nearby business data';
   let accessDetail = 'Unable to assess access';
   let environmentalDetail = 'No environmental data available';
@@ -228,6 +230,62 @@ export function calculateFeasibilityScore(
       }
       if (growthTrend > 0) {
         demographicsDetail += `, ${growthTrend}% growth`;
+      }
+    }
+  }
+
+  // DISCRETIONARY INCOME SCORE (0-10) - Spending power after necessities
+  if (demographicsData) {
+    const discretionaryIncome = demographicsData.discretionaryIncome || 0;
+    const discretionaryPercent = demographicsData.discretionaryPercent || 0;
+    const discretionaryPerCapita = demographicsData.discretionaryIncomePerCapita || 0;
+
+    if (discretionaryIncome > 0) {
+      // Score based on discretionary income levels
+      if (discretionaryIncome >= 50000) {
+        discretionaryScore = 10;
+        discretionaryDetail = `Excellent spending power: $${discretionaryIncome.toLocaleString()} discretionary income`;
+      } else if (discretionaryIncome >= 40000) {
+        discretionaryScore = 9;
+        discretionaryDetail = `Very strong spending: $${discretionaryIncome.toLocaleString()} discretionary income`;
+      } else if (discretionaryIncome >= 30000) {
+        discretionaryScore = 8;
+        discretionaryDetail = `Strong spending: $${discretionaryIncome.toLocaleString()} discretionary income`;
+      } else if (discretionaryIncome >= 20000) {
+        discretionaryScore = 7;
+        discretionaryDetail = `Good spending power: $${discretionaryIncome.toLocaleString()} discretionary income`;
+      } else if (discretionaryIncome >= 15000) {
+        discretionaryScore = 6;
+        discretionaryDetail = `Moderate spending: $${discretionaryIncome.toLocaleString()} discretionary income`;
+      } else if (discretionaryIncome >= 10000) {
+        discretionaryScore = 5;
+        discretionaryDetail = `Limited spending: $${discretionaryIncome.toLocaleString()} discretionary income`;
+      } else {
+        discretionaryScore = 4;
+        discretionaryDetail = `Low spending power: $${discretionaryIncome.toLocaleString()} discretionary income`;
+      }
+
+      // Add percentage context
+      if (discretionaryPercent > 0) {
+        discretionaryDetail += ` (${discretionaryPercent}% of income)`;
+      }
+
+      // Bonus for high per capita discretionary income
+      if (discretionaryPerCapita >= 25000) {
+        discretionaryScore = Math.min(10, discretionaryScore + 0.5);
+      }
+    } else {
+      // Estimate from median income if discretionary not available
+      const income = demographicsData.medianHouseholdIncome || 0;
+      if (income > 0) {
+        // Rough estimate: ~30-40% of income is discretionary
+        const estimatedDiscretionary = income * 0.35;
+        if (estimatedDiscretionary >= 35000) discretionaryScore = 8;
+        else if (estimatedDiscretionary >= 25000) discretionaryScore = 7;
+        else if (estimatedDiscretionary >= 18000) discretionaryScore = 6;
+        else if (estimatedDiscretionary >= 12000) discretionaryScore = 5;
+        else discretionaryScore = 4;
+        discretionaryDetail = `Est. $${Math.round(estimatedDiscretionary).toLocaleString()} discretionary (based on $${income.toLocaleString()} median income)`;
       }
     }
   }
@@ -529,6 +587,7 @@ export function calculateFeasibilityScore(
     breakdown: {
       trafficScore: Math.round(trafficScore * 10) / 10,
       demographicsScore: Math.round(demographicsScore * 10) / 10,
+      discretionaryScore: Math.round(discretionaryScore * 10) / 10,
       competitionScore: Math.round(competitionScore * 10) / 10,
       accessScore: Math.round(accessScore * 10) / 10,
       environmentalScore: Math.round(environmentalScore * 10) / 10,
@@ -544,6 +603,7 @@ export function calculateFeasibilityScore(
     details: {
       traffic: trafficDetail,
       demographics: demographicsDetail,
+      discretionary: discretionaryDetail,
       competition: competitionDetail,
       environmental: environmentalDetail,
       market: marketDetail,

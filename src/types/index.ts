@@ -64,6 +64,7 @@ export interface RetailerMatch {
     traffic: { matches: boolean; note: string };
     demographics: { matches: boolean; note: string };
     region: { matches: boolean; note: string };
+    siteType?: { matches: boolean; note: string };
   };
   activelyExpanding: boolean;
   franchiseAvailable: boolean;
@@ -72,6 +73,9 @@ export interface RetailerMatch {
   totalInvestment?: string;
   expansionRegions: string[];
   notes?: string;
+  // Site type preferences
+  siteTypes?: string[];  // e.g., ['Freestanding', 'Pad Site', 'End Cap']
+  prefersAnchoredCenter?: boolean;  // Prefers to be near grocery/big box anchor
 }
 
 export interface RetailerMatchResult {
@@ -86,6 +90,7 @@ export interface FeasibilityScore {
   breakdown: {
     trafficScore: number;
     demographicsScore: number;
+    discretionaryScore: number; // Discretionary income/spending power
     competitionScore: number;
     accessScore: number;
     environmentalScore: number;
@@ -101,6 +106,7 @@ export interface FeasibilityScore {
   details: {
     traffic: string;
     demographics: string;
+    discretionary: string; // Discretionary income details
     competition: string;
     access: string;
     environmental: string;

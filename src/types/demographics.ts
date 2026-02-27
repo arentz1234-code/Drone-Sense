@@ -34,4 +34,8 @@ export interface DemographicsData {
     description: string;
     preferredBusinesses: string[];
   };
+  // Discretionary income
+  discretionaryIncome?: number;
+  discretionaryIncomePerCapita?: number;
+  discretionaryPercent?: number;
 }

@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { AnalysisResult, TrafficInfo, ExtendedDemographics, Business, EnvironmentalRisk, MarketComp, FeasibilityScore, AccessPoint, LocationIntelligence } from '@/types';
 import DataSourceTooltip, { DATA_SOURCES } from '@/components/ui/DataSourceTooltip';
+import { ConfidenceBadge, DataConfidenceSummary } from '@/components/ui/ConfidenceIndicator';
 import { calculateFeasibilityScore, getScoreLabelAndIcon } from '@/utils/feasibilityScore';
 
 // Score circle component with hover tooltip
@@ -11,11 +12,15 @@ function ScoreCircle({
   label,
   details,
   colorClass,
+  confidence,
+  source,
 }: {
   score: number;
   label: string;
   details: string;
   colorClass: string;
+  confidence?: 'high' | 'medium' | 'low';
+  source?: string;
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const strokeColor = score >= 7 ? '#22c55e' : score >= 5 ? '#eab308' : '#ef4444';
@@ -41,6 +46,12 @@ function ScoreCircle({
         <span className="absolute inset-0 flex items-center justify-center text-lg font-bold">
           {score}
         </span>
+        {/* Confidence indicator dot */}
+        {confidence && (
+          <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-[var(--bg-tertiary)] ${
+            confidence === 'high' ? 'bg-green-500' : confidence === 'medium' ? 'bg-yellow-500' : 'bg-red-500'
+          }`} title={`${confidence} confidence`} />
+        )}
       </div>
       <p className={`text-xs font-medium ${colorClass}`}>{label}</p>
       <p className="text-xs text-[var(--text-muted)] mt-1">
@@ -52,11 +63,25 @@ function ScoreCircle({
       {showTooltip && details && (
         <div className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 p-3 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-xl">
           <div className="text-left">
-            <div className="flex items-center gap-2 mb-2">
-              <span className={`text-sm font-semibold ${colorClass}`}>{label}</span>
-              <span className="text-sm font-bold" style={{ color: strokeColor }}>{score}/10</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-semibold ${colorClass}`}>{label}</span>
+                <span className="text-sm font-bold" style={{ color: strokeColor }}>{score}/10</span>
+              </div>
+              {confidence && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                  confidence === 'high' ? 'bg-green-500/20 text-green-400' :
+                  confidence === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                  'bg-red-500/20 text-red-400'
+                }`}>
+                  {confidence === 'high' ? 'Verified' : confidence === 'medium' ? 'Estimated' : 'Limited'}
+                </span>
+              )}
             </div>
             <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{details}</p>
+            {source && (
+              <p className="text-[10px] text-[var(--text-muted)] mt-2 italic">Source: {source}</p>
+            )}
           </div>
           {/* Arrow */}
           <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px">
@@ -297,6 +322,8 @@ export default function AnalysisReport({
               label="Traffic"
               details={feasibilityScore.details?.traffic || 'Traffic volume assessment based on VPD data'}
               colorClass="text-[var(--accent-cyan)]"
+              confidence={accessPoints?.some(ap => ap.vpdSource === 'fdot') ? 'high' : trafficData ? 'medium' : 'low'}
+              source={accessPoints?.some(ap => ap.vpdSource === 'fdot') ? 'DOT Official Data' : 'Road Class Estimate'}
             />
 
             {/* Demographics Score */}
@@ -305,6 +332,18 @@ export default function AnalysisReport({
               label="Demographics"
               details={feasibilityScore.details?.demographics || 'Population and income analysis'}
               colorClass="text-[var(--accent-green)]"
+              confidence={demographicsData ? 'high' : 'medium'}
+              source="Census ACS 5-Year"
+            />
+
+            {/* Discretionary Income Score */}
+            <ScoreCircle
+              score={feasibilityScore.breakdown.discretionaryScore || 5}
+              label="Spending"
+              details={feasibilityScore.details?.discretionary || 'Discretionary income and spending power'}
+              colorClass="text-pink-400"
+              confidence={demographicsData?.discretionaryIncome ? 'high' : 'medium'}
+              source="Census + BLS Data"
             />
 
             {/* Competition Score */}
@@ -313,6 +352,8 @@ export default function AnalysisReport({
               label="Competition"
               details={feasibilityScore.details?.competition || 'Nearby business competition analysis'}
               colorClass="text-[var(--accent-orange)]"
+              confidence={businesses.length > 0 ? 'medium' : 'low'}
+              source="OpenStreetMap POI"
             />
 
             {/* Access Score */}
@@ -321,6 +362,8 @@ export default function AnalysisReport({
               label="Access"
               details={feasibilityScore.details?.access || 'Road access and visibility assessment'}
               colorClass="text-[var(--accent-blue)]"
+              confidence={accessPoints && accessPoints.length > 0 ? 'high' : 'medium'}
+              source="OpenStreetMap Roads"
             />
 
             {/* Market Score */}
@@ -329,6 +372,8 @@ export default function AnalysisReport({
               label="Market"
               details={feasibilityScore.details?.market || 'Market conditions and property values'}
               colorClass="text-[var(--accent-red)]"
+              confidence={marketComps && marketComps.length > 0 ? 'high' : 'low'}
+              source={marketComps && marketComps.length > 0 ? 'County Property Records' : 'Regional Estimate'}
             />
 
             {/* Environmental Score */}
@@ -337,6 +382,8 @@ export default function AnalysisReport({
               label="Environmental"
               details={feasibilityScore.details?.environmental || 'Environmental risk factors'}
               colorClass="text-[var(--accent-purple)]"
+              confidence={environmentalRisk ? 'high' : 'low'}
+              source="FEMA/EPA/FWS"
             />
 
             {/* Economic Score */}
@@ -345,6 +392,8 @@ export default function AnalysisReport({
               label="Economic"
               details={feasibilityScore.details?.economic || 'Economic growth and spending patterns'}
               colorClass="text-emerald-400"
+              confidence={demographicsData ? 'medium' : 'low'}
+              source="Census ACS + Regional Data"
             />
 
             {/* Site Score */}
@@ -353,6 +402,8 @@ export default function AnalysisReport({
               label="Site"
               details={feasibilityScore.details?.site || 'Lot size and site characteristics'}
               colorClass="text-amber-400"
+              confidence={parcelInfo?.acres ? 'high' : 'medium'}
+              source={parcelInfo?.acres ? 'County Assessor' : 'Estimate'}
             />
           </div>
 
@@ -369,6 +420,21 @@ export default function AnalysisReport({
           </div>
         </div>
       )}
+
+      {/* Data Confidence Summary */}
+      <div className="mb-8">
+        <DataConfidenceSummary
+          trafficVerified={accessPoints?.some(ap => ap.vpdSource === 'fdot')}
+          trafficAvailable={!!trafficData || (accessPoints && accessPoints.length > 0)}
+          demographicsVerified={!!demographicsData}
+          demographicsAvailable={!!demographicsData}
+          environmentalVerified={!!environmentalRisk}
+          environmentalAvailable={!!environmentalRisk}
+          marketCompsAvailable={!!marketComps && marketComps.length > 0}
+          walkScoreVerified={false}
+          crimeDataVerified={false}
+        />
+      </div>
 
       {/* Traffic & Access Points */}
       {accessPoints && accessPoints.length > 0 && (
@@ -954,6 +1020,23 @@ export default function AnalysisReport({
                     <span className="font-medium">Region:</span> {retailer.matchDetails.region.matches ? '✓' : '✗'}
                   </div>
                 </div>
+
+                {/* Site Type Preferences */}
+                {retailer.siteTypes && retailer.siteTypes.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1 mb-2">
+                    <span className="text-xs text-[var(--text-muted)]">Site Types:</span>
+                    {retailer.siteTypes.map((siteType, idx) => (
+                      <span key={idx} className="px-2 py-0.5 bg-[var(--bg-secondary)] text-[var(--text-secondary)] text-xs rounded border border-[var(--border-color)]">
+                        {siteType}
+                      </span>
+                    ))}
+                    {retailer.prefersAnchoredCenter && (
+                      <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-xs rounded-full">
+                        Prefers Anchored Center
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Expansion & Franchise Info */}
                 <div className="flex flex-wrap gap-2 mb-2">
