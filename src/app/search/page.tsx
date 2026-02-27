@@ -544,21 +544,16 @@ export default function SearchPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link href="/" className="flex items-center gap-3 group">
-                {/* Feasora Logo - Radar style */}
+                {/* Feasora Logo - Crosshair style (matches main header) */}
                 <div className="w-10 h-10 flex items-center justify-center">
-                  <svg viewBox="0 0 32 32" className="w-10 h-10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    {/* Outer circle */}
-                    <circle cx="16" cy="16" r="11" stroke="#00D4FF" strokeWidth="2" fill="none"/>
-                    {/* Middle circle */}
-                    <circle cx="16" cy="16" r="7" stroke="#00D4FF" strokeWidth="2" fill="none"/>
-                    {/* Inner circle */}
-                    <circle cx="16" cy="16" r="3.5" stroke="#00D4FF" strokeWidth="1.5" fill="none"/>
-                    {/* Center dot */}
-                    <circle cx="16" cy="16" r="1.5" fill="#00D4FF"/>
-                    {/* Radar sweep line */}
-                    <line x1="16" y1="16" x2="24" y2="8" stroke="#00D4FF" strokeWidth="2" strokeLinecap="round"/>
-                    {/* Detection dot on sweep */}
-                    <circle cx="21" cy="11" r="1.5" fill="#00D4FF"/>
+                  <svg className="w-10 h-10 text-[#00D4FF]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="12" r="6" />
+                    <circle cx="12" cy="12" r="2" fill="currentColor" />
+                    <line x1="12" y1="2" x2="12" y2="6" />
+                    <line x1="12" y1="18" x2="12" y2="22" />
+                    <line x1="2" y1="12" x2="6" y2="12" />
+                    <line x1="18" y1="12" x2="22" y2="12" />
                   </svg>
                 </div>
                 <div>
