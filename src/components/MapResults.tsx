@@ -4,24 +4,7 @@ import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import Link from 'next/link';
-
-interface QuickFeasibility {
-  parcelId: string;
-  address: string;
-  coordinates: { lat: number; lng: number };
-  lotSize?: number;
-  lotSizeAcres?: number;
-  score: number;
-  factors: {
-    trafficScore: number;
-    businessDensity: number;
-    zoningScore: number;
-    accessScore: number;
-  };
-  zoning?: string;
-  nearbyBusinesses?: number;
-  estimatedVPD?: number;
-}
+import { QuickFeasibility } from '@/hooks/useSearchFavorites';
 
 interface MapResultsProps {
   results: QuickFeasibility[];

@@ -285,9 +285,10 @@ async function getHighwayAccess(lat: number, lng: number): Promise<{
     let interchangeName = '';
 
     for (const hw of highways) {
-      const ref = hw.tags?.ref || hw.tags?.name || '';
+      const ref = hw.tags?.ref || '';
+      const name = hw.tags?.name || '';
 
-      // Skip non-interstate refs (we only want I-XX)
+      // Skip non-interstate refs (we only want I-XX) unless it's a motorway
       if (ref && !ref.match(/^I-\d+/) && hw.tags?.highway !== 'motorway') {
         continue;
       }
@@ -300,11 +301,27 @@ async function getHighwayAccess(lat: number, lng: number): Promise<{
             const dist = calculateDistance(lat, lng, node.lat, node.lon);
             if (dist < minDistance) {
               minDistance = dist;
-              nearestHighway = formatHighwayRef(ref) || 'Interstate';
+
+              // Try to get the best highway identifier
+              // Priority: ref tag (I-95), then extract from name, then use name directly
+              if (ref) {
+                nearestHighway = formatHighwayRef(ref);
+              } else if (name) {
+                // Try to extract interstate from name like "Interstate 95" or "I-95 North"
+                const interstateMatch = name.match(/(?:Interstate|I-)\s*(\d+)/i);
+                if (interstateMatch) {
+                  nearestHighway = `I-${interstateMatch[1]}`;
+                } else {
+                  // Use the name directly if it's reasonable length
+                  nearestHighway = name.length <= 30 ? name : 'Interstate';
+                }
+              } else {
+                nearestHighway = 'Interstate';
+              }
 
               // Check for junction/interchange name
-              if (hw.tags?.junction || hw.tags?.name?.includes('Exit')) {
-                interchangeName = hw.tags.junction || hw.tags.name;
+              if (hw.tags?.junction || name?.includes('Exit')) {
+                interchangeName = hw.tags.junction || name;
               }
             }
           }

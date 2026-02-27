@@ -502,7 +502,7 @@ async function findAccessPoints(
             continue;
           }
 
-          if (distance <= 30) {
+          if (distance <= 20) { // Only roads within 20m of parcel boundary
             const roadDirection = calculateBearing([geom.lon, geom.lat], [nextGeom.lon, nextGeom.lat]);
             const nearestEdge = findNearestEdge([geom.lat, geom.lon], parcelBoundary);
             const isPerpendicular = nearestEdge ?
@@ -550,9 +550,25 @@ async function findAccessPoints(
     // This ensures clean labeling with only unique roads shown
     const uniqueRoads = new Map<string, AccessPoint>();
 
+    // Road type priority (higher = more important)
+    const roadTypePriority: Record<string, number> = {
+      'motorway': 10, 'motorway_link': 9,
+      'trunk': 8, 'trunk_link': 7,
+      'primary': 6, 'primary_link': 5,
+      'secondary': 4, 'secondary_link': 3,
+      'tertiary': 2, 'tertiary_link': 1,
+      'residential': 0, 'unclassified': -1,
+      'living_street': -2, 'service': -3,
+    };
+
     for (const ap of accessPoints) {
       // Skip unnamed roads - these are typically service roads, parking lots, driveways
       if (ap.roadName === 'Unnamed Road' || ap.roadName.toLowerCase().includes('unnamed')) {
+        continue;
+      }
+
+      // Skip service roads unless they're named (actual driveways vs parking lot aisles)
+      if (ap.roadType === 'service' && !ap.roadName.match(/\d|drive|entrance|exit/i)) {
         continue;
       }
 
@@ -563,8 +579,23 @@ async function findAccessPoints(
       }
     }
 
-    // Convert to array
-    const deduped = Array.from(uniqueRoads.values());
+    // Convert to array and sort by road importance
+    let deduped = Array.from(uniqueRoads.values());
+
+    // Sort by road type priority (most important first), then by distance
+    deduped.sort((a, b) => {
+      const priorityA = roadTypePriority[a.roadType || 'unclassified'] ?? -1;
+      const priorityB = roadTypePriority[b.roadType || 'unclassified'] ?? -1;
+      if (priorityA !== priorityB) return priorityB - priorityA;
+      return (a.distance || 0) - (b.distance || 0);
+    });
+
+    // Limit to maximum 4 access points (most properties don't have more than 4 road frontages)
+    // This prevents cluttered maps at complex intersections
+    if (deduped.length > 4) {
+      console.log(`[AccessPoints] Limiting from ${deduped.length} to 4 most important roads`);
+      deduped = deduped.slice(0, 4);
+    }
 
     console.log(`[AccessPoints] Final: ${deduped.length} unique roads (from ${accessPoints.length} candidates)`);
 

@@ -1,6 +1,9 @@
 // Curated database of retailer site requirements based on SE CRE Complete V2 spreadsheet
 // 358 retailers across 30 categories for Southeast US commercial real estate
 
+// Site/space type preferences for retailers
+export type SiteType = 'freestanding' | 'pad_site' | 'end_cap' | 'inline' | 'anchor' | 'junior_anchor' | 'strip_center' | 'anchored_center';
+
 export interface RetailerRequirements {
   name: string;
   category: string;
@@ -11,6 +14,9 @@ export interface RetailerRequirements {
   maxSqFt?: number;
   minVPD: number;      // vehicles per day
   idealVPD: number;
+  // Site type preferences
+  siteTypes?: SiteType[];  // e.g., ['freestanding', 'pad_site'] or ['inline', 'end_cap', 'anchored_center']
+  prefersAnchoredCenter?: boolean;  // Prefers to be near anchor tenants (grocery, big box)
   // Demographics
   incomePreference: ('low' | 'moderate' | 'middle' | 'upper-middle' | 'high')[];
   minPopulation: number;  // within trade area (typically 3-5 miles)
@@ -45,6 +51,196 @@ export const US_REGIONS: Record<string, string[]> = {
   'Florida': ['FL'],
   'California': ['CA'],
   'National': ['ALL'],
+};
+
+// Site type preferences lookup - based on industry knowledge and typical location strategies
+// This provides defaults for retailers that don't have siteTypes explicitly set
+export const SITE_TYPE_LOOKUP: Record<string, { siteTypes: SiteType[]; prefersAnchoredCenter: boolean }> = {
+  // ===== FREESTANDING ONLY (Drive-thru QSR, Auto, Banks) =====
+  "Chick-fil-A": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: false },
+  "McDonald's": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: false },
+  "Wendy's": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: false },
+  "Burger King": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: false },
+  "Taco Bell": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: false },
+  "Popeyes": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: false },
+  "KFC": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: false },
+  "Raising Cane's": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: false },
+  "Whataburger": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: false },
+  "Sonic": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "Starbucks": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: true },
+  "Dunkin'": { siteTypes: ['freestanding', 'pad_site', 'end_cap', 'inline'], prefersAnchoredCenter: true },
+  "Dutch Bros": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: false },
+  "Wawa": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "7-Eleven": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: false },
+  "RaceTrac": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "QuikTrip": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "Buc-ee's": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "AutoZone": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: true },
+  "O'Reilly Auto Parts": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: true },
+  "Advance Auto Parts": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: true },
+  "Jiffy Lube": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: false },
+  "Valvoline": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: false },
+  "Take 5 Oil Change": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: false },
+  "Chase Bank": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Bank of America": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Wells Fargo": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Regions Bank": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Truist": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Walgreens": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "CVS": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+
+  // ===== ANCHOR TENANTS (Big Box, Grocery) =====
+  "Walmart": { siteTypes: ['anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "Target": { siteTypes: ['anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "Costco": { siteTypes: ['anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "Sam's Club": { siteTypes: ['anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "Publix": { siteTypes: ['anchor'], prefersAnchoredCenter: false },
+  "Kroger": { siteTypes: ['anchor'], prefersAnchoredCenter: false },
+  "Whole Foods": { siteTypes: ['anchor', 'junior_anchor'], prefersAnchoredCenter: false },
+  "Sprouts": { siteTypes: ['anchor', 'junior_anchor'], prefersAnchoredCenter: false },
+  "Aldi": { siteTypes: ['anchor', 'junior_anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "Lidl": { siteTypes: ['anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "The Fresh Market": { siteTypes: ['anchor', 'junior_anchor'], prefersAnchoredCenter: false },
+  "Home Depot": { siteTypes: ['anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "Lowe's": { siteTypes: ['anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "Best Buy": { siteTypes: ['anchor', 'junior_anchor'], prefersAnchoredCenter: false },
+
+  // ===== JUNIOR ANCHOR (Mid-size, 15K-40K SF) =====
+  "Ross": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "TJ Maxx": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "Marshalls": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "HomeGoods": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "Burlington": { siteTypes: ['junior_anchor', 'anchor'], prefersAnchoredCenter: true },
+  "Nordstrom Rack": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "Ulta Beauty": { siteTypes: ['junior_anchor', 'end_cap', 'inline'], prefersAnchoredCenter: true },
+  "Five Below": { siteTypes: ['junior_anchor', 'end_cap', 'inline'], prefersAnchoredCenter: true },
+  "Dollar Tree": { siteTypes: ['junior_anchor', 'end_cap', 'inline'], prefersAnchoredCenter: true },
+  "Dollar General": { siteTypes: ['freestanding', 'end_cap'], prefersAnchoredCenter: false },
+  "PetSmart": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "Petco": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "Dick's Sporting Goods": { siteTypes: ['junior_anchor', 'anchor'], prefersAnchoredCenter: true },
+  "Academy Sports": { siteTypes: ['junior_anchor', 'anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "Michaels": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "Hobby Lobby": { siteTypes: ['junior_anchor', 'anchor'], prefersAnchoredCenter: false },
+  "At Home": { siteTypes: ['anchor', 'junior_anchor'], prefersAnchoredCenter: false },
+  "Bed Bath & Beyond": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "Old Navy": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "Kohl's": { siteTypes: ['anchor', 'junior_anchor', 'freestanding'], prefersAnchoredCenter: false },
+  "Barnes & Noble": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+
+  // ===== INLINE / STRIP CENTER (Prefer to be near anchor) =====
+  "Subway": { siteTypes: ['inline', 'end_cap', 'pad_site'], prefersAnchoredCenter: true },
+  "Jersey Mike's": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Jimmy John's": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Firehouse Subs": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Great Clips": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Sport Clips": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Supercuts": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "European Wax Center": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Massage Envy": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Orange Theory": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Planet Fitness": { siteTypes: ['junior_anchor', 'end_cap'], prefersAnchoredCenter: true },
+  "Anytime Fitness": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "The UPS Store": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "FedEx Office": { siteTypes: ['inline', 'end_cap', 'freestanding'], prefersAnchoredCenter: true },
+  "H&R Block": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Jackson Hewitt": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Verizon": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "AT&T": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "T-Mobile": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "GameStop": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "GNC": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Vitamin Shoppe": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Sally Beauty": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Chipotle": { siteTypes: ['inline', 'end_cap', 'freestanding'], prefersAnchoredCenter: true },
+  "Panera Bread": { siteTypes: ['end_cap', 'freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Panda Express": { siteTypes: ['inline', 'end_cap', 'pad_site'], prefersAnchoredCenter: true },
+  "Wingstop": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Buffalo Wild Wings": { siteTypes: ['end_cap', 'freestanding'], prefersAnchoredCenter: true },
+  "Crumbl Cookies": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Nothing Bundt Cakes": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Insomnia Cookies": { siteTypes: ['inline'], prefersAnchoredCenter: true },
+  "Tropical Smoothie": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Smoothie King": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Jamba": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Moe's Southwest Grill": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Qdoba": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Five Guys": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Shake Shack": { siteTypes: ['end_cap', 'inline', 'freestanding'], prefersAnchoredCenter: true },
+  "MOD Pizza": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Blaze Pizza": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Marco's Pizza": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Papa Johns": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Domino's": { siteTypes: ['inline', 'end_cap', 'freestanding'], prefersAnchoredCenter: true },
+  "Little Caesars": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+
+  // ===== CASUAL DINING (End-cap or Freestanding, often pad sites) =====
+  "Olive Garden": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: true },
+  "Applebee's": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: true },
+  "Chili's": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: true },
+  "Red Lobster": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Outback Steakhouse": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Longhorn Steakhouse": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Texas Roadhouse": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: true },
+  "Cracker Barrel": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "IHOP": { siteTypes: ['freestanding', 'pad_site', 'end_cap'], prefersAnchoredCenter: true },
+  "Denny's": { siteTypes: ['freestanding', 'pad_site'], prefersAnchoredCenter: false },
+  "Waffle House": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "Golden Corral": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "Hooters": { siteTypes: ['freestanding', 'end_cap'], prefersAnchoredCenter: false },
+  "Twin Peaks": { siteTypes: ['freestanding', 'end_cap'], prefersAnchoredCenter: false },
+
+  // ===== MEDICAL / URGENT CARE =====
+  "CareNow": { siteTypes: ['freestanding', 'end_cap'], prefersAnchoredCenter: true },
+  "MedExpress": { siteTypes: ['freestanding', 'end_cap'], prefersAnchoredCenter: true },
+  "MinuteClinic (CVS)": { siteTypes: ['freestanding'], prefersAnchoredCenter: false },
+  "Aspen Dental": { siteTypes: ['end_cap', 'inline', 'freestanding'], prefersAnchoredCenter: true },
+  "Heartland Dental": { siteTypes: ['end_cap', 'inline'], prefersAnchoredCenter: true },
+  "Affordable Dentures": { siteTypes: ['freestanding', 'end_cap'], prefersAnchoredCenter: true },
+  "America's Best": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "LensCrafters": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+  "Pearle Vision": { siteTypes: ['inline', 'end_cap'], prefersAnchoredCenter: true },
+};
+
+// Helper to get site type info for a retailer
+export function getRetailerSiteTypes(retailerName: string): { siteTypes: SiteType[]; prefersAnchoredCenter: boolean } | null {
+  // Direct lookup
+  if (SITE_TYPE_LOOKUP[retailerName]) {
+    return SITE_TYPE_LOOKUP[retailerName];
+  }
+
+  // Try partial match (e.g., "Chick-fil-A #12345" matches "Chick-fil-A")
+  for (const [name, data] of Object.entries(SITE_TYPE_LOOKUP)) {
+    if (retailerName.toLowerCase().includes(name.toLowerCase())) {
+      return data;
+    }
+  }
+
+  return null;
+}
+
+// Get human-readable site type labels
+export const SITE_TYPE_LABELS: Record<SiteType, string> = {
+  'freestanding': 'Freestanding',
+  'pad_site': 'Pad Site',
+  'end_cap': 'End Cap',
+  'inline': 'Inline',
+  'anchor': 'Anchor',
+  'junior_anchor': 'Junior Anchor',
+  'strip_center': 'Strip Center',
+  'anchored_center': 'Anchored Center',
+};
+
+// Get description for site types
+export const SITE_TYPE_DESCRIPTIONS: Record<SiteType, string> = {
+  'freestanding': 'Standalone building on its own parcel',
+  'pad_site': 'Separate building in front of larger shopping center',
+  'end_cap': 'End unit of a strip center with extra visibility',
+  'inline': 'Middle unit within a strip center',
+  'anchor': 'Large tenant (40K+ SF) that draws traffic to a center',
+  'junior_anchor': 'Mid-size tenant (15K-40K SF) that supports anchors',
+  'strip_center': 'Any position in an unanchored strip center',
+  'anchored_center': 'Any position in a center with a grocery/big box anchor',
 };
 
 export const RETAILER_REQUIREMENTS: RetailerRequirements[] = [

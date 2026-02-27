@@ -169,6 +169,22 @@ interface RecommendationRequest {
   nearbyBusinesses: Array<{ name: string; type: string; distance: number }>;
   floodRisk: 'low' | 'medium' | 'high' | null;
   zoning: string | null;
+  // Enhanced data from feasibility score
+  discretionaryIncome?: number | null;
+  consumerSpending?: number | null;
+  environmentalRisk?: {
+    floodZone?: { risk: 'low' | 'medium' | 'high' };
+    wetlands?: { present: boolean };
+    brownfields?: { present: boolean; count: number };
+    superfund?: { present: boolean };
+    overallRiskScore?: number;
+  } | null;
+  walkabilityScore?: number | null;
+  safetyScore?: number | null;
+  developmentScore?: number | null;
+  saturationScore?: number | null;
+  accessScore?: number | null;
+  marketComps?: Array<{ pricePerSqft: number; salePrice: number }> | null;
 }
 
 interface ScoreResult {
@@ -187,6 +203,11 @@ interface RecommendationResponse {
   competition: ScoreResult;
   demographics: ScoreResult;
   siteConditions: ScoreResult;
+  spending?: ScoreResult;
+  environmental?: ScoreResult;
+  walkability?: ScoreResult;
+  safety?: ScoreResult;
+  market?: ScoreResult;
   suggestedUses: string[];
   concerns: string[];
   strengths: string[];
@@ -534,6 +555,293 @@ function scoreSiteConditions(
   };
 }
 
+function scoreSpending(
+  discretionaryIncome: number | null | undefined,
+  consumerSpending: number | null | undefined,
+  medianIncome: number | null
+): ScoreResult {
+  if (!discretionaryIncome && !consumerSpending && !medianIncome) {
+    return {
+      score: 'C',
+      value: 70,
+      insight: 'Spending data not available',
+      recommendation: 'Obtain consumer spending data for accurate assessment',
+    };
+  }
+
+  let value = 70;
+  const insights: string[] = [];
+  const recommendations: string[] = [];
+
+  // Discretionary income analysis
+  if (discretionaryIncome) {
+    if (discretionaryIncome >= 50000) {
+      value += 20;
+      insights.push(`Excellent spending power ($${discretionaryIncome.toLocaleString()} discretionary)`);
+      recommendations.push('Supports premium positioning and upscale concepts');
+    } else if (discretionaryIncome >= 35000) {
+      value += 15;
+      insights.push(`Strong spending power ($${discretionaryIncome.toLocaleString()} discretionary)`);
+    } else if (discretionaryIncome >= 20000) {
+      value += 8;
+      insights.push(`Moderate spending power ($${discretionaryIncome.toLocaleString()} discretionary)`);
+    } else {
+      insights.push(`Limited discretionary income ($${discretionaryIncome.toLocaleString()})`);
+      recommendations.push('Value-oriented concepts perform better here');
+    }
+  } else if (medianIncome) {
+    // Estimate discretionary as ~35% of income
+    const estimated = medianIncome * 0.35;
+    if (estimated >= 30000) {
+      value += 10;
+      insights.push(`Est. $${Math.round(estimated).toLocaleString()} discretionary (based on income)`);
+    }
+  }
+
+  // Consumer spending analysis
+  if (consumerSpending) {
+    const spendingM = consumerSpending / 1000000;
+    if (spendingM >= 500) {
+      value += 10;
+      insights.push(`$${spendingM.toFixed(0)}M consumer spending in trade area`);
+    } else if (spendingM >= 200) {
+      value += 5;
+      insights.push(`$${spendingM.toFixed(0)}M consumer spending in trade area`);
+    }
+  }
+
+  return {
+    score: calculateGrade(Math.min(100, value)),
+    value: Math.min(100, Math.round(value)),
+    insight: insights.join('. ') || 'Spending data limited',
+    recommendation: recommendations.join('. ') || 'Standard spending patterns for commercial development',
+  };
+}
+
+function scoreEnvironmental(
+  floodRisk: 'low' | 'medium' | 'high' | null,
+  environmentalRisk: RecommendationRequest['environmentalRisk']
+): ScoreResult {
+  if (!floodRisk && !environmentalRisk) {
+    return {
+      score: 'C',
+      value: 70,
+      insight: 'Environmental data not available',
+      recommendation: 'Obtain Phase I ESA for due diligence',
+    };
+  }
+
+  let value = 85;
+  const issues: string[] = [];
+  const recommendations: string[] = [];
+
+  // Flood risk
+  const flood = environmentalRisk?.floodZone?.risk || floodRisk;
+  if (flood === 'high') {
+    value -= 30;
+    issues.push('High flood risk zone');
+    recommendations.push('Flood insurance required, elevated construction needed');
+  } else if (flood === 'medium') {
+    value -= 15;
+    issues.push('Moderate flood risk');
+    recommendations.push('Consider flood mitigation measures');
+  } else if (flood === 'low') {
+    issues.push('Low flood risk - favorable');
+  }
+
+  // Brownfields
+  if (environmentalRisk?.brownfields?.present) {
+    value -= 15;
+    issues.push(`${environmentalRisk.brownfields.count} brownfield site(s) nearby`);
+    recommendations.push('Phase II ESA recommended');
+  }
+
+  // Superfund
+  if (environmentalRisk?.superfund?.present) {
+    value -= 25;
+    issues.push('Superfund site nearby - significant concern');
+    recommendations.push('Detailed environmental review required');
+  }
+
+  // Wetlands
+  if (environmentalRisk?.wetlands?.present) {
+    value -= 10;
+    issues.push('Wetlands present - development restrictions may apply');
+    recommendations.push('Verify wetland boundaries and permitting requirements');
+  }
+
+  return {
+    score: calculateGrade(Math.max(40, value)),
+    value: Math.max(40, Math.round(value)),
+    insight: issues.join('. ') || 'Clear environmental profile',
+    recommendation: recommendations.join('. ') || 'No significant environmental concerns',
+  };
+}
+
+function scoreWalkability(
+  walkabilityScore: number | null | undefined,
+  businessType: string | null
+): ScoreResult {
+  if (walkabilityScore === null || walkabilityScore === undefined) {
+    return {
+      score: 'C',
+      value: 70,
+      insight: 'Walk score not available',
+      recommendation: 'Consider pedestrian traffic patterns',
+    };
+  }
+
+  let value = 60;
+  let insight: string;
+  let recommendation: string;
+
+  // Walk score interpretation
+  if (walkabilityScore >= 90) {
+    value = 95;
+    insight = `Walker\'s Paradise (${walkabilityScore}) - Daily errands do not require a car`;
+    recommendation = 'Excellent for pedestrian-oriented retail, coffee shops, restaurants';
+  } else if (walkabilityScore >= 70) {
+    value = 85;
+    insight = `Very Walkable (${walkabilityScore}) - Most errands can be accomplished on foot`;
+    recommendation = 'Good for neighborhood retail and services';
+  } else if (walkabilityScore >= 50) {
+    value = 70;
+    insight = `Somewhat Walkable (${walkabilityScore}) - Some errands can be accomplished on foot`;
+    recommendation = 'Mixed pedestrian/drive-up traffic expected';
+  } else if (walkabilityScore >= 25) {
+    value = 55;
+    insight = `Car-Dependent (${walkabilityScore}) - Almost all errands require a car`;
+    recommendation = 'Focus on drive-up and drive-thru concepts';
+  } else {
+    value = 45;
+    insight = `Almost All Errands Require a Car (${walkabilityScore})`;
+    recommendation = 'Site requires strong vehicular traffic to succeed';
+  }
+
+  return {
+    score: calculateGrade(value),
+    value: Math.round(value),
+    insight,
+    recommendation,
+  };
+}
+
+function scoreSafety(
+  safetyScore: number | null | undefined
+): ScoreResult {
+  if (safetyScore === null || safetyScore === undefined) {
+    return {
+      score: 'C',
+      value: 70,
+      insight: 'Crime/safety data not available',
+      recommendation: 'Research local crime statistics',
+    };
+  }
+
+  let value: number;
+  let insight: string;
+  let recommendation: string;
+
+  if (safetyScore >= 8) {
+    value = 95;
+    insight = `Excellent safety profile (${safetyScore}/10) - Low crime area`;
+    recommendation = 'Favorable for all retail concepts, lower security costs';
+  } else if (safetyScore >= 6) {
+    value = 80;
+    insight = `Good safety (${safetyScore}/10) - Average crime levels`;
+    recommendation = 'Standard security measures recommended';
+  } else if (safetyScore >= 4) {
+    value = 65;
+    insight = `Moderate safety concerns (${safetyScore}/10) - Above average crime`;
+    recommendation = 'Enhanced security measures recommended, may affect insurance costs';
+  } else {
+    value = 45;
+    insight = `Significant safety concerns (${safetyScore}/10) - High crime area`;
+    recommendation = 'Major security investment required, limits concept options';
+  }
+
+  return {
+    score: calculateGrade(value),
+    value: Math.round(value),
+    insight,
+    recommendation,
+  };
+}
+
+function scoreMarket(
+  marketComps: Array<{ pricePerSqft: number; salePrice: number }> | null | undefined,
+  saturationScore: number | null | undefined,
+  developmentScore: number | null | undefined
+): ScoreResult {
+  if (!marketComps?.length && saturationScore === null && developmentScore === null) {
+    return {
+      score: 'C',
+      value: 70,
+      insight: 'Market data not available',
+      recommendation: 'Obtain market comps for valuation',
+    };
+  }
+
+  let value = 70;
+  const insights: string[] = [];
+  const recommendations: string[] = [];
+
+  // Market comps analysis
+  if (marketComps && marketComps.length > 0) {
+    const avgPricePerSqft = marketComps.reduce((sum, c) => sum + c.pricePerSqft, 0) / marketComps.length;
+
+    if (avgPricePerSqft >= 200) {
+      value += 15;
+      insights.push(`Premium market ($${Math.round(avgPricePerSqft)}/sqft avg)`);
+    } else if (avgPricePerSqft >= 150) {
+      value += 10;
+      insights.push(`Strong market ($${Math.round(avgPricePerSqft)}/sqft avg)`);
+    } else if (avgPricePerSqft >= 100) {
+      value += 5;
+      insights.push(`Moderate market ($${Math.round(avgPricePerSqft)}/sqft avg)`);
+    } else {
+      insights.push(`Value market ($${Math.round(avgPricePerSqft)}/sqft avg)`);
+    }
+
+    insights.push(`${marketComps.length} recent sales`);
+  }
+
+  // Saturation analysis
+  if (saturationScore !== null && saturationScore !== undefined) {
+    if (saturationScore >= 7) {
+      value += 10;
+      insights.push('Undersupplied market - strong opportunity');
+    } else if (saturationScore >= 5) {
+      value += 5;
+      insights.push('Balanced market supply');
+    } else if (saturationScore < 4) {
+      value -= 5;
+      insights.push('Market may be saturated');
+      recommendations.push('Differentiation strategy important');
+    }
+  }
+
+  // Development momentum
+  if (developmentScore !== null && developmentScore !== undefined) {
+    if (developmentScore >= 7) {
+      value += 5;
+      insights.push('High development momentum - growing area');
+    } else if (developmentScore >= 5) {
+      insights.push('Stable development activity');
+    } else {
+      insights.push('Limited new development');
+      recommendations.push('Verify demand drivers');
+    }
+  }
+
+  return {
+    score: calculateGrade(Math.min(100, value)),
+    value: Math.min(100, Math.round(value)),
+    insight: insights.join('. ') || 'Market conditions standard',
+    recommendation: recommendations.join('. ') || 'Market supports commercial development',
+  };
+}
+
 function generateSuggestedUses(
   vpd: number | null,
   lotSizeAcres: number | null,
@@ -626,7 +934,10 @@ function generateConcerns(
   accessScore: ScoreResult,
   competitionScore: ScoreResult,
   demographicsScore: ScoreResult,
-  siteScore: ScoreResult
+  siteScore: ScoreResult,
+  spendingScore?: ScoreResult,
+  environmentalScore?: ScoreResult,
+  safetyScore?: ScoreResult
 ): string[] {
   const concerns: string[] = [];
 
@@ -645,6 +956,16 @@ function generateConcerns(
   if (siteScore.value < 70) {
     concerns.push('Site conditions require additional due diligence');
   }
+  // Enhanced concerns
+  if (spendingScore && spendingScore.value < 70) {
+    concerns.push('Limited consumer spending power in trade area');
+  }
+  if (environmentalScore && environmentalScore.value < 65) {
+    concerns.push('Environmental issues may affect development');
+  }
+  if (safetyScore && safetyScore.value < 60) {
+    concerns.push('Safety/crime concerns may impact operations');
+  }
 
   return concerns;
 }
@@ -656,7 +977,11 @@ function generateStrengths(
   demographicsScore: ScoreResult,
   siteScore: ScoreResult,
   isCornerLot: boolean,
-  hasHighwayAccess: boolean
+  hasHighwayAccess: boolean,
+  spendingScore?: ScoreResult,
+  environmentalScore?: ScoreResult,
+  walkScore?: ScoreResult,
+  marketScore?: ScoreResult
 ): string[] {
   const strengths: string[] = [];
 
@@ -680,6 +1005,19 @@ function generateStrengths(
   }
   if (hasHighwayAccess) {
     strengths.push('Highway exposure');
+  }
+  // Enhanced strengths
+  if (spendingScore && spendingScore.value >= 85) {
+    strengths.push('Strong consumer spending power');
+  }
+  if (environmentalScore && environmentalScore.value >= 90) {
+    strengths.push('Clear environmental profile');
+  }
+  if (walkScore && walkScore.value >= 80) {
+    strengths.push('Highly walkable location');
+  }
+  if (marketScore && marketScore.value >= 85) {
+    strengths.push('Strong market fundamentals');
   }
 
   return strengths;
@@ -736,6 +1074,15 @@ export async function POST(request: Request) {
       nearbyBusinesses,
       floodRisk,
       zoning,
+      // Enhanced data
+      discretionaryIncome,
+      consumerSpending,
+      environmentalRisk,
+      walkabilityScore,
+      safetyScore,
+      developmentScore,
+      saturationScore,
+      marketComps,
     } = body;
 
     // Normalize businessType (convert undefined to null)
@@ -744,21 +1091,49 @@ export async function POST(request: Request) {
     // Get business type requirements if specified
     const requirements = normalizedBusinessType ? BUSINESS_TYPE_REQUIREMENTS[normalizedBusinessType] : null;
 
-    // Calculate individual scores
+    // Calculate individual scores (original)
     const trafficScore = scoreTraffic(vpd, normalizedBusinessType, requirements);
     const accessScore = scoreAccess(accessPointCount, roadCount, isCornerLot, hasHighwayAccess, requirements);
     const { result: competitionScore, gaps } = scoreCompetition(nearbyBusinesses || [], normalizedBusinessType);
     const demographicsScore = scoreDemographics(medianIncome, population, normalizedBusinessType);
     const siteScore = scoreSiteConditions(lotSizeAcres, floodRisk, zoning, requirements);
 
-    // Calculate overall score (weighted average)
-    const overallValue = Math.round(
-      trafficScore.value * 0.30 +
-      accessScore.value * 0.20 +
-      competitionScore.value * 0.15 +
-      demographicsScore.value * 0.20 +
-      siteScore.value * 0.15
-    );
+    // Calculate enhanced scores (new)
+    const spendingScore = scoreSpending(discretionaryIncome, consumerSpending, medianIncome);
+    const environmentalScore = scoreEnvironmental(floodRisk, environmentalRisk);
+    const walkScore = scoreWalkability(walkabilityScore, normalizedBusinessType);
+    const safetyResult = scoreSafety(safetyScore);
+    const marketScore = scoreMarket(marketComps, saturationScore, developmentScore);
+
+    // Calculate overall score (weighted average with new factors)
+    // Adjusted weights to include new data points
+    const hasEnhancedData = discretionaryIncome || environmentalRisk || walkabilityScore !== null || safetyScore !== null || marketComps?.length;
+
+    let overallValue: number;
+    if (hasEnhancedData) {
+      // Enhanced scoring with all data
+      overallValue = Math.round(
+        trafficScore.value * 0.20 +       // 20% traffic
+        accessScore.value * 0.12 +         // 12% access
+        competitionScore.value * 0.10 +    // 10% competition
+        demographicsScore.value * 0.12 +   // 12% demographics
+        siteScore.value * 0.10 +           // 10% site conditions
+        spendingScore.value * 0.10 +       // 10% spending power
+        environmentalScore.value * 0.10 +  // 10% environmental
+        walkScore.value * 0.05 +           // 5% walkability
+        safetyResult.value * 0.06 +        // 6% safety
+        marketScore.value * 0.05           // 5% market
+      );
+    } else {
+      // Original scoring without enhanced data
+      overallValue = Math.round(
+        trafficScore.value * 0.30 +
+        accessScore.value * 0.20 +
+        competitionScore.value * 0.15 +
+        demographicsScore.value * 0.20 +
+        siteScore.value * 0.15
+      );
+    }
 
     const overallGrade = calculateGrade(overallValue);
 
@@ -777,7 +1152,10 @@ export async function POST(request: Request) {
       accessScore,
       competitionScore,
       demographicsScore,
-      siteScore
+      siteScore,
+      spendingScore,
+      environmentalScore,
+      safetyResult
     );
 
     const strengths = generateStrengths(
@@ -787,7 +1165,11 @@ export async function POST(request: Request) {
       demographicsScore,
       siteScore,
       isCornerLot,
-      hasHighwayAccess
+      hasHighwayAccess,
+      spendingScore,
+      environmentalScore,
+      walkScore,
+      marketScore
     );
 
     const keyTakeaways = generateKeyTakeaways(
@@ -821,6 +1203,12 @@ export async function POST(request: Request) {
       competition: competitionScore,
       demographics: demographicsScore,
       siteConditions: siteScore,
+      // Enhanced scores
+      spending: spendingScore,
+      environmental: environmentalScore,
+      walkability: walkScore,
+      safety: safetyResult,
+      market: marketScore,
       suggestedUses,
       concerns,
       strengths,

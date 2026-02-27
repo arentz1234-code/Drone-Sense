@@ -478,6 +478,12 @@ export default function HomePage() {
       }
 
       try {
+        // Gather enhanced data for more accurate matching
+        const isCornerLot = accessPoints.length >= 2 &&
+          new Set(accessPoints.map(ap => ap.roadName)).size >= 2;
+        const hasHighwayAccess = locationIntelligence?.highwayAccess?.hasDirectAccess ||
+          (locationIntelligence?.highwayAccess?.distanceMiles ?? 999) < 0.5;
+
         const response = await fetch('/api/retailer-match', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -488,6 +494,30 @@ export default function HomePage() {
             incomeLevel,
             population,
             stateCode,
+            // Enhanced data for more accurate matching
+            discretionaryIncome: demographicsData?.discretionaryIncome || null,
+            consumerSpending: demographicsData?.consumerSpending || null,
+            environmentalRisk: environmentalRisk ? {
+              floodZone: environmentalRisk.floodZone,
+              wetlands: environmentalRisk.wetlands,
+              brownfields: environmentalRisk.brownfields,
+              superfund: environmentalRisk.superfund,
+              overallRiskScore: environmentalRisk.overallRiskScore,
+            } : null,
+            competitionCount: businesses.length,
+            competitionDensity: businesses.length > 30 ? 'saturated'
+              : businesses.length > 15 ? 'high'
+              : businesses.length > 5 ? 'moderate' : 'low',
+            accessScore: analysis?.feasibilityScore?.breakdown?.accessScore || null,
+            walkabilityScore: enhancedData?.walkScore?.walkScore || null,
+            safetyScore: enhancedData?.crimeData?.safetyScore || null,
+            developmentScore: enhancedData?.buildingPermits?.developmentMomentum
+              ? enhancedData.buildingPermits.developmentMomentum / 10 : null,
+            saturationScore: enhancedData?.vacancyData?.marketSaturationScore
+              ? enhancedData.vacancyData.marketSaturationScore / 10 : null,
+            zoning: selectedParcel?.parcelInfo?.zoning || parcelData?.parcelInfo?.zoning || null,
+            isCornerLot,
+            hasHighwayAccess,
           }),
         });
 
@@ -510,7 +540,19 @@ export default function HomePage() {
     trafficData?.estimatedVPD,
     demographicsData?.medianHouseholdIncome,
     demographicsData?.population,
+    demographicsData?.discretionaryIncome,
+    demographicsData?.consumerSpending,
     address,
+    environmentalRisk,
+    businesses.length,
+    analysis?.feasibilityScore?.breakdown?.accessScore,
+    enhancedData?.walkScore?.walkScore,
+    enhancedData?.crimeData?.safetyScore,
+    enhancedData?.buildingPermits?.developmentMomentum,
+    enhancedData?.vacancyData?.marketSaturationScore,
+    locationIntelligence?.highwayAccess,
+    selectedParcel?.parcelInfo?.zoning,
+    parcelData?.parcelInfo?.zoning,
   ]);
 
   // Fetch enhanced data (Walk Score, Crime, Building Permits, Isochrone, Vacancy)

@@ -168,8 +168,25 @@ export default function RecommendationsPanel({
       nearbyBusinesses,
       floodRisk,
       zoning: parcelInfo?.zoning || null,
+      // Enhanced data for more accurate recommendations
+      discretionaryIncome: demographicsData?.discretionaryIncome || null,
+      consumerSpending: demographicsData?.consumerSpending || null,
+      environmentalRisk: environmentalRisk ? {
+        floodZone: environmentalRisk.floodZone,
+        wetlands: environmentalRisk.wetlands,
+        brownfields: environmentalRisk.brownfields,
+        superfund: environmentalRisk.superfund,
+        overallRiskScore: environmentalRisk.overallRiskScore,
+      } : null,
+      walkabilityScore: enhancedData?.walkScore?.walkScore || null,
+      safetyScore: enhancedData?.crimeData?.safetyScore || null,
+      developmentScore: enhancedData?.buildingPermits?.developmentMomentum
+        ? enhancedData.buildingPermits.developmentMomentum / 10 : null,
+      saturationScore: enhancedData?.vacancyData?.marketSaturationScore
+        ? enhancedData.vacancyData.marketSaturationScore / 10 : null,
+      marketComps: null, // Not passed to this component currently
     };
-  }, [accessPoints, trafficData, businesses, environmentalRisk, demographicsData, parcelInfo]);
+  }, [accessPoints, trafficData, businesses, environmentalRisk, demographicsData, parcelInfo, enhancedData]);
 
   // Fetch recommendations when data changes
   useEffect(() => {

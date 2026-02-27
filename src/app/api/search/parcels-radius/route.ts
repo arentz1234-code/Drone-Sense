@@ -12,6 +12,12 @@ interface ParcelResult {
   coordinates: { lat: number; lng: number };
   lotSize?: number;
   zoning?: string;
+  landUse?: string;
+  landUseCode?: string;
+  owner?: string;
+  yearBuilt?: number;
+  buildingSqFt?: number;
+  propertyType?: string; // Inferred: 'Vacant Land', 'Improved', 'Parking', etc.
 }
 
 // Earth radius in miles
@@ -66,6 +72,82 @@ function calculatePolygonArea(coords: [number, number][]): number {
 
   const sqft = area * 10.7639;
   return sqft;
+}
+
+// Infer property type from available data
+function inferPropertyType(
+  landUse: string,
+  useCode: string,
+  zoning: string | undefined,
+  buildingSqFt: number | undefined,
+  yearBuilt: number | undefined
+): string {
+  const lu = (landUse || '').toUpperCase();
+  const uc = (useCode || '').toUpperCase();
+  const z = (zoning || '').toUpperCase();
+
+  // Check for vacant land indicators
+  if (lu.includes('VACANT') || uc.includes('VAC') || uc.startsWith('00') || uc.startsWith('0000')) {
+    if (z.includes('C') || z.includes('COM')) return 'Vacant Commercial';
+    if (z.includes('I') || z.includes('IND')) return 'Vacant Industrial';
+    return 'Vacant Land';
+  }
+
+  // Check for parking
+  if (lu.includes('PARKING') || lu.includes('PKG') || uc.includes('PARK')) {
+    return 'Parking Lot';
+  }
+
+  // Check for specific commercial uses
+  if (lu.includes('RESTAURANT') || lu.includes('FOOD') || uc.includes('REST')) return 'Restaurant';
+  if (lu.includes('RETAIL') || lu.includes('STORE') || uc.includes('RET')) return 'Retail';
+  if (lu.includes('OFFICE') || uc.includes('OFF')) return 'Office';
+  if (lu.includes('HOTEL') || lu.includes('MOTEL') || uc.includes('HOT')) return 'Hotel/Motel';
+  if (lu.includes('MEDICAL') || lu.includes('CLINIC') || lu.includes('HOSPITAL')) return 'Medical';
+  if (lu.includes('BANK') || lu.includes('FINANC')) return 'Bank/Financial';
+  if (lu.includes('GAS') || lu.includes('SERVICE STATION') || lu.includes('FUEL')) return 'Gas Station';
+  if (lu.includes('AUTO') || lu.includes('CAR WASH') || lu.includes('DEALER')) return 'Auto Service';
+  if (lu.includes('WAREHOUSE') || lu.includes('STORAGE') || lu.includes('DISTRIB')) return 'Warehouse';
+  if (lu.includes('INDUSTRIAL') || lu.includes('MANUFAC')) return 'Industrial';
+  if (lu.includes('CHURCH') || lu.includes('RELIGIOUS')) return 'Religious';
+  if (lu.includes('SCHOOL') || lu.includes('EDUCATION')) return 'Educational';
+  if (lu.includes('GOVERN') || lu.includes('PUBLIC')) return 'Government';
+
+  // Check zoning for general type
+  if (z.includes('CBD') || z.includes('C-2') || z.includes('CG')) {
+    if (buildingSqFt && buildingSqFt > 0) return 'Commercial Building';
+    return 'Commercial Land';
+  }
+  if (z.includes('C-1') || z.includes('CN') || z.includes('NC')) {
+    if (buildingSqFt && buildingSqFt > 0) return 'Retail Building';
+    return 'Commercial Land';
+  }
+  if (z.includes('I-') || z.includes('IND') || z.includes('M-')) {
+    if (buildingSqFt && buildingSqFt > 0) return 'Industrial Building';
+    return 'Industrial Land';
+  }
+  if (z.includes('MU') || z.includes('MX') || z.includes('MIXED')) {
+    if (buildingSqFt && buildingSqFt > 0) return 'Mixed-Use Building';
+    return 'Mixed-Use Land';
+  }
+  if (z.includes('O-') || z.includes('OP') || z.includes('OFFICE')) {
+    if (buildingSqFt && buildingSqFt > 0) return 'Office Building';
+    return 'Office Land';
+  }
+
+  // Check if there's a building
+  if (buildingSqFt && buildingSqFt > 0) {
+    if (yearBuilt && yearBuilt > 0) {
+      return 'Improved Property';
+    }
+    return 'Building';
+  }
+
+  // Default based on zoning
+  if (z.includes('R-') || z.includes('RES')) return 'Residential';
+  if (z.includes('AG') || z.includes('AGRI')) return 'Agricultural';
+
+  return 'Unknown';
 }
 
 // Generate grid cells for large area searches
@@ -131,7 +213,7 @@ async function fetchParcelsFromArcGISCell(
     url.searchParams.set('geometry', envelope);
     url.searchParams.set('geometryType', 'esriGeometryEnvelope');
     url.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
-    url.searchParams.set('outFields', 'APN,PARCEL_ID,OWNER,ADDR,SITEADDR,ADDRESS,ACRES,GIS_ACRES,ZONING,ZONE_CODE,LANDUSE,OBJECTID');
+    url.searchParams.set('outFields', 'APN,PARCEL_ID,OWNER,ADDR,SITEADDR,ADDRESS,ACRES,GIS_ACRES,ZONING,ZONE_CODE,LANDUSE,LAND_USE,USE_CODE,USECODE,USECD,YEAR_BUILT,YEARBUILT,YR_BLT,BLDG_SQFT,SQFT,LIVING_AREA,OBJECTID');
     url.searchParams.set('returnGeometry', 'true');
     url.searchParams.set('outSR', '4326');
     url.searchParams.set('resultRecordCount', '1000');
@@ -167,12 +249,27 @@ async function fetchParcelsFromArcGISCell(
         lotSize = calculatePolygonArea(boundary) / 43560;
       }
 
+      // Get land use info
+      const landUse = attrs.LANDUSE || attrs.LAND_USE || '';
+      const useCode = attrs.USE_CODE || attrs.USECODE || attrs.USECD || '';
+      const yearBuilt = attrs.YEAR_BUILT || attrs.YEARBUILT || attrs.YR_BLT;
+      const buildingSqFt = attrs.BLDG_SQFT || attrs.SQFT || attrs.LIVING_AREA;
+
+      // Infer property type from land use, zoning, and building info
+      const propertyType = inferPropertyType(landUse, useCode, attrs.ZONING || attrs.ZONE_CODE, buildingSqFt, yearBuilt);
+
       parcels.push({
         parcelId: attrs.APN || attrs.PARCEL_ID || attrs.OBJECTID?.toString() || `parcel-${parcels.length}`,
         address: attrs.ADDR || attrs.SITEADDR || attrs.ADDRESS || 'Unknown Address',
         coordinates: { lat: centroidLat, lng: centroidLng },
         lotSize: lotSize ? Math.round(lotSize * 43560) : undefined,
         zoning: attrs.ZONING || attrs.ZONE_CODE,
+        landUse: landUse || undefined,
+        landUseCode: useCode || undefined,
+        owner: attrs.OWNER || undefined,
+        yearBuilt: yearBuilt ? parseInt(yearBuilt) : undefined,
+        buildingSqFt: buildingSqFt ? parseInt(buildingSqFt) : undefined,
+        propertyType,
       });
     }
 
@@ -258,12 +355,28 @@ async function fetchParcelsFromLeonCountyCell(
       const address = attrs.SITEADDR || attrs.SITE_ADDR || attrs.ADDRESS ||
                      (attrs.STREET_NUM && attrs.STREET_NAME ? `${attrs.STREET_NUM} ${attrs.STREET_NAME}` : 'Unknown');
 
+      // Get land use info from Leon County fields
+      const landUse = attrs.LANDUSE || attrs.LAND_USE || attrs.USE_DESC || attrs.USEDESC || '';
+      const useCode = attrs.USE_CODE || attrs.USECODE || attrs.DOR_CODE || '';
+      const yearBuilt = attrs.YEAR_BUILT || attrs.YEARBUILT || attrs.YR_BLT || attrs.EFFYRBLT;
+      const buildingSqFt = attrs.BLDG_SQFT || attrs.SQFT || attrs.LIVING_AREA || attrs.HEATED_SQFT || attrs.TOTAL_SQFT;
+      const owner = attrs.OWNER || attrs.OWNER_NAME || attrs.OWN_NAME;
+
+      // Infer property type
+      const propertyType = inferPropertyType(landUse, useCode, attrs.ZONING || attrs.ZONE_CODE, buildingSqFt, yearBuilt);
+
       parcels.push({
         parcelId: attrs.PARCELID || attrs.PARCEL_ID || attrs.PIN || attrs.STRAP || `parcel-${parcels.length}`,
         address,
         coordinates: { lat: centroidLat, lng: centroidLng },
         lotSize: lotSize ? Math.round(lotSize * 43560) : undefined,
         zoning: attrs.ZONING || attrs.ZONE_CODE,
+        landUse: landUse || undefined,
+        landUseCode: useCode || undefined,
+        owner: owner || undefined,
+        yearBuilt: yearBuilt ? parseInt(yearBuilt) : undefined,
+        buildingSqFt: buildingSqFt ? parseInt(buildingSqFt) : undefined,
+        propertyType,
       });
     }
 

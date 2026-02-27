@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { RETAILER_REQUIREMENTS, RetailerRequirements, getRegionFromState } from '@/data/retailerRequirements';
+import { RETAILER_REQUIREMENTS, RetailerRequirements, getRegionFromState, SiteType, getRetailerSiteTypes, SITE_TYPE_LABELS } from '@/data/retailerRequirements';
 
 interface MatchRequest {
   lotSizeAcres: number | null;
@@ -8,6 +8,28 @@ interface MatchRequest {
   incomeLevel: 'low' | 'moderate' | 'middle' | 'upper-middle' | 'high' | null;
   population: number | null;
   stateCode: string | null;
+  siteType?: SiteType | null;  // Filter by site type
+  hasAnchorNearby?: boolean;   // Is there a grocery/big box anchor nearby?
+  // Enhanced data from feasibility score
+  discretionaryIncome?: number | null;  // Spending power
+  consumerSpending?: number | null;     // Total consumer spending in trade area
+  environmentalRisk?: {
+    floodZone?: { risk: 'low' | 'medium' | 'high' };
+    wetlands?: { present: boolean };
+    brownfields?: { present: boolean; count: number };
+    superfund?: { present: boolean };
+    overallRiskScore?: number;
+  } | null;
+  competitionCount?: number | null;     // Number of nearby businesses
+  competitionDensity?: 'low' | 'moderate' | 'high' | 'saturated' | null;
+  accessScore?: number | null;          // 0-10 access quality
+  walkabilityScore?: number | null;     // 0-100 walk score
+  safetyScore?: number | null;          // 0-10 safety rating
+  developmentScore?: number | null;     // 0-10 development momentum
+  saturationScore?: number | null;      // 0-10 market saturation
+  zoning?: string | null;               // Zoning code
+  isCornerLot?: boolean;
+  hasHighwayAccess?: boolean;
 }
 
 export interface RetailerMatch {
@@ -19,6 +41,12 @@ export interface RetailerMatch {
     traffic: { matches: boolean; note: string };
     demographics: { matches: boolean; note: string };
     region: { matches: boolean; note: string };
+    siteType?: { matches: boolean; note: string };
+    environmental?: { matches: boolean; note: string };
+    spending?: { matches: boolean; note: string };
+    competition?: { matches: boolean; note: string };
+    access?: { matches: boolean; note: string };
+    safety?: { matches: boolean; note: string };
   };
   activelyExpanding: boolean;
   franchiseAvailable: boolean;
@@ -27,13 +55,27 @@ export interface RetailerMatch {
   totalInvestment?: string;
   expansionRegions: string[];
   notes?: string;
+  // Site type preferences
+  siteTypes?: string[];  // Human-readable labels
+  prefersAnchoredCenter?: boolean;
 }
 
 function calculateMatch(
   retailer: RetailerRequirements,
   site: MatchRequest
 ): RetailerMatch | null {
-  const matchDetails = {
+  const matchDetails: {
+    lotSize: { matches: boolean; note: string };
+    traffic: { matches: boolean; note: string };
+    demographics: { matches: boolean; note: string };
+    region: { matches: boolean; note: string };
+    siteType?: { matches: boolean; note: string };
+    environmental?: { matches: boolean; note: string };
+    spending?: { matches: boolean; note: string };
+    competition?: { matches: boolean; note: string };
+    access?: { matches: boolean; note: string };
+    safety?: { matches: boolean; note: string };
+  } = {
     lotSize: { matches: false, note: '' },
     traffic: { matches: false, note: '' },
     demographics: { matches: false, note: '' },
@@ -42,6 +84,44 @@ function calculateMatch(
 
   let totalScore = 0;
   let weightedFactors = 0;
+
+  // Get site type preferences for this retailer
+  const siteTypeInfo = retailer.siteTypes
+    ? { siteTypes: retailer.siteTypes, prefersAnchoredCenter: retailer.prefersAnchoredCenter || false }
+    : getRetailerSiteTypes(retailer.name);
+
+  // === SITE TYPE MATCHING (15% weight if specified) ===
+  if (site.siteType && siteTypeInfo) {
+    const siteTypeWeight = 15;
+    weightedFactors += siteTypeWeight;
+
+    const siteTypeMatches = siteTypeInfo.siteTypes.includes(site.siteType);
+    const siteTypeLabels = siteTypeInfo.siteTypes.map(st => SITE_TYPE_LABELS[st] || st);
+
+    if (siteTypeMatches) {
+      matchDetails.siteType = {
+        matches: true,
+        note: `Suitable for ${SITE_TYPE_LABELS[site.siteType]}. Accepts: ${siteTypeLabels.join(', ')}`
+      };
+      totalScore += siteTypeWeight;
+    } else {
+      matchDetails.siteType = {
+        matches: false,
+        note: `Prefers: ${siteTypeLabels.join(', ')}. May not be ideal for ${SITE_TYPE_LABELS[site.siteType]}.`
+      };
+      // Don't completely disqualify, but significant penalty
+      totalScore += siteTypeWeight * 0.2;
+    }
+
+    // Bonus/penalty for anchored center preference
+    if (site.hasAnchorNearby !== undefined) {
+      if (siteTypeInfo.prefersAnchoredCenter && site.hasAnchorNearby) {
+        totalScore += 3; // Bonus for being in preferred anchored location
+      } else if (siteTypeInfo.prefersAnchoredCenter && !site.hasAnchorNearby) {
+        totalScore -= 2; // Slight penalty for missing preferred anchor
+      }
+    }
+  }
 
   // === LOT SIZE MATCHING (30% weight) ===
   if (site.lotSizeAcres !== null) {
@@ -141,8 +221,8 @@ function calculateMatch(
   matchDetails.demographics.note = demoNotes.join('; ') || 'Demographics data not available';
   totalScore += demoWeight * demoScore;
 
-  // === REGION MATCHING (20% weight) ===
-  const regionWeight = 20;
+  // === REGION MATCHING (15% weight - reduced to make room for new factors) ===
+  const regionWeight = 15;
   weightedFactors += regionWeight;
 
   if (site.stateCode) {
@@ -169,6 +249,203 @@ function calculateMatch(
     totalScore += regionWeight * 0.5; // Neutral
   }
 
+  // === ENVIRONMENTAL RISK (10% weight) - Critical gate for many retailers ===
+  if (site.environmentalRisk) {
+    const envWeight = 10;
+    weightedFactors += envWeight;
+    const env = site.environmentalRisk;
+    const envIssues: string[] = [];
+
+    // High flood risk is a dealbreaker for most retailers
+    if (env.floodZone?.risk === 'high') {
+      matchDetails.environmental = {
+        matches: false,
+        note: 'High flood risk zone - most retailers avoid'
+      };
+      totalScore += envWeight * 0.1; // Nearly disqualifying
+      // Return null for QSR and convenience - they won't build in flood zones
+      if (retailer.category.includes('QSR') || retailer.category.includes('CONVENIENCE')) {
+        return null;
+      }
+    } else if (env.brownfields?.present || env.superfund?.present) {
+      envIssues.push(env.brownfields?.present ? `${env.brownfields.count} brownfield sites nearby` : '');
+      envIssues.push(env.superfund?.present ? 'Superfund site nearby' : '');
+      matchDetails.environmental = {
+        matches: false,
+        note: `Environmental concerns: ${envIssues.filter(Boolean).join(', ')}`
+      };
+      totalScore += envWeight * 0.3;
+    } else if (env.floodZone?.risk === 'medium') {
+      matchDetails.environmental = {
+        matches: true,
+        note: 'Moderate flood risk - manageable with mitigation'
+      };
+      totalScore += envWeight * 0.7;
+    } else {
+      matchDetails.environmental = {
+        matches: true,
+        note: 'Low environmental risk - clear for development'
+      };
+      totalScore += envWeight;
+    }
+  }
+
+  // === SPENDING POWER (10% weight) - Discretionary income and consumer spending ===
+  if (site.discretionaryIncome !== null && site.discretionaryIncome !== undefined) {
+    const spendWeight = 10;
+    weightedFactors += spendWeight;
+
+    const di = site.discretionaryIncome;
+    const spending = site.consumerSpending;
+
+    // Higher-end retailers need more discretionary income
+    const isHighEnd = retailer.category.includes('BEAUTY') ||
+                      retailer.category.includes('FITNESS') ||
+                      retailer.category.includes('SPECIALTY');
+    const minDiscretionary = isHighEnd ? 30000 : 15000;
+
+    if (di >= minDiscretionary * 1.5) {
+      matchDetails.spending = {
+        matches: true,
+        note: `Strong spending power: $${di.toLocaleString()} discretionary income${spending ? `, $${(spending / 1000000).toFixed(0)}M consumer spending` : ''}`
+      };
+      totalScore += spendWeight;
+    } else if (di >= minDiscretionary) {
+      matchDetails.spending = {
+        matches: true,
+        note: `Good spending power: $${di.toLocaleString()} discretionary income`
+      };
+      totalScore += spendWeight * 0.7;
+    } else {
+      matchDetails.spending = {
+        matches: false,
+        note: `Limited spending: $${di.toLocaleString()} discretionary (${isHighEnd ? 'premium concept needs more' : 'below typical thresholds'})`
+      };
+      totalScore += spendWeight * 0.3;
+    }
+  }
+
+  // === COMPETITION/SATURATION (8% weight) ===
+  if (site.competitionDensity || site.saturationScore !== null) {
+    const compWeight = 8;
+    weightedFactors += compWeight;
+
+    const saturation = site.saturationScore ?? 5;
+    const density = site.competitionDensity;
+
+    // Most retailers want some competition (proven market) but not too much
+    if (saturation >= 7 || density === 'low') {
+      matchDetails.competition = {
+        matches: true,
+        note: `Undersupplied market - opportunity for new entrants (${site.competitionCount || 'few'} competitors)`
+      };
+      totalScore += compWeight;
+    } else if (saturation >= 5 || density === 'moderate') {
+      matchDetails.competition = {
+        matches: true,
+        note: `Balanced market - healthy competition level`
+      };
+      totalScore += compWeight * 0.8;
+    } else if (saturation >= 3 || density === 'high') {
+      matchDetails.competition = {
+        matches: false,
+        note: `Competitive market - differentiation required`
+      };
+      totalScore += compWeight * 0.5;
+    } else {
+      matchDetails.competition = {
+        matches: false,
+        note: `Saturated market - high competition risk`
+      };
+      totalScore += compWeight * 0.2;
+    }
+  }
+
+  // === ACCESS QUALITY (7% weight) ===
+  if (site.accessScore !== null && site.accessScore !== undefined) {
+    const accessWeight = 7;
+    weightedFactors += accessWeight;
+
+    const accessNotes: string[] = [];
+    if (site.isCornerLot) accessNotes.push('corner lot');
+    if (site.hasHighwayAccess) accessNotes.push('highway access');
+
+    // QSR and drive-thru concepts need excellent access
+    const needsGreatAccess = retailer.category.includes('QSR') ||
+                             retailer.category.includes('COFFEE') ||
+                             retailer.category.includes('CONVENIENCE');
+    const minAccess = needsGreatAccess ? 7 : 5;
+
+    if (site.accessScore >= 8) {
+      matchDetails.access = {
+        matches: true,
+        note: `Excellent access (${site.accessScore}/10)${accessNotes.length ? ` - ${accessNotes.join(', ')}` : ''}`
+      };
+      totalScore += accessWeight;
+    } else if (site.accessScore >= minAccess) {
+      matchDetails.access = {
+        matches: true,
+        note: `Good access (${site.accessScore}/10)${accessNotes.length ? ` - ${accessNotes.join(', ')}` : ''}`
+      };
+      totalScore += accessWeight * 0.7;
+    } else {
+      matchDetails.access = {
+        matches: false,
+        note: `Limited access (${site.accessScore}/10)${needsGreatAccess ? ' - QSR/drive-thru needs better access' : ''}`
+      };
+      totalScore += accessWeight * 0.3;
+      // QSR concepts really need good access
+      if (needsGreatAccess && site.accessScore < 5) {
+        totalScore -= 5; // Additional penalty
+      }
+    }
+  }
+
+  // === SAFETY/CRIME (5% weight) ===
+  if (site.safetyScore !== null && site.safetyScore !== undefined) {
+    const safetyWeight = 5;
+    weightedFactors += safetyWeight;
+
+    if (site.safetyScore >= 7) {
+      matchDetails.safety = {
+        matches: true,
+        note: `Safe area (${site.safetyScore}/10) - low crime impact on operations`
+      };
+      totalScore += safetyWeight;
+    } else if (site.safetyScore >= 5) {
+      matchDetails.safety = {
+        matches: true,
+        note: `Moderate safety (${site.safetyScore}/10) - standard security measures`
+      };
+      totalScore += safetyWeight * 0.7;
+    } else {
+      matchDetails.safety = {
+        matches: false,
+        note: `Safety concerns (${site.safetyScore}/10) - may affect insurance/operations`
+      };
+      totalScore += safetyWeight * 0.3;
+    }
+  }
+
+  // === WALKABILITY BONUS (only for certain categories) ===
+  if (site.walkabilityScore !== null && site.walkabilityScore !== undefined) {
+    // Walkability matters for coffee shops, restaurants, fitness
+    const walkMatters = retailer.category.includes('COFFEE') ||
+                        retailer.category.includes('RESTAURANT') ||
+                        retailer.category.includes('FITNESS') ||
+                        retailer.category.includes('SALON');
+
+    if (walkMatters && site.walkabilityScore >= 70) {
+      totalScore += 3; // Bonus points for walkable locations
+    }
+  }
+
+  // === DEVELOPMENT MOMENTUM BONUS ===
+  if (site.developmentScore !== null && site.developmentScore !== undefined && site.developmentScore >= 7) {
+    // Growing areas are attractive
+    totalScore += 2; // Bonus for high-growth areas
+  }
+
   // Calculate final score
   const finalScore = weightedFactors > 0
     ? Math.round((totalScore / weightedFactors) * 100)
@@ -178,6 +455,11 @@ function calculateMatch(
   if (finalScore < 30) {
     return null;
   }
+
+  // Get site type info for output
+  const siteTypeInfoForOutput = retailer.siteTypes
+    ? { siteTypes: retailer.siteTypes, prefersAnchoredCenter: retailer.prefersAnchoredCenter || false }
+    : getRetailerSiteTypes(retailer.name);
 
   return {
     name: retailer.name,
@@ -193,6 +475,9 @@ function calculateMatch(
       : undefined,
     expansionRegions: retailer.expansionRegions,
     notes: retailer.notes,
+    // Site type preferences
+    siteTypes: siteTypeInfoForOutput?.siteTypes.map(st => SITE_TYPE_LABELS[st] || st),
+    prefersAnchoredCenter: siteTypeInfoForOutput?.prefersAnchoredCenter,
   };
 }
 

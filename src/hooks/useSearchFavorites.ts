@@ -9,19 +9,39 @@ export interface QuickFeasibility {
   lotSizeAcres?: number;
   score: number;
   factors: {
-    trafficScore: number;
-    businessDensity: number;
+    // Core 8 factors (same weights as single parcel analysis)
+    trafficScore: number;       // 20%
+    demographicsScore: number;  // 15%
+    economicScore: number;      // 15%
+    competitionScore: number;   // 10%
+    accessScore: number;        // 10%
+    siteScore: number;          // 10%
+    environmentalScore: number; // 10%
+    marketScore: number;        // 10%
+    // Enhanced scores for additional insights
+    walkabilityScore: number;
+    safetyScore: number;
+    developmentScore: number;
+    saturationScore: number;
+    // Additional scores
     zoningScore: number;
-    accessScore: number;
-    demographicsScore?: number;
-    lotSizeScore?: number;
-    environmentalScore?: number;
+    lotSizeScore: number;
+    // Legacy field for backwards compatibility
+    businessDensity: number;
   };
   zoning?: string;
   nearbyBusinesses?: number;
   estimatedVPD?: number;
   medianIncome?: number;
   population?: number;
+  // Property context fields
+  landUse?: string;
+  landUseCode?: string;
+  owner?: string;
+  yearBuilt?: number;
+  buildingSqFt?: number;
+  propertyType?: string;
+  occupancyStatus?: 'occupied' | 'vacant' | 'unknown';
 }
 
 const STORAGE_KEY = 'drone-sense-search-favorites';
