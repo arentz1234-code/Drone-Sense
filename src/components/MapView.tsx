@@ -107,7 +107,7 @@ export default function MapView({
   onParcelDataChange,
   interactiveMode = true,
 }: MapViewProps) {
-  const [mapType, setMapType] = useState<MapType>('satellite');
+  const [mapType, setMapType] = useState<MapType>('street');
   const [parcelData, setParcelData] = useState<ParcelData | null>(null);
   const [nearbyParcels, setNearbyParcels] = useState<NearbyParcel[]>([]);
   const [accessPoints, setAccessPoints] = useState<AccessPoint[]>([]);
