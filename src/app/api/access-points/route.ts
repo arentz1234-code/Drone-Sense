@@ -12,6 +12,7 @@ interface AccessPoint {
   type: 'entrance' | 'exit' | 'access';
   roadType?: string;
   distance?: number; // Distance from parcel boundary in meters
+  roadPointCoordinates?: [number, number]; // Point ON the road for FDOT queries
   vpd?: number; // Official VPD from FDOT if available
   vpdYear?: number; // Year of VPD count
   vpdSource?: 'fdot' | 'estimated'; // Source of VPD data
@@ -47,29 +48,70 @@ const ROAD_TYPE_VPD: Record<string, { min: number; max: number; avg: number }> =
 
 /**
  * Fetch FDOT AADT data at specific coordinates
+ * Uses multiple query approaches to maximize hit rate
  */
 async function fetchFDOTAtPoint(lat: number, lng: number, roadName?: string): Promise<{ vpd: number; year: number } | null> {
   try {
-    // Query FDOT GIS at the exact access point location
-    const radius = 0.0015; // ~165m search radius
-    const mapExtent = `${lng - radius},${lat - radius},${lng + radius},${lat + radius}`;
-    const url = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
-      `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
-      `layers=all:7&tolerance=30&mapExtent=${mapExtent}&imageDisplay=400,400,96&` +
-      `returnGeometry=false&f=json`;
+    // Try multiple query approaches
 
-    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!response.ok) return null;
+    // Approach 1: Query FDOT AADT layer directly with larger buffer
+    // Use a feature query instead of identify for better results
+    const queryUrl = new URL('https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/7/query');
+    queryUrl.searchParams.set('where', '1=1');
+    queryUrl.searchParams.set('geometry', `${lng},${lat}`);
+    queryUrl.searchParams.set('geometryType', 'esriGeometryPoint');
+    queryUrl.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
+    queryUrl.searchParams.set('distance', '100'); // 100 meter buffer
+    queryUrl.searchParams.set('units', 'esriSRUnit_Meter');
+    queryUrl.searchParams.set('outFields', 'AADT,YEAR_,ROAD_NAME,ROADNAME,DESC_TO,DESC_FRM,ROAD,FUNCLASS');
+    queryUrl.searchParams.set('returnGeometry', 'false');
+    queryUrl.searchParams.set('outSR', '4326');
+    queryUrl.searchParams.set('f', 'json');
 
-    const data = await response.json();
-    if (!data.results || data.results.length === 0) return null;
+    let data: { features?: Array<{ attributes: Record<string, unknown> }> } | null = null;
+
+    try {
+      const response = await fetch(queryUrl.toString(), { signal: AbortSignal.timeout(8000) });
+      if (response.ok) {
+        data = await response.json();
+      }
+    } catch {
+      // Continue to fallback
+    }
+
+    // Approach 2: If feature query failed, try identify with larger tolerance
+    if (!data?.features?.length) {
+      const radius = 0.003; // ~330m search radius
+      const mapExtent = `${lng - radius},${lat - radius},${lng + radius},${lat + radius}`;
+      const identifyUrl = `https://gis.fdot.gov/arcgis/rest/services/FTO/fto_PROD/MapServer/identify?` +
+        `geometry=${lng},${lat}&geometryType=esriGeometryPoint&sr=4326&` +
+        `layers=all:7&tolerance=100&mapExtent=${mapExtent}&imageDisplay=800,800,96&` +
+        `returnGeometry=false&f=json`;
+
+      try {
+        const response = await fetch(identifyUrl, { signal: AbortSignal.timeout(8000) });
+        if (response.ok) {
+          const identifyData = await response.json();
+          if (identifyData.results?.length) {
+            data = { features: identifyData.results.map((r: { attributes: Record<string, unknown> }) => ({ attributes: r.attributes })) };
+          }
+        }
+      } catch {
+        // Continue
+      }
+    }
+
+    if (!data?.features?.length) {
+      console.log(`[FDOT] No data found at ${lat.toFixed(5)},${lng.toFixed(5)} for ${roadName || 'unknown road'}`);
+      return null;
+    }
 
     // Find the best matching segment
     let bestMatch: { vpd: number; year: number } | null = null;
     let bestScore = -1;
 
-    for (const result of data.results) {
-      const attrs = result.attributes;
+    for (const feature of data.features) {
+      const attrs = feature.attributes;
       if (!attrs || !attrs.AADT || Number(attrs.AADT) <= 0) continue;
 
       const vpd = Number(attrs.AADT);
@@ -81,32 +123,42 @@ async function fetchFDOTAtPoint(lat: number, lng: number, roadName?: string): Pr
       // If road name provided, check for match in FDOT fields
       if (roadName) {
         const normalizedSearch = roadName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const fdotRoadName = (attrs.ROAD_NAME || attrs.ROADNAME || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const descTo = (attrs.DESC_TO || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const descFrm = (attrs.DESC_FRM || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const fdotRoadName = (attrs.ROAD_NAME || attrs.ROADNAME || attrs.ROAD || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const descTo = (attrs.DESC_TO || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const descFrm = (attrs.DESC_FRM || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
 
         // PRIORITY 1: ROAD_NAME field is the actual road name - strongest match
         if (fdotRoadName && (fdotRoadName.includes(normalizedSearch) || normalizedSearch.includes(fdotRoadName))) {
           score += 2000; // Highest priority - this IS the road
         }
-        // PRIORITY 2: DESC_TO/DESC_FRM are cross-streets - weaker signal
-        // Only use if BOTH fields mention the road (suggests it's the main road, not just crossing)
-        else if ((descTo.includes(normalizedSearch) || normalizedSearch.includes(descTo)) &&
-                 (descFrm.includes(normalizedSearch) || normalizedSearch.includes(descFrm))) {
-          score += 1000; // Both endpoints mention this road - likely the main road
+        // PRIORITY 2: Partial match on road name
+        else if (fdotRoadName && normalizedSearch.length > 3) {
+          // Check for partial matches (e.g., "thomasville" in "thomasvilleroad")
+          const searchWords = normalizedSearch.split(/\s+/);
+          for (const word of searchWords) {
+            if (word.length > 3 && fdotRoadName.includes(word)) {
+              score += 1500;
+              break;
+            }
+          }
         }
-        // Note: Single DESC_TO/DESC_FRM match no longer gives bonus (was causing wrong matching)
+        // PRIORITY 3: DESC_TO/DESC_FRM mention the road
+        if ((descTo.includes(normalizedSearch) || normalizedSearch.includes(descTo)) ||
+            (descFrm.includes(normalizedSearch) || normalizedSearch.includes(descFrm))) {
+          score += 500;
+        }
       }
 
       if (score > bestScore) {
         bestScore = score;
         bestMatch = { vpd, year };
+        console.log(`[FDOT] Found match for ${roadName}: AADT=${vpd} (${year}), score=${score}`);
       }
     }
 
     return bestMatch;
   } catch (error) {
-    console.log(`[AccessPoints] FDOT fetch error at ${lat},${lng}:`, error);
+    console.log(`[FDOT] Fetch error at ${lat},${lng}:`, error);
     return null;
   }
 }
@@ -309,9 +361,10 @@ async function findAccessPoints(
 
           if (seenCoords.has(coordKey)) continue;
 
-          // Find which main road this driveway connects to
+          // Find which main road this driveway connects to AND get a point ON the road for FDOT
           let connectedRoadName = 'Unnamed Road';
           let connectedRoadType = 'service';
+          let roadPointCoords: [number, number] | undefined;
 
           for (const mainRoad of mainRoads) {
             const mainRoadName = mainRoad.tags?.name || mainRoad.tags?.ref;
@@ -327,6 +380,8 @@ async function findAccessPoints(
                 if (dist <= 15) {
                   connectedRoadName = mainRoadName;
                   connectedRoadType = mainRoad.tags?.highway || 'road';
+                  // Store the point ON the main road for FDOT queries
+                  roadPointCoords = [mainGeom.lat, mainGeom.lon];
                   break;
                 }
               }
@@ -351,8 +406,9 @@ async function findAccessPoints(
               type: 'entrance',
               roadType: connectedRoadType,
               distance: 0,
+              roadPointCoordinates: roadPointCoords,
             });
-            console.log(`[AccessPoints] Driveway intersection at parcel boundary from ${connectedRoadName}`);
+            console.log(`[AccessPoints] Driveway intersection at parcel boundary from ${connectedRoadName} (road point: ${roadPointCoords?.[0].toFixed(5)},${roadPointCoords?.[1].toFixed(5)})`);
           }
         }
       } catch (err) {
@@ -387,14 +443,22 @@ async function findAccessPoints(
           if (!seenCoords.has(coordKey)) {
             seenCoords.add(coordKey);
             seenRoads.set(roadName, 0);
+
+            // Find a point further along the road (away from parcel) for better FDOT match
+            // Use the road midpoint for the FDOT query
+            const midIndex = Math.floor(road.geometry.length / 2);
+            const midPoint = road.geometry[midIndex];
+            const roadPointCoords: [number, number] = [midPoint.lat, midPoint.lon];
+
             accessPoints.push({
               coordinates: [lat, lng],
               roadName,
               type: 'access',
               roadType,
               distance: 0,
+              roadPointCoordinates: roadPointCoords,
             });
-            console.log(`[AccessPoints] Fallback - road directly intersects parcel: ${roadName}`);
+            console.log(`[AccessPoints] Fallback - road directly intersects parcel: ${roadName} (road point: ${roadPointCoords[0].toFixed(5)},${roadPointCoords[1].toFixed(5)})`);
           }
         }
       } catch {
@@ -540,16 +604,21 @@ export async function POST(request: Request) {
 
     console.log(`[AccessPoints] Found ${accessPoints.length} access points from ${roadAccessPoints.size} unique roads`);
 
-    // Fetch FDOT VPD data for each unique road at its access point location
+    // Fetch FDOT VPD data for each unique road
+    // Use roadPointCoordinates (on the road) for better FDOT match, fallback to access point coordinates
     const roadVPDMap = new Map<string, { vpd: number; year: number; source: 'fdot' | 'estimated' }>();
 
     // Fetch FDOT data in parallel (limit concurrency)
     const fdotPromises = Array.from(roadAccessPoints.entries()).map(async ([roadName, ap]) => {
-      const [lat, lng] = ap.coordinates;
+      // Prefer the road point coordinates (on the actual road) for FDOT query
+      const queryCoords = ap.roadPointCoordinates || ap.coordinates;
+      const [lat, lng] = queryCoords;
+
+      console.log(`[FDOT] Querying for "${roadName}" at road point ${lat.toFixed(5)},${lng.toFixed(5)}`);
       const fdotData = await fetchFDOTAtPoint(lat, lng, roadName);
 
       if (fdotData) {
-        console.log(`[AccessPoints] FDOT VPD for "${roadName}" at ${lat.toFixed(5)},${lng.toFixed(5)}: ${fdotData.vpd} (${fdotData.year})`);
+        console.log(`[AccessPoints] FDOT VPD for "${roadName}": ${fdotData.vpd} (${fdotData.year})`);
         roadVPDMap.set(roadName, { vpd: fdotData.vpd, year: fdotData.year, source: 'fdot' });
       } else {
         // Fallback to estimated VPD based on road type
