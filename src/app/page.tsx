@@ -769,12 +769,12 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    {/* Traffic VPD */}
+                    {/* Traffic VPD - Sum of all access roads */}
                     <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
                       <div className="text-xs text-[var(--text-muted)] mb-1">Daily Traffic</div>
                       <div className="text-lg font-semibold text-[var(--text-primary)]">
                         {accessPoints.length > 0
-                          ? `${Math.max(...accessPoints.map(ap => ap.vpd || ap.estimatedVpd || 0)).toLocaleString()} VPD`
+                          ? `${accessPoints.reduce((sum, ap) => sum + (ap.vpd || ap.estimatedVpd || 0), 0).toLocaleString()} VPD`
                           : trafficData?.estimatedVPD
                             ? `${trafficData.estimatedVPD.toLocaleString()} VPD`
                             : '—'}
