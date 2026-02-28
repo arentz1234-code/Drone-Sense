@@ -19,6 +19,30 @@ function enrichZoning(zoningCode?: string, apiDescription?: string): { code?: st
   };
 }
 
+/**
+ * Infer zoning from Florida DOR (Department of Revenue) Use Codes
+ */
+function inferZoningFromDOR(dorCode?: string | number): string | undefined {
+  if (!dorCode) return undefined;
+  const code = String(dorCode).trim();
+  if (!code || code === '0' || code === '00') return undefined;
+
+  const num = parseInt(code, 10);
+  if (isNaN(num)) return undefined;
+
+  // DOR Code ranges
+  if (num >= 0 && num <= 9) return 'AG'; // Agricultural/Vacant
+  if (num >= 10 && num <= 19) return 'R-1'; // Single Family
+  if (num >= 20 && num <= 29) return 'R-3'; // Multi-Family
+  if (num >= 30 && num <= 39) return 'C-2'; // Commercial
+  if (num >= 40 && num <= 49) return 'M-1'; // Industrial
+  if (num >= 50 && num <= 69) return 'AG'; // Agricultural
+  if (num >= 70 && num <= 89) return 'P'; // Public/Institutional
+  if (num >= 90) return 'U'; // Other
+
+  return undefined;
+}
+
 interface ParcelResponse {
   boundaries: Array<[number, number][]>;
   parcelInfo: {
@@ -616,14 +640,19 @@ async function fetchParcelFromFloridaCountyGIS(lat: number, lng: number): Promis
         address: address,
         acres: acres ? Number(acres) : undefined,
         sqft: sqft ? Math.round(Number(sqft)) : undefined,
-        zoning: attrs?.ZONING || attrs?.ZONE_CODE || attrs?.ZONING_CODE || attrs?.ZONE,
-        landUse: attrs?.LANDUSE || attrs?.LAND_USE || attrs?.USE_CODE || attrs?.DOR_CODE || attrs?.USEDESC,
+        zoning: attrs?.ZONING || attrs?.ZONE_CODE || attrs?.ZONING_CODE || attrs?.ZONE ||
+                attrs?.ZONINGCODE || attrs?.ZON_CODE || attrs?.ZONING_CD || attrs?.ZONE_CD ||
+                inferZoningFromDOR(attrs?.DOR_UC || attrs?.DOR_CODE || attrs?.DORCODE),
+        landUse: attrs?.LANDUSE || attrs?.LAND_USE || attrs?.USE_CODE || attrs?.DOR_CODE || attrs?.USEDESC ||
+                attrs?.DOR_UC || attrs?.DORCODE,
         yearBuilt: attrs?.YEAR_BUILT || attrs?.YEARBUILT || attrs?.YR_BUILT || attrs?.EFFYEAR,
       },
-      zoning: attrs?.ZONING ? {
-        code: attrs.ZONING,
-        description: attrs?.ZONE_DESC || attrs?.ZONING_DESC,
-      } : null,
+      zoning: enrichZoning(
+        attrs?.ZONING || attrs?.ZONE_CODE || attrs?.ZONING_CODE || attrs?.ZONE ||
+        attrs?.ZONINGCODE || attrs?.ZON_CODE ||
+        inferZoningFromDOR(attrs?.DOR_UC || attrs?.DOR_CODE || attrs?.DORCODE),
+        attrs?.ZONE_DESC || attrs?.ZONING_DESC
+      ),
       source: `${matchingCounty.name} GIS`,
     };
   } catch (error) {

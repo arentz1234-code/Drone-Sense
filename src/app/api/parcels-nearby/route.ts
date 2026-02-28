@@ -23,6 +23,43 @@ interface ParcelRequest {
   centerLng?: number;
 }
 
+/**
+ * Infer zoning from Florida DOR (Department of Revenue) Use Codes
+ * DOR codes are 2-digit numbers that indicate land use type
+ * https://floridarevenue.com/property/Pages/DataPortal.aspx
+ */
+function inferZoningFromDOR(dorCode?: string | number): string | undefined {
+  if (!dorCode) return undefined;
+  const code = String(dorCode).trim();
+  if (!code || code === '0' || code === '00') return undefined;
+
+  // Extract just the numeric portion
+  const num = parseInt(code, 10);
+  if (isNaN(num)) return undefined;
+
+  // DOR Code ranges:
+  // 00-09: Vacant/Agricultural
+  // 10-19: Single Family Residential
+  // 20-29: Multi-Family Residential
+  // 30-39: Commercial
+  // 40-49: Industrial
+  // 50-69: Agricultural
+  // 70-79: Institutional/Government
+  // 80-89: Government
+  // 90-99: Miscellaneous
+
+  if (num >= 0 && num <= 9) return 'AG'; // Agricultural/Vacant
+  if (num >= 10 && num <= 19) return 'R-1'; // Single Family
+  if (num >= 20 && num <= 29) return 'R-3'; // Multi-Family
+  if (num >= 30 && num <= 39) return 'C-2'; // Commercial
+  if (num >= 40 && num <= 49) return 'M-1'; // Industrial
+  if (num >= 50 && num <= 69) return 'AG'; // Agricultural
+  if (num >= 70 && num <= 89) return 'P'; // Public/Institutional
+  if (num >= 90) return 'U'; // Other/Unclassified
+
+  return undefined;
+}
+
 // Calculate area of a polygon using the Shoelace formula
 function calculatePolygonArea(coords: [number, number][]): number {
   if (coords.length < 3) return 0;
@@ -411,6 +448,17 @@ async function fetchParcelsFromFloridaCounty(bounds: ParcelBounds, county: Flori
 
     if (data.error || !data.features || data.features.length === 0) return [];
 
+    // Log first parcel's fields to help debug zoning field names
+    if (data.features.length > 0 && data.features[0].attributes) {
+      const sampleAttrs = data.features[0].attributes;
+      const zoningFields = Object.keys(sampleAttrs).filter(k =>
+        k.toLowerCase().includes('zone') || k.toLowerCase().includes('zon') ||
+        k.toLowerCase().includes('land') || k.toLowerCase().includes('use')
+      );
+      console.log(`[${county.name}] Sample zoning-related fields:`, zoningFields.join(', '));
+      console.log(`[${county.name}] Field values:`, zoningFields.map(f => `${f}=${sampleAttrs[f]}`).join(', '));
+    }
+
     return data.features.map((feature: {
       geometry?: { rings?: number[][][] };
       attributes?: Record<string, string | number | undefined>;
@@ -438,8 +486,14 @@ async function fetchParcelsFromFloridaCounty(bounds: ParcelBounds, county: Flori
         apn: attrs.PARCELID || attrs.PARCEL_ID || attrs.PIN || attrs.FOLIO || attrs.APN || attrs.STRAP || attrs.TAXID,
         acres: acres ? Number(acres) : undefined,
         address: address,
-        zoning: attrs.ZONING || attrs.ZONE_CODE || attrs.ZONING_CODE || attrs.ZONE,
-        landUse: attrs.LANDUSE || attrs.LAND_USE || attrs.USE_CODE || attrs.DOR_CODE || attrs.USEDESC,
+        zoning: attrs.ZONING || attrs.ZONE_CODE || attrs.ZONING_CODE || attrs.ZONE ||
+                attrs.ZONINGCODE || attrs.ZON_CODE || attrs.ZONING_CD || attrs.ZONE_CD ||
+                attrs.ZONEDESC || attrs.ZONING_DESC || attrs.ZONINGDESC ||
+                attrs.ZONING_CLASS || attrs.ZONE_CLASS || attrs.ZONCLASS || attrs.ZONECLASS ||
+                // Fallback: infer from Florida DOR codes
+                inferZoningFromDOR(attrs.DOR_UC || attrs.DOR_CODE || attrs.DORCODE),
+        landUse: attrs.LANDUSE || attrs.LAND_USE || attrs.USE_CODE || attrs.DOR_CODE || attrs.USEDESC ||
+                attrs.DOR_UC || attrs.DORCODE || attrs.LANDUSECODE || attrs.LAND_USE_CODE,
       } as NearbyParcel;
     }).filter((p: NearbyParcel | null): p is NearbyParcel => p !== null && p.boundaries.length > 0);
   } catch (error) {
