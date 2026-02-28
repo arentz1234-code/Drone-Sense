@@ -1,8 +1,22 @@
 import { NextResponse } from 'next/server';
+import { getZoningDetails } from '@/constants/zoning';
 
 interface ParcelRequest {
   coordinates: { lat: number; lng: number };
   address: string;
+}
+
+// Helper to enrich zoning code with description and allowed uses
+function enrichZoning(zoningCode?: string, apiDescription?: string): { code?: string; description?: string; allowedUses?: string[] } | null {
+  if (!zoningCode) return null;
+
+  const details = getZoningDetails(zoningCode);
+
+  return {
+    code: zoningCode,
+    description: apiDescription || details?.description || details?.label,
+    allowedUses: details?.allowedUses,
+  };
 }
 
 interface ParcelResponse {
@@ -101,10 +115,7 @@ async function fetchParcelFromRegrid(lat: number, lng: number): Promise<ParcelRe
         zoning: parcel.properties?.zoning,
         landUse: parcel.properties?.usedesc,
       },
-      zoning: parcel.properties?.zoning ? {
-        code: parcel.properties.zoning,
-        description: parcel.properties.zoning_description,
-      } : null,
+      zoning: enrichZoning(parcel.properties?.zoning, parcel.properties?.zoning_description),
       source: 'Regrid',
     };
   } catch (error) {
@@ -184,10 +195,10 @@ async function fetchParcelFromArcGIS(lat: number, lng: number): Promise<ParcelRe
         landUse: feature.attributes?.LANDUSE || feature.attributes?.LAND_USE || feature.attributes?.USE_CODE,
         yearBuilt: feature.attributes?.YEAR_BUILT || feature.attributes?.YEARBUILT,
       },
-      zoning: feature.attributes?.ZONING ? {
-        code: feature.attributes.ZONING,
-        description: feature.attributes.ZONE_DESC || feature.attributes.ZONING_DESC,
-      } : null,
+      zoning: enrichZoning(
+        feature.attributes?.ZONING || feature.attributes?.ZONE_CODE || feature.attributes?.ZONING_CODE,
+        feature.attributes?.ZONE_DESC || feature.attributes?.ZONING_DESC
+      ),
       source: 'ArcGIS USA Parcels',
     };
   } catch (error) {
@@ -274,7 +285,7 @@ async function fetchParcelFromAuburnGIS(lat: number, lng: number): Promise<Parce
         landUse: feature.attributes?.HSCODE ? `Class ${feature.attributes.HSCODE}` : undefined,
         yearBuilt: feature.attributes?.YEAR_BUILT,
       },
-      zoning: null,
+      zoning: enrichZoning(feature.attributes?.ZONING),
       source: 'City of Auburn GIS',
     };
   } catch (error) {
@@ -335,7 +346,7 @@ async function fetchParcelFromLeeCountyAL(lat: number, lng: number): Promise<Par
         zoning: feature.attributes?.ZONING,
         landUse: feature.attributes?.LANDUSE || feature.attributes?.PROPCLASS,
       },
-      zoning: null,
+      zoning: enrichZoning(feature.attributes?.ZONING),
       source: 'Lee County AL GIS',
     };
   } catch (error) {
@@ -679,10 +690,10 @@ async function fetchParcelFromStateGIS(lat: number, lng: number): Promise<Parcel
           landUse: feature.attributes?.LANDUSE || feature.attributes?.LAND_USE || feature.attributes?.PROPCLASS || feature.attributes?.USE_CODE,
           yearBuilt: feature.attributes?.YEAR_BUILT || feature.attributes?.YEARBUILT,
         },
-        zoning: feature.attributes?.ZONING ? {
-          code: feature.attributes.ZONING,
-          description: feature.attributes.ZONE_DESC,
-        } : null,
+        zoning: enrichZoning(
+          feature.attributes?.ZONING || feature.attributes?.ZONE_CODE,
+          feature.attributes?.ZONE_DESC
+        ),
         source: endpoint.name,
       };
     } catch (error) {
@@ -754,7 +765,7 @@ async function fetchParcelFromCountyGIS(lat: number, lng: number): Promise<Parce
           zoning: feature.attributes?.ZONING || feature.attributes?.zoning,
           landUse: feature.attributes?.LANDUSE || feature.attributes?.USECODE || feature.attributes?.usedesc,
         },
-        zoning: null,
+        zoning: enrichZoning(feature.attributes?.ZONING || feature.attributes?.zoning),
         source: 'National Parcels',
       };
     } catch (error) {
